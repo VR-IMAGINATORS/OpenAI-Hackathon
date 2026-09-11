@@ -1,3 +1,5 @@
+> 注記: native imagegen採用は初期判断。2026-09-12のユーザー提案後、イベント画像は承認付きFlare preflight経路へ置換した。
+
 # 調査・採用判断
 
 - Codex native imagegenの公開引数はpromptと参照画像。モデル指定欄なし。Flare指定はできない。native生成として実際の経路をログへ残す。

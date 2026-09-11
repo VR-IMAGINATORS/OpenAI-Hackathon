@@ -23,9 +23,9 @@ python -X utf8 C:/Users/kimha/.codex/skills/.system/skill-creator/scripts/quick_
 
 ## 実生成・ユーザー評価
 
-未実施。ユーザーのプレイ用写真はまだ受領していない。各ターンのnative画像生成と最後の15秒H3動画の具体的な承認・送信・視聴、楽しさ評価は後続。テスト用写真や模擬メディアでこの項目を合格にしない。
+未実施。ユーザーのプレイ用写真はまだ受領していない。各ターンのFlare画像生成と最後の15秒H3動画の具体的な承認・送信・視聴、楽しさ評価は後続。テスト用写真や模擬メディアでこの項目を合格にしない。
 
-native生成経路だけを別途実測した。検証用の倉庫・はさみ・切れた縄の画像1枚を生成し、tool output_hintに保存先が返り、ローカルコピーとSHA-256確認ができた。`runs/native-tool-check/receipt.json`にプロンプトと目視範囲を保存。顔は見えず、はさみと切れ端は描かれたが、椅子に縄が残り完全な解放は曖昧なので成功ターン画像としては採用していない。実写真入力経路は未検証。パスなし添付の環境では同じ原本のローカル保存を依頼する境界をスキルに明記。
+以下は旧native経路を採用していた時点の履歴であり、現行のFlare経路の検証ではない。native生成経路だけを別途実測した。検証用の倉庫・はさみ・切れた縄の画像1枚を生成し、tool output_hintに保存先が返り、ローカルコピーとSHA-256確認ができた。`runs/native-tool-check/receipt.json`にプロンプトと目視範囲を保存。顔は見えず、はさみと切れ端は描かれたが、椅子に縄が残り完全な解放は曖昧なので成功ターン画像としては採用していない。実写真入力経路は未検証。パスなし添付の環境では同じ原本のローカル保存を依頼する境界をスキルに明記。
 
 SpecWorkflowは取得したスキル本文を適用した。プラグインのインストールとフック、review-orchestrator一式の動作を確認済みとはしていない。
 
@@ -79,3 +79,16 @@ rootと別SolがCRVの29採用フレームと終盤3画像を確認し、階段�
 配布物: `dist/call-to-past-0.2.1.zip`。SHA-256: `6b5990b7360caae295a023e24dbaa72eb6f3811b30c6cfecb7855a414d8d95e4`。
 
 この更新ではfalへの送信や課金、実動画生成は行っていない。別途必要なのは`fal_client`、`FAL_KEY`、ffmpeg/ffprobeであり、価格再確認と具体的な送信承認も従来どおり必要。
+
+## Flare画像生成preflight更新
+
+2026-09-12、画像生成前にOpenAI SDKを準備・診断する提案を反映。scripts/flare_image.pyを追加し、uvの隔離環境で openai>=2.26,<3 と pillow>=11,<13 を用意する。preflight-onlyはAPIを呼ばず、依存版、OpenAI用キー、UTF-8プロンプト、参照画像、リンクを含まない新規出力先、SDK引数を確認する。
+
+独立Solレビューで、任意のsk-*取得、承認hashと送信バイトの差し替え余地、出力競合、自動再送、価格・時刻型の不足を指摘。修正後は、プロンプトと画像を一度だけ不変バイト列へ読み込み、同じバイトでhashとAPI入力を構成する。完全一致のOpenAI資格情報だけを採用し、承認JSON、24時間以内の価格確認、O_EXCL出力予約、max_retries=0、厳密Base64/PNG検証、not_sent/maybe_sent/response_receivedを実装した。
+
+実プレイの既存プロンプトと画像2枚でpreflightを実行し ready=true、send_state=not_sent を確認。画像APIへの送信と新規出力は0件。全62件（既存51件、新規preflight 11件）成功、skip 0。quick_validateは Skill is valid!。これはローカル事前診断の検証であり、新たな画像生成・課金・モデル利用可否確認ではない。
+## Flare preflight 0.3.0 配布・インストール
+
+独立Solの最終判定はApprove（Blocker/High/Mediumなし）。正本で全62件成功・skip 0、quick_validate成功。dist/call-to-past-0.3.0.zipは19ファイル、archive SHA-256 48208b26157b1ff5a5ecc4a1a32ce04ea818552f998db091fef2743d49de2c13。インストール先の全19ファイルをmanifestと照合し不一致0件。
+
+更新後スキル自身で実生成テスト用generate preflightを実行。gpt-image-2.5-flare、low、1536x1024、n=1、max_retries=0としてready=true、send_state=not_sentを確認後、利用者へ正確な内容と概算0.02 USDを提示し「OK」の承認を取得。承認JSONとrequest manifestを照合して1回だけ送信し、response_received、request ID req_801687a7a53a4fa683ab31b97da20d7d、13.984秒、PNG 1536x1024、2,278,897 bytesを確認した。SHA-256はC84517345B57DA857DECB1A6F75E83D6275D21588DE9489533FECFCBFF62F200。目視で空の廃病院隔離室、診察椅子、曇った観察窓、閉じた非常扉、緑のランプを確認し、人物・手持ち道具・可読文字・UI・流血・追加パズルは見られなかった。再送0件。実請求額は請求明細未確認。

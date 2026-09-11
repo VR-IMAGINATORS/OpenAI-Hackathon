@@ -4,9 +4,9 @@ game.pyのイベント描画packetを入力にする。現在の全contextをそ
 
 各ターンは現在の障害と道具を中心に寄った構図にする。別の拘束部位や出口設備は画面外・衣服・暗部で隠し、まだ扱っていない部位を「拘束されていない」と確定させる全身画も避ける。未公開の障害を後から追加したように見える矛盾を防ぐ。
 
-native imagegenを用いる。ローカル参照画像は事前にview_imageで見る。画像にローカルパスがある場合はreferenced_image_paths、パスがない添付を扱う場合だけ必要最小数のnum_last_images_to_includeを使う。両者を同時に使わない。モデル指定欄がないので生成モデルは`Codex native imagegen (model not exposed)`と記録。
+OpenAI Images APIの `gpt-image-2.5-flare` を `quality=low`、`1536x1024`、1枚で用いる。ローカル参照画像は事前に閲覧する。APIキーは環境変数または利用者が指定した資格情報ファイルから読み、値を出力・保存しない。
 
-現在のCodexでは生成結果のoutput_hintに`$CODEX_HOME/generated_images/...`の保存先が返ることを実測した。その明示された実ファイルをコピーし、原本は残す。環境が変わってパスを返さない場合は、提供されたexport機能か利用者による保存で実ファイルを得るまで添付完了にしない。直接OpenAI APIへ勝手に切り替えない。
+最初の画像API送信より前に、`uv run --with "openai>=2.26,<3" --with "pillow>=11,<13" python -X utf8 scripts/flare_image.py ... --preflight-only` を実行する。これは画像APIを呼ばず、Python、検証済み範囲のOpenAI SDK/Pillow、OpenAI用APIキー、プロンプト、参照画像、リンクを含まない新規出力先、SDK引数互換性を検査する。結果の `request` にあるモデル設定、プロンプトと参照画像のSHA-256、出力先に加え、最新価格・確認日時・出典を利用者へ提示し、具体的な承認を得る。承認内容を `approved: true`、`approved_at`、`approval_note`、`price_checked_at`、`price_source`、`estimated_usd`、同一の `request` を持つJSONへ保存する。その後だけ、同じ引数から `--preflight-only` を外し `--approval-json` を加えて1回実行する。CLIは `max_retries=0`、出力先の排他的予約、厳密Base64/PNG検証を行う。失敗後は再実行せず、`request_id`、`reserved_output` とAPI側の状態を確認する。preflightはモデルのアカウント利用可否までは保証しない。
 
 生成に使ったプロンプト、参照画像のセッション内パス、event ID、生成経路、生成結果のファイルパスをセッション内の新規JSONに残す。画像の見た目を確認した内容はその範囲を記す。キーや原本の不要な個人情報は記録しない。
 
