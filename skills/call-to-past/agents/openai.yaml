@@ -1,0 +1,4 @@
+interface:
+  display_name: "Call to the Past"
+  short_description: "身近な物の写真で未来の自分を助ける、会話型ミステリー脱出ゲーム"
+  default_prompt: "$call-to-past を使って、新しいゲームを日本語で始めてください。"

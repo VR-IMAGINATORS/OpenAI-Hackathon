@@ -1,1 +1,9 @@
 /.specworkflow/review/
+
+/runs/
+/dist/
+**/__pycache__/
+*.pyc
+.h3-video-submission-ledger/
+*.local.json
+*.local.md
