@@ -1,6 +1,6 @@
 # H3エンディング動画CLI
 
-この経路は `minimax/h3-max-turbo/image-to-video` の **768P・15秒・1本・balanced** に固定する。開始画像と終了画像は必須で、同じピクセル寸法・縦横比にする。R2V、複数候補、別尺、別解像度への切替は、この承認枠に含めない。`--seed` は比較目的などで利用者が値を明示した場合だけ `prepare` に加える。
+この経路は本スキルに同梱した `minimax/h3-max-turbo/image-to-video` の実装を使い、**768P・15秒・1本・balanced** に固定する。別途`h3-video`スキルをインストールする必要はない。開始画像と終了画像は必須で、同じピクセル寸法・縦横比にする。R2V、複数候補、別尺、別解像度への切替は、この承認枠に含めない。`--seed` は比較目的などで利用者が値を明示した場合だけ `prepare` に加える。
 
 `media.py` はローカル準備、承認記録、一度だけの送信、保存済みrequest IDの回収を分離する。今回のスキル実装承認はfalへの外部送信承認ではない。`approve` は、利用者から既に得た具体的な承認をそのまま保存するだけであり、コマンド実行自体が承認を作ることはない。
 
@@ -8,12 +8,12 @@
 
 送信直前に [fal公式H3 Turbo I2Vページ](https://fal.ai/models/minimax/h3-max-turbo/image-to-video) で動画単価を確認し、同時点のUSD/JPYを用意する。`pricing-checked-at` はタイムゾーン付きISO-8601で記録する。24時間を超えた見積、未来日時、非fal URL、非有限値・0以下の単価/為替、不整合なUSD/JPY計算は拒否される。
 
-PowerShell例。`$H3Skill`、`$Session`、単価、為替、日時は実値へ置き換える。
+PowerShell例。`$CallToPast`、`$Session`、単価、為替、日時は実値へ置き換える。
 
 ```powershell
-$H3Skill = "<INSTALLED_H3_VIDEO_SKILL>"
+$CallToPast = "<INSTALLED_CALL_TO_PAST_SKILL>"
 $Session = "<SESSION_DIRECTORY>"
-python "$H3Skill\scripts\estimate_cost.py" `
+python "$CallToPast\scripts\estimate_cost.py" `
   --mode i2v `
   --resolution 768P `
   --duration 15 `
@@ -76,18 +76,17 @@ python $Media approve `
 
 `FAL_KEY` が環境にあれば最優先で使う。未設定の場合だけ `--credentials-file` を読み、その中の `fal.ai` Markdownセクションから候補が厳密に1つ見つかった場合に限り使う。別セクションの値、falセクションが複数、候補0件/複数件は拒否する。キー値は子プロセス環境だけへ渡し、標準出力・標準エラーを保存しない。資格情報ファイルの実パスや値を配布例へ書かない。
 
-`--h3-skill` を省略すると、`$CODEX_HOME\skills\h3-video`、`CODEX_HOME` 未設定時は利用者ホームの `.codex\skills\h3-video` を探す。別の場所へ導入した場合は、インストール済み `h3-video` のルートを明示する。
+`submit`、`status`、`result` は常に`call-to-past`内の同梱ランタイムを使う。見積・送信・QCの3スクリプトのいずれかが欠けていれば停止し、`call-to-past`の再インストールを案内する。外部スキルや任意パスへ切り替えるCLI引数は持たない。
 
 ```powershell
 python $Media submit `
   --run-dir $Run `
-  --h3-skill $H3Skill `
   --credentials-file "<LOCAL_CREDENTIALS_FILE>"
 ```
 
 送信直前にマニフェスト、承認、4スナップショット、画像寸法、固定設定、価格鮮度を再検証する。検証後、アップロードより先に `submission-attempt.json` を排他的に作る。この記録が存在するrunでは二度目のsubmitを拒否する。
 
-既存 `h3-video/scripts/generate_h3.py` を1回だけ起動し、同じbatch・request slot 1を使う。アップロード失敗、タイムアウト、子プロセス異常、request ID欠落を含め、試行記録後の失敗は `submission-uncertain.json` として扱う。受付されなかったと推測しても自動再POSTしない。依存スクリプトが既知キーをエラー文へ含めた場合は、run配下のJSON/TXT/LOGから値を伏せてから報告する。
+同梱 `scripts/generate_h3.py` を1回だけ起動し、同じbatch・request slot 1を使う。アップロード失敗、タイムアウト、子プロセス異常、request ID欠落を含め、試行記録後の失敗は `submission-uncertain.json` として扱う。受付されなかったと推測しても自動再POSTしない。依存スクリプトが既知キーをエラー文へ含めた場合は、run配下のJSON/TXT/LOGから値を伏せてから報告する。
 
 ## 5. 保存済みrequest IDだけを照会・回収する
 
@@ -96,12 +95,10 @@ python $Media submit `
 ```powershell
 python $Media status `
   --run-dir $Run `
-  --h3-skill $H3Skill `
   --credentials-file "<LOCAL_CREDENTIALS_FILE>"
 
 python $Media result `
   --run-dir $Run `
-  --h3-skill $H3Skill `
   --credentials-file "<LOCAL_CREDENTIALS_FILE>"
 ```
 
@@ -111,10 +108,10 @@ result成功時は同じ取得ディレクトリへ `receipt.json` を排他的�
 
 ## 6. 動画QC
 
-動画を取得してから、既存H3スキルの検査を新しい出力先で実行する。
+動画を取得してから、同梱QCスクリプトの検査を新しい出力先で実行する。
 
 ```powershell
-python "$H3Skill\scripts\verify_and_concat.py" `
+python "$CallToPast\scripts\verify_and_concat.py" `
   --clip "<RETRIEVED_ENDING_MP4>" `
   --output "$Run\qc\ending-qc-copy.mp4" `
   --report "$Run\qc\report.json" `

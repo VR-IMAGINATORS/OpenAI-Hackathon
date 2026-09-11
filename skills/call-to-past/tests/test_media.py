@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from datetime import timedelta
@@ -58,8 +59,107 @@ class MediaBridgeTests(unittest.TestCase):
             "# next:\nANOTHER_NON_FAL_VALUE\n",
             encoding="utf-8",
         )
+        self.real_resolve_h3_skill = media.resolve_h3_skill
         self.h3_skill = self.make_fake_h3_skill()
+        self.resolve_h3_patch = mock.patch.object(
+            media, "resolve_h3_skill", return_value=self.h3_skill
+        )
+        self.resolve_h3_patch.start()
+        self.addCleanup(self.resolve_h3_patch.stop)
 
+    def test_default_h3_runtime_is_bundled_with_call_to_past(self) -> None:
+        nonexistent_home = self.root / "codex-home-without-h3-video"
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(nonexistent_home)}, clear=False):
+            skill = self.real_resolve_h3_skill()
+        self.assertEqual(skill, SCRIPT.parents[1].resolve())
+        for name in ("estimate_cost.py", "generate_h3.py", "verify_and_concat.py"):
+            self.assertTrue((skill / "scripts" / name).is_file(), name)
+
+    def test_isolated_copy_runs_submit_status_result_from_bundled_runtime(self) -> None:
+        copied_skill = self.root / "isolated-call-to-past"
+        shutil.copytree(
+            SCRIPT.parents[1],
+            copied_skill,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        copied_script = copied_skill / "scripts" / "media.py"
+        copied_spec = importlib.util.spec_from_file_location(
+            "call_to_past_media_isolated", copied_script
+        )
+        assert copied_spec and copied_spec.loader
+        copied_media = importlib.util.module_from_spec(copied_spec)
+        copied_spec.loader.exec_module(copied_media)
+
+        calls: list[list[str]] = []
+
+        def fake_run(command, *, cwd, fal_key, scrub_root):
+            calls.append(command)
+            self.assertEqual(
+                Path(command[1]).resolve(),
+                (copied_skill / "scripts" / "generate_h3.py").resolve(),
+            )
+            action = command[2]
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if action == "submit":
+                (output_dir / "request-id.json").write_text(
+                    json.dumps(
+                        {
+                            "endpoint": copied_media.ENDPOINT,
+                            "request_id": "isolated-request-id-001",
+                            "submitted_at": "2026-09-12T00:00:00Z",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            elif action == "status":
+                (output_dir / "status-isolated.json").write_text(
+                    json.dumps({"position": 1}), encoding="utf-8"
+                )
+            elif action == "result":
+                video = Path(command[command.index("--video-output") + 1])
+                video.write_bytes(b"isolated-fake-mp4")
+            return mock.Mock(returncode=0, stdout=b"", stderr=b"")
+
+        run_dir = self.root / "isolated-run"
+        quiet_call(
+            copied_media.prepare,
+            namespace(
+                run_dir=run_dir,
+                prompt_file=self.prompt,
+                start_image=self.start,
+                end_image=self.end,
+                cost_plan=self.cost_plan,
+                seed=None,
+            ),
+        )
+        manifest_hash = copied_media.sha256_file(run_dir / "approval-manifest.json")
+        quiet_call(
+            copied_media.approve,
+            namespace(
+                run_dir=run_dir,
+                manifest_sha256=manifest_hash,
+                approval_text="同梱ランタイムのテスト送信を承認します。",
+                approval_evidence_file=None,
+            ),
+        )
+        runtime_args = namespace(run_dir=run_dir, credentials_file=self.credentials)
+        missing_h3_home = self.root / "codex-home-without-h3-video"
+        with mock.patch.dict(
+            os.environ,
+            {"CODEX_HOME": str(missing_h3_home), "FAL_KEY": ""},
+            clear=False,
+        ):
+            with mock.patch.object(copied_media, "run_dependency", side_effect=fake_run):
+                self.assertEqual(quiet_call(copied_media.submit, runtime_args), 0)
+                for action in ("status", "result"):
+                    args = namespace(
+                        command=action,
+                        run_dir=run_dir,
+                        credentials_file=self.credentials,
+                    )
+                    self.assertEqual(quiet_call(copied_media.recovery, args), 0)
+        self.assertEqual([command[2] for command in calls], ["submit", "status", "result"])
     def write_cost_plan(
         self,
         *,
@@ -183,7 +283,6 @@ elif command == 'result':
     def submit_args(self, run_dir: Path) -> argparse.Namespace:
         return namespace(
             run_dir=run_dir,
-            h3_skill=self.h3_skill,
             credentials_file=self.credentials,
         )
 
@@ -194,7 +293,6 @@ elif command == 'result':
         result_args = namespace(
             command="result",
             run_dir=run_dir,
-            h3_skill=self.h3_skill,
             credentials_file=self.credentials,
         )
         output = io.StringIO()
@@ -306,6 +404,34 @@ elif command == 'result':
             media.sha256_file(run_dir / "approval-manifest.json"),
         )
 
+    def test_submit_without_override_invokes_bundled_runtime(self) -> None:
+        run_dir = self.prepare("bundled-runtime")
+        self.approve(run_dir)
+        expected_script = SCRIPT.parents[1].resolve() / "scripts" / "generate_h3.py"
+
+        def fake_run(command, *, cwd, fal_key, scrub_root):
+            self.assertEqual(Path(command[1]).resolve(), expected_script)
+            self.assertEqual(cwd, run_dir)
+            output_dir = Path(command[command.index("--output-dir") + 1])
+            output_dir.mkdir(parents=True, exist_ok=False)
+            (output_dir / "request-id.json").write_text(
+                json.dumps(
+                    {
+                        "endpoint": media.ENDPOINT,
+                        "request_id": "bundled-request-id-001",
+                        "submitted_at": "2026-09-12T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return mock.Mock(returncode=0, stdout=b"", stderr=b"")
+
+        args = namespace(run_dir=run_dir, credentials_file=self.credentials)
+        with mock.patch.dict(os.environ, {"FAL_KEY": ""}, clear=False):
+            with mock.patch.object(media, "resolve_h3_skill", side_effect=self.real_resolve_h3_skill):
+                with mock.patch.object(media, "run_dependency", side_effect=fake_run):
+                    self.assertEqual(quiet_call(media.submit, args), 0)
+        self.assertTrue((run_dir / "submission-success.json").is_file())
     def test_submit_is_one_attempt_and_replay_is_blocked(self) -> None:
         run_dir = self.prepare("replay")
         self.approve(run_dir, "表示された同一ハッシュの15秒動画1本を承認します。")
@@ -353,14 +479,12 @@ elif command == 'result':
             status_args = namespace(
                 command="status",
                 run_dir=run_dir,
-                h3_skill=self.h3_skill,
-                credentials_file=self.credentials,
+                    credentials_file=self.credentials,
             )
             result_args = namespace(
                 command="result",
                 run_dir=run_dir,
-                h3_skill=self.h3_skill,
-                credentials_file=self.credentials,
+                    credentials_file=self.credentials,
             )
             status_output = io.StringIO()
             with contextlib.redirect_stdout(status_output):
@@ -448,7 +572,6 @@ elif command == 'result':
         result_args = namespace(
             command="result",
             run_dir=run_dir,
-            h3_skill=self.h3_skill,
             credentials_file=self.credentials,
         )
         with mock.patch.dict(os.environ, {"FAL_KEY": ""}, clear=False):
@@ -522,7 +645,6 @@ elif command == 'result':
         result_args = namespace(
             command="result",
             run_dir=run_dir,
-            h3_skill=self.h3_skill,
             credentials_file=self.credentials,
         )
         with mock.patch.dict(os.environ, {"FAL_KEY": ""}, clear=False):

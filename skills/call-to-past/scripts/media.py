@@ -646,17 +646,15 @@ def credentials(args: argparse.Namespace) -> tuple[str, str]:
     return key, "credentials-file:fal.ai-section"
 
 
-def resolve_h3_skill(value: Path | None) -> Path:
-    if value is not None:
-        skill = value.resolve()
-    else:
-        codex_home = os.environ.get("CODEX_HOME")
-        base = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
-        skill = (base / "skills" / "h3-video").resolve()
-    generate = skill / "scripts" / "generate_h3.py"
-    verify = skill / "scripts" / "verify_and_concat.py"
-    if not generate.is_file() or not verify.is_file():
-        raise BridgeError("h3-video dependency is incomplete")
+def resolve_h3_skill() -> Path:
+    skill = Path(__file__).resolve().parents[1]
+    required = ("estimate_cost.py", "generate_h3.py", "verify_and_concat.py")
+    missing = [name for name in required if not (skill / "scripts" / name).is_file()]
+    if missing:
+        names = ", ".join(missing)
+        raise BridgeError(
+            f"bundled H3 Max Turbo runtime is incomplete: {names}; reinstall call-to-past"
+        )
     return skill
 
 
@@ -738,7 +736,7 @@ def run_dependency(
         )
     except Exception as exc:
         scrub_secret_files(scrub_root, fal_key)
-        raise BridgeError("failed to start the H3 dependency") from exc
+        raise BridgeError("failed to start the bundled H3 Max Turbo runtime") from exc
     scrub_secret_files(scrub_root, fal_key)
     return completed
 
@@ -770,7 +768,7 @@ def submit(args: argparse.Namespace) -> int:
     manifest_path, manifest = load_manifest(run_dir, fresh_price=True)
     manifest_hash = sha256_file(manifest_path)
     approval = load_approval(run_dir, manifest_hash)
-    h3_skill = resolve_h3_skill(args.h3_skill)
+    h3_skill = resolve_h3_skill()
     fal_key, credential_source = credentials(args)
     attempt_path = run_dir / "submission-attempt.json"
     if attempt_path.exists():
@@ -845,7 +843,7 @@ def submit(args: argparse.Namespace) -> int:
             "request_slot": 1,
             "state": "uncertain",
             "failed_at": iso_utc(utc_now()),
-            "reason": "dependency-start-failure-after-attempt-lock",
+            "reason": "bundled-runtime-start-failure-after-attempt-lock",
             "action": "Do not submit again. Inspect the provider before any new approval.",
         }
         write_json_new(run_dir / "submission-uncertain.json", uncertain)
@@ -861,7 +859,7 @@ def submit(args: argparse.Namespace) -> int:
             "request_slot": 1,
             "state": "uncertain",
             "failed_at": iso_utc(utc_now()),
-            "reason": "H3 dependency returned a failure after the attempt lock",
+            "reason": "bundled H3 runtime returned a failure after the attempt lock",
             "captured_output": fingerprint,
             "action": "Do not submit again. Inspect the provider before any new approval.",
         }
@@ -1063,7 +1061,7 @@ def recovery(args: argparse.Namespace) -> int:
         manifest_hash, manifest, request_id = recovery_contract(run_dir)
     else:
         request_id = saved_request(run_dir)
-    h3_skill = resolve_h3_skill(args.h3_skill)
+    h3_skill = resolve_h3_skill()
     fal_key, _ = credentials(args)
     output_dir = run_dir / "h3"
     previous_status_files = set(output_dir.glob("status-*.json"))
@@ -1166,14 +1164,7 @@ def recovery(args: argparse.Namespace) -> int:
 
 
 def add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--h3-skill",
-        type=Path,
-        help=(
-            "Installed h3-video skill root; otherwise use $CODEX_HOME/skills/h3-video "
-            "or ~/.codex/skills/h3-video."
-        ),
-    )
+
     parser.add_argument(
         "--credentials-file",
         type=Path,

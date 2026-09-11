@@ -18,7 +18,7 @@ $call-to-past を使って、新しいゲームを日本語で始めてくださ
 
 ハッピー・ノーマル・バッドのどの動画も、開始と終了で人物の動作・構図・場所や明るさが大きく変わるよう設計します。確定した結果に合う移動や行動でつなぎます。
 
-Python3.10+とPillowが必要です。動画には別途`h3-video`、fal_client、ffmpeg/ffprobe、FAL_KEYを使います。内蔵画像ツールはFlareの明示指定に対応していません。判定にはSol highサブエージェントを使用します。
+Python3.10+とPillowが必要です。H3 Max Turbo I2Vの実行コードは`call-to-past`へ同梱済みで、別途`h3-video`をインストールする必要はありません。動画生成にはfal_client、ffmpeg/ffprobe、FAL_KEYを使います。内蔵画像ツールはFlareの明示指定に対応していません。判定にはSol highサブエージェントを使用します。
 
 開発用テスト（ネットワーク・有料生成なし）:
 
