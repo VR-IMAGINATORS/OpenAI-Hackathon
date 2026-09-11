@@ -1,0 +1,8 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+[marketplaces.spec-workflow]
+source_type = "git"
+source = "https://github.com/edom18/SpecWorkflow.git"
+
+[plugins."spec-workflow@spec-workflow"]
+enabled = true
