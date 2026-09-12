@@ -1,7 +1,11 @@
-export interface PreparedPhoto { base64: string; preview: string }
+export interface PreparedPhoto {
+  base64: string;
+  preview: string;
+}
 export async function preparePhoto(file: File): Promise<PreparedPhoto> {
   if (!file.type.startsWith('image/')) throw new Error('画像ファイルを選択してください。');
-  if (file.size > 32 * 1024 * 1024) throw new Error('写真が大きすぎます。32MB以下の写真を選択してください。');
+  if (file.size > 32 * 1024 * 1024)
+    throw new Error('写真が大きすぎます。32MB以下の写真を選択してください。');
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();
@@ -24,5 +28,7 @@ export async function preparePhoto(file: File): Promise<PreparedPhoto> {
   } catch (error) {
     if (error instanceof Error && error.name !== 'EncodingError') throw error;
     throw new Error('写真を読み込めません。JPEG、PNGなどの画像で再試行してください。');
-  } finally { URL.revokeObjectURL(url); }
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

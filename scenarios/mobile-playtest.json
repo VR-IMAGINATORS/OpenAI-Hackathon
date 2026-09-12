@@ -11,10 +11,7 @@
   },
   "setting": {
     "location": "薄暗い倉庫",
-    "characters": [
-      "未来のあなた",
-      "倉庫の外にいる監禁犯"
-    ],
+    "characters": ["未来のあなた", "倉庫の外にいる監禁犯"],
     "constraints": [
       "写真から指定した対象が実体化する",
       "特殊能力は付与しない",
@@ -27,27 +24,21 @@
       "title": "手首の拘束",
       "situation": "椅子に座った状態で手首が縄で縛られている。",
       "goal": "手首を自由にする",
-      "constraints": [
-        "痛みだけで成功扱いにしない"
-      ]
+      "constraints": ["痛みだけで成功扱いにしない"]
     },
     {
       "id": "door",
       "title": "開かない扉",
       "situation": "倉庫の扉は内側の錆びた留め金で固定されている。",
       "goal": "扉を通れる状態にする",
-      "constraints": [
-        "前の道具がなくても身近な物の工夫で解けるよう調整する"
-      ]
+      "constraints": ["前の道具がなくても身近な物の工夫で解けるよう調整する"]
     },
     {
       "id": "escape",
       "title": "外への通路",
       "situation": "外へ続く通路には監禁犯の気配がある。",
       "goal": "監禁犯に捕まらず外へ出る",
-      "constraints": [
-        "説得や陽動も状況に筋が通れば認める"
-      ]
+      "constraints": ["説得や陽動も状況に筋が通れば認める"]
     }
   ],
   "events": [
@@ -55,9 +46,7 @@
       "id": "approaching",
       "title": "足音が近づく",
       "mode": "disabled",
-      "eligibleObstacleIds": [
-        "door"
-      ],
+      "eligibleObstacleIds": ["door"],
       "triggerCondition": "物語の流れに合う場合に、隣室へ向かう足音を知らせる。",
       "timeLimitSeconds": 60,
       "maxOccurrences": 1,
