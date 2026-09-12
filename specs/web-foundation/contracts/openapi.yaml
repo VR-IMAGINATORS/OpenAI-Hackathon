@@ -1,0 +1,154 @@
+openapi: 3.1.0
+info:
+  title: Web foundation (mock only)
+  version: 0.1.0
+paths:
+  /api/bootstrap:
+    get:
+      description: Local server. Public scenario projection and relay availability, no internal obstacles.
+      responses:
+        '200':
+          description: Bootstrap, including reachable=false if relay is unavailable.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [app, scenario, relay]
+                properties:
+                  app:
+                    type: object
+                    properties:
+                      name: {type: string}
+                      stage: {const: foundation}
+                  scenario:
+                    type: object
+                    required: [id, title, playerBriefing, rules, obstacleCount]
+                    properties:
+                      id: {type: string}
+                      title: {type: string}
+                      playerBriefing: {type: string}
+                      obstacleCount: {type: integer}
+                      rules:
+                        type: object
+                        properties:
+                          maxActions: {type: integer}
+                          maxPhotosPerAction: {type: integer}
+                          totalTimeSeconds: {type: integer}
+                  relay:
+                    type: object
+                    properties:
+                      reachable: {type: boolean}
+                      authMode: {enum: [required, none, null]}
+                      mode: {enum: [mock, null]}
+  /api/connection:
+    post:
+      description: Local -> relay login -> authorized mock diagnostic. Never returns token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      responses:
+        '200':
+          description: Confirmed HTTP path, no real AI.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kind, message, path, scenarioId]
+                properties:
+                  kind: {const: mock}
+                  message: {type: string}
+                  path:
+                    type: array
+                    items: {type: string}
+                  scenarioId: {type: string}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '504': {$ref: '#/components/responses/Error'}
+  /health:
+    get:
+      description: Relay public metadata.
+      responses:
+        '200':
+          description: Relay is available; this does not confirm OpenAI availability.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service: {const: relay}
+                  mode: {const: mock}
+                  authMode: {enum: [required, none]}
+  /v1/sessions:
+    post:
+      description: Relay issues a short-lived token subject to operator auth mode and quotas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Login'}
+      responses:
+        '200':
+          description: Secret relay token, never forwarded to browser.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresAt]
+                properties:
+                  token: {type: string}
+                  expiresAt: {type: integer, description: Unix milliseconds}
+        '401': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /v1/diagnostics:
+    post:
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '200':
+          description: Deterministic mock provider result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kind, message]
+                properties:
+                  kind: {const: mock}
+                  message: {type: string}
+        '401': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    Login:
+      type: object
+      additionalProperties: false
+      properties:
+        passphrase: {type: string, maxLength: 256}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+  responses:
+    Error:
+      description: Sanitized application error; no upstream body or credentials.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
