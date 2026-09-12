@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist/server",
+    "rootDir": ".",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "apps/local-server/**/*.ts",
+    "apps/relay/**/*.ts",
+    "packages/**/*.ts"
+  ],
+  "exclude": [
+    "apps/web",
+    "tests",
+    "tools"
+  ]
+}

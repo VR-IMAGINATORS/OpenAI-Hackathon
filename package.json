@@ -1,0 +1,39 @@
+{
+  "name": "call-to-the-past-foundation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "node --import tsx tools/dev.ts",
+    "dev:all": "node --import tsx tools/dev.ts --with-relay",
+    "dev:web": "vite",
+    "dev:local": "tsx watch apps/local-server/index.ts",
+    "dev:relay": "tsx watch apps/relay/index.ts",
+    "check": "tsc --noEmit && tsx tools/validate-scenario.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "build": "npm run check && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/apps/local-server/index.js",
+    "start:relay": "node dist/server/apps/relay/index.js",
+    "validate:scenario": "tsx tools/validate-scenario.ts"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.3.6",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  }
+}

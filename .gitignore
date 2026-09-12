@@ -8,3 +8,15 @@
 *.local.json
 *.local.md
 .skill-staging
+
+# Web artifacts and credentials
+.env
+.env.*
+!.env.example
+!*.env.example
+node_modules/
+**/dist/
+coverage/
+artifacts/
+*.log
+!.env.*.example
