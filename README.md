@@ -1,58 +1,80 @@
-# OpenAI-Hackathon
+# Call to the Past — 未来からの着信
 
-## Call to the Past
+身近な物の写真と、音声で伝える意外な使い方で、未来の自分を脱出へ導くAIゲーム。
+プレイヤーの発想をAIが理解し、状況に合う攻略として物語へ反映することが体験の核です。
 
-Codexの会話で写真を送り、1週間後の自分を助ける脱出ゲームの試作スキルです。3つの障害を1つずつ攻略し、最大4行動。1回の写真は2枚までで、持越品だけなら写真なしでも挑めます。
+**現在はWeb版の開発基盤です。ゲーム本編・GPT-Live音声・実画像/動画生成は未実装です。**
+APIキーなしで、画面→ローカルサーバー→中継サーバーのモック通信を確認できます。
 
-- スキル: [skills/call-to-past/SKILL.md](skills/call-to-past/SKILL.md)
-- 仕様と進捗: [specs/call-to-past/tasks.md](specs/call-to-past/tasks.md)
-- 検証結果と制約: [specs/call-to-past/verification.md](specs/call-to-past/verification.md)
+## 起動
 
-インストール後、新しいCodexセッションで次のように呼び出します。
+Node.js22.12以上とnpmを用意し、このリポジトリのルートで実行します。
 
-```text
-$call-to-past を使って、新しいゲームを日本語で始めてください。
+```sh
+npm ci
+npm run dev:all
 ```
 
-写真と「どう使うか」を送ると未来AIが判定し、各ターンの画像を生成します。最後の15秒動画はH3を使用し、素材と見積を提示して承認を得てから送信します。動画API料金とは別にCodexの利用枠を使います。写真コピー・生成物・履歴は`runs/call-to-past/`へ保存し、自動削除しません。
+[開発画面](http://127.0.0.1:5173) を開き、合言葉 **local-demo-only** で「接続を確認」。
+これは公開された開発専用の合言葉で、実APIへの通信や課金はありません。Ctrl+Cで3プロセスを停止します。
 
-ハッピー・ノーマル・バッドのどの動画も、開始と終了で人物の動作・構図・場所や明るさが大きく変わるよう設計します。確定した結果に合う移動や行動でつなぎます。
+運営の中継へ接続するときは .env.local.example を .env.local にコピーしてRELAY_URLを設定し、`npm run dev`。
+審査員はプロバイダーのAPIキーを用意しません。運営が別途共有する合言葉を使います。
+詳細は [起動・運用手順](docs/development.md)。
 
-Python3.10+とPillowが必要です。H3 Max Turbo I2Vの実行コードは`call-to-past`へ同梱済みで、別途`h3-video`をインストールする必要はありません。動画生成にはfal_client、ffmpeg/ffprobe、FAL_KEYを使います。内蔵画像ツールはFlareの明示指定に対応していません。判定にはSol highサブエージェントを使用します。
+## 構成と作業場所
 
-開発用テスト（ネットワーク・有料生成なし）:
+| 場所 | 担当 |
+|---|---|
+| apps/web/ | React/Viteの画面 |
+| apps/local-server/ | 審査員側。設定読込、今後のゲーム進行/prompt/状態管理 |
+| apps/relay/ | 運営側。認証・利用制限・通信。現在はモック診断のみ |
+| packages/shared/ | 通信型とシナリオ検証 |
+| scenarios/ | プランナーが編集するJSON |
+| specs/web-foundation/ | Web版の合意・仕様・計画・タスク・検証 |
+| skills/call-to-past/ | 既存Codex試作。ドッグフーディング用の参考 |
 
-```powershell
-python -X utf8 -m unittest discover -s skills/call-to-past/tests -v
+[構成と境界](docs/architecture.md) / [シナリオ編集](docs/planner-guide.md) / [ゲームの合意事項](specs/web-foundation/game-direction.md)。
+
+## ゲームの初期方針
+
+- GPT-Live音声で相談し、AIの理解した使い方を短文表示。「これで実行」で確定。
+- 3障害・最大4行動・1回2枚・全体5分。JSONで調整。
+- 道具は状態を持ち越し。失敗後も別の工夫を試せる。
+- 結果を音声で先に伝え、画像を非同期表示。成否通知後にエンディング動画を生成。
+- 動画は成功/失敗の両方。現時点で必須だが、時間不足時の削除候補。
+
+## 検証
+
+```sh
+npm run check
+npm test
+npm run build
 ```
 
-模擬テストの成功は、実写真・実生成の通し確認やゲームの面白さを保証しません。現状は上記の検証結果を参照してください。
+[実施結果と未実施項目](specs/web-foundation/verification.md)を参照してください。モックの成功は実AI接続や面白さの検証を意味しません。
+
+## ハッカソン提出
+
+| 提出物 | 現在 |
+|---|---|
+| GitHubソース | local/UI/relayコードを含める。秘密は除外 |
+| 動作するゲームデモ | 未完成。現在はモック通信のみ |
+| プロジェクトの説明 | 本READMEと合意事項 |
+| 応募部門 | 未確定 |
+| OpenAI活用説明 | GPT-Live会話を必須に計画。判定/画像/動画のモデルと実績は後続で追記 |
+
+ゲームロジックは審査員のローカルで実行し、運営サーバーは認証・利用制限・API中継を担当する設計です。
+外部依存の審査規定適合は未確認。審査後に中継を停止するため、運営の利用枠によるAIプレイも終了します。
+第三者のキャラクター/アセット/音楽は権利を確認したものだけ使用します。
 
 ## 開発ワークフロー
 
-[SpecWorkflow](https://github.com/edom18/SpecWorkflow) を使用します。
-`.codex/config.toml` にマーケットプレイスの取得元と、このプロジェクトでの有効化を定義しています。
+[SpecWorkflow](https://github.com/edom18/SpecWorkflow)を使用します。仕様→計画→タスク→実装→レビュー。
+[AGENTS.md](AGENTS.md)が共通指示の正本で、[CLAUDE.md](CLAUDE.md)も同じ方針を参照します。
+レビュー実行台帳 .specworkflow/review/ はGit対象外、仕様・設計判断は記録します。
 
-Codex でこのリポジトリを信頼済みプロジェクトとして開き、設定変更後は新しいセッションを開始してください。
-未インストールの環境では Plugins から `spec-workflow@spec-workflow` をインストールします。
-Codex CLI を使用する場合の導入コマンドは以下です。
+旧試作の利用方法は [旧スキル](skills/call-to-past/SKILL.md)、[旧仕様/検証](specs/call-to-past/verification.md)。
+旧試作のルールやテスト結果を、Web版の確定事項・実績として扱いません。
 
-```sh
-codex plugin marketplace add edom18/SpecWorkflow
-codex plugin add spec-workflow@spec-workflow
-```
-
-プラグイン本体の保存先はユーザー領域の `~/.codex/plugins/cache/` です。
-プロジェクトの設定は、このリポジトリでの有効・無効を制御します。
-他プロジェクトでの有効化状態やユーザー設定は変更しません。
-詳細は [Codex のプロジェクト単位のプラグイン設定](https://developers.openai.com/plugins/build/plugins#enable-or-disable-a-plugin-for-a-repo) を参照してください。
-
-導入後は `spec-workflow:doctor` で依存を確認します。Windows のフックスクリプトは Git Bash と `jq` を使用します。
-フックはクライアントの対応状況と信頼設定に依存するため、スキルが使えることとフックの動作は別に確認してください。
-特に、SpecWorkflow の Codex 用フックには Claude Code 用の PreToolUse による main push / PR ゲートの強制は含まれません。
-
-基本の流れは、仕様作成 → 実装計画 → タスク分割 → 実装 → レビューです。
-「SpecWorkflow で仕様を作成して」のように依頼できます。運用方針は `AGENTS.md` を参照してください。
-
-レビュー実行台帳 `.specworkflow/review/` は Git 管理対象外です。
-仕様・設計判断・教訓などの恒久記録は Git 管理します。
+次の開発は [後続の進め方](specs/web-foundation/next-steps.md) を参照してください。
