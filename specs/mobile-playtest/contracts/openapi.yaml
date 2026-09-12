@@ -1,0 +1,137 @@
+openapi: 3.1.0
+info:
+  title: Mobile playtest local API
+  version: 0.1.0-draft
+servers:
+  - url: /
+security:
+  - owner: []
+paths:
+  /api/play/claim:
+    post:
+      security: []
+      summary: 一回招待を所有cookieへ交換
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [invite]
+              properties:
+                invite: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { description: 所有cookie発行と公開状態 }
+        '401': { description: 招待不正又は期限切れ }
+        '409': { description: 使用済み又は別プレイ中 }
+  /api/play/state:
+    get:
+      summary: data-model.mdの公開状態
+      responses:
+        '200': { description: 公開状態 }
+        '401': { description: 所有権なし }
+  /api/play/start:
+    post:
+      summary: 導入終了後に時計開始（冪等）
+      responses:
+        '200': { description: 公開状態 }
+  /api/play/photos:
+    put:
+      summary: 写真を置換して提案を無効化し認識
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [images]
+              properties:
+                images:
+                  type: array
+                  maxItems: 2
+                  items: { type: string, maxLength: 2796204, description: base64 JPEG/PNG/WebP。decode後1枚2MiB以下 }
+      responses:
+        '200': { description: 更新公開状態 }
+        '413': { description: 写真上限 }
+        '422': { description: 認識不能又は形式不正 }
+  /api/play/events:
+    post:
+      summary: Live transcript/delegationを型検証してlocalへ反映
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [generation, event]
+              properties:
+                generation: { type: integer, minimum: 0 }
+                event: { type: object, description: research.mdの受信イベントallowlist。最大32KiB }
+      responses:
+        '200': { description: 公開状態とLive appendコマンド配列 }
+        '409': { description: 旧generation }
+  /api/play/actions:
+    post:
+      summary: 表示認識を固定して一度だけ判定
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [actionId, proposalRevision]
+              properties:
+                actionId: { type: string, format: uuid }
+                proposalRevision: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: 保存済み又は新しい行動結果と公開状態 }
+        '409': { description: 別処理中・古い認識・実行不能 }
+        '502': { description: AI失敗。行動消費なし }
+  /api/play/live:
+    post:
+      summary: local設定でrelay経由のSDP交換
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sdp]
+              properties:
+                sdp: { type: string, minLength: 1, maxLength: 65536 }
+                passphrase: { type: string, maxLength: 256 }
+      responses:
+        '201': { description: SDP answerとgeneration。relay/APIキーなし }
+        '429': { description: 作成上限 }
+  /api/play/heartbeat:
+    post:
+      summary: 所有セッションとLive生存通知（10秒毎と音声接続状態変更直後）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [generation, voiceState]
+              properties:
+                generation: { type: integer, minimum: 0 }
+                voiceState: { type: string, enum: [connecting, connected, disconnected, failed, closed] }
+      responses:
+        '200': { description: 公開状態 }
+  /api/play/end:
+    post:
+      summary: Live終了と画像・会話破棄（冪等）
+      responses:
+        '200': { description: 終了結果 }
+components:
+  securitySchemes:
+    owner:
+      type: apiKey
+      in: cookie
+      name: play_owner
