@@ -1,3 +1,4 @@
+import JoinScreen from './JoinScreen.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ApiError, Bootstrap, ConnectionResult } from '../../../packages/shared/api.js';
@@ -52,7 +53,7 @@ function ArrowIcon() {
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-export default function App() {
+function FoundationScreen() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -175,4 +176,15 @@ export default function App() {
       <footer className="site-footer"><span>現代のひらめきを、未来へ。</span><span>FOUNDATION BUILD <span className="footer-divider">/</span> NO LIVE AI</span></footer>
     </div>
   );
+}
+const initialInvite = new URLSearchParams(window.location.hash.slice(1)).get('invite');
+if (initialInvite) history.replaceState(null, '', window.location.pathname + window.location.search);
+
+export default function App() {
+  const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
+  const [error, setError] = useState('');
+  const load = () => { setError(''); void requestJson<Bootstrap>('/api/bootstrap').then(setBootstrap).catch(error => setError(error.message)); };
+  useEffect(load, []);
+  if (!bootstrap) return <main className="play-shell join-shell"><p className="play-brand">CALL TO PAST</p><h1>未来への回線を<br />準備しています。</h1><p role="status">{error || '接続先を確認中…'}</p>{error && <button className="primary-button" onClick={load}>もう一度確認</button>}</main>;
+  return bootstrap.app.stage === 'mobile-playtest' ? <JoinScreen bootstrap={bootstrap} initialInvite={initialInvite} /> : <FoundationScreen />;
 }

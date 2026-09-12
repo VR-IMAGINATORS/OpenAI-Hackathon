@@ -94,3 +94,11 @@ $call-to-past を使って、新しいゲームを日本語で始めてくださ
 ```powershell
 python -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests -v
 ```
+
+## スマホで音声と写真を使って試遊する
+
+モバイル試遊版は `npm run play:mobile` で起動します。PCのターミナルと管理画面に表示されるQRからスマホで参加できます。
+
+事前に運営側のGPT-Live利用権限を持つAPIキーとrelay設定、および起動PCのcloudflaredが必要です。審査員にAPIキーを渡す必要はありません。[セットアップと起動手順](docs/development.md#モバイル試遊版を起動する)を参照してください。
+
+ゲームは音声相談・写真認識・明示実行・JSONの障害進行を実装しています。生成画像・動画・緊迫イベントは後続です。実API・実機の確認状況は[検証記録](specs/mobile-playtest/verification.md)に分けて記載します。

@@ -1,0 +1,42 @@
+openapi: 3.1.0
+info:
+  title: Mobile playtest relay API
+  version: 0.1.0-draft
+security:
+  - relayToken: []
+paths:
+  /v1/live/sessions:
+    post:
+      summary: 固定OpenAI Live作成契約。model/instructions/client delegation/store=false/SDPを検証
+      description: research.mdのPOST契約。tokenごと同時1、3作成まで。最大body128KiB。instructions最大8000文字。未知keyは拒否。
+      responses:
+        '201': { description: session idとSDP answer（localのみへ返す） }
+        '401': { description: 認証失敗 }
+        '429': { description: 制限到達 }
+  /v1/live/{id}/heartbeat:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, maxLength: 128 } }
+    post:
+      summary: token所有IDを確認し生存期限更新
+      responses:
+        '200': { description: 期限更新 }
+        '404': { description: 非所有又は存在なし }
+  /v1/live/{id}/hangup:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, maxLength: 128 } }
+    post:
+      summary: token所有IDのLiveを終了
+      responses:
+        '200': { description: 終了確認済み }
+        '502': { description: 終了未確認、限定再試行中 }
+  /v1/responses:
+    post:
+      summary: 画像とテキストの構造化Responses（localのみ）
+      description: 固定api.openai.com/v1/responsesへ転送。modelは運営allowlist。inputはtextとbase64 JPEGのみ。instructions/入力各最大16000文字、写真最大2枚各2MiB、output schema最大16KiB。store=false、max_output_tokens<=1000、tools/外部URL/background/previous_response_id拒否。全body6MiB。応答も最大256KiB/30秒。未知key拒否。
+      responses:
+        '200': { description: Responses結果（localでゲームschema検証） }
+        '413': { description: 上限超過 }
+        '429': { description: 回数・同時上限 }
+components:
+  securitySchemes:
+    relayToken: { type: http, scheme: bearer }

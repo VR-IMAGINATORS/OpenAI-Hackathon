@@ -1,0 +1,39 @@
+openapi: 3.1.0
+info:
+  title: Loopback-only mobile playtest administration
+  version: 0.1.0-draft
+servers:
+  - url: http://127.0.0.1:4312
+security:
+  - admin: []
+paths:
+  /api/admin/claim:
+    post:
+      security: []
+      summary: 起動時のフラグメント管理tokenを一度だけ管理cookieへ交換
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { description: admin cookie発行。URLからtoken除去 }
+  /api/admin/invite:
+    post:
+      summary: 招待を失効・再発行しQR表示用URLを返す
+      description: プレイ中は409。公開URLの準備完了までは503。referrer-policy=no-referrer/cache-control=no-store。
+      responses:
+        '200': { description: invite URLとexpiresAt }
+  /api/admin/reset:
+    post:
+      summary: 現プレイ破棄・hangup・写真削除・cookie失効
+      responses:
+        '200': { description: 破棄完了（新招待は別操作） }
+components:
+  securitySchemes:
+    admin: { type: apiKey, in: cookie, name: play_admin }

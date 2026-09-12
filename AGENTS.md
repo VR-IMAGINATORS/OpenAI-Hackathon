@@ -43,3 +43,6 @@ Node.js22.12+、npm、TypeScript。rootから実行。
 中継の既定認証はrequired。noneは運営設定だけ。privateリポジトリ自体は中継認証ではない。
 現在の上限はメモリで再起動リセット。実課金/公開運用に十分と扱わない。
 本編追加前に後続の未決定事項を確認し、土台の範囲を黙ってゲーム全体へ広げない。
+
+## モバイル試遊
+specs/mobile-playtest/spec.md と plan.mdが試遊版の正本。npm run play:mobileでbuild→local→HTTPSトンネル→招待QR。ゲーム状態はlocal、運営relayはAPI通信と認証/上限だけ。実音声と実機撮影の検証をfake upstreamテストと混同しない。
