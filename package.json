@@ -19,7 +19,9 @@
     "start:relay": "node dist/server/apps/relay/index.js",
     "validate:scenario": "tsx tools/validate-scenario.ts",
     "play:mobile": "npm run build && node --import tsx tools/mobile.ts",
-    "play:mobile:start": "node --import tsx tools/mobile.ts"
+    "play:mobile:start": "node --import tsx tools/mobile.ts",
+    "format": "prettier --write \"{apps,packages,tools,tests}/**/*.{ts,tsx,js,cjs,mjs,css}\" \"scenarios/**/*.json\" package.json .prettierrc.json",
+    "format:check": "prettier --check \"{apps,packages,tools,tests}/**/*.{ts,tsx,js,cjs,mjs,css}\" \"scenarios/**/*.json\" package.json .prettierrc.json"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
@@ -37,6 +39,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "prettier": "3.6.2",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0"

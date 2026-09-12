@@ -18,20 +18,43 @@ run(async()=>{const p=new URLSearchParams(location.hash.slice(1));const token=p.
 export function createAdminApp(access: PlayAccess, port: number) {
   const admin = new AdminAccess();
   const app = baseApp();
-  app.use(originGuard(new Set(['127.0.0.1:' + port, 'localhost:' + port]), new Set(['http://127.0.0.1:' + port, 'http://localhost:' + port])));
-  app.use((_req, res, next) => { res.setHeader('Referrer-Policy', 'no-referrer'); res.setHeader('X-Frame-Options', 'DENY'); next(); });
+  app.use(
+    originGuard(
+      new Set(['127.0.0.1:' + port, 'localhost:' + port]),
+      new Set(['http://127.0.0.1:' + port, 'http://localhost:' + port]),
+    ),
+  );
+  app.use((_req, res, next) => {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+  });
   app.get('/', (_req, res) => res.type('html').send(html));
   app.use(express.json({ limit: '2kb', inflate: false }));
   app.post('/api/admin/claim', admin.claim);
   app.use('/api/admin', admin.authorize);
-  const render = async (value: ReturnType<PlayAccess['currentInvite']>) => value && ({ ...value, qr: await QRCode.toDataURL(value.url, { margin: 2, width: 320 }) });
-  app.get('/api/admin/invite', async (_req, res) => { res.json(await render(access.currentInvite())); });
+  const render = async (value: ReturnType<PlayAccess['currentInvite']>) =>
+    value && { ...value, qr: await QRCode.toDataURL(value.url, { margin: 2, width: 320 }) };
+  app.get('/api/admin/invite', async (_req, res) => {
+    res.json(await render(access.currentInvite()));
+  });
   app.post('/api/admin/invite', async (_req, res) => {
     await access.expire();
-    try { res.json(await render(access.issue())); }
-    catch (e) { errorResponse(res, e instanceof Error && e.message === 'PLAY_OCCUPIED' ? 409 : 503, 'INVITE_UNAVAILABLE', 'プレイ中は先に終了してください。接続準備中は少し待ってください。'); }
+    try {
+      res.json(await render(access.issue()));
+    } catch (e) {
+      errorResponse(
+        res,
+        e instanceof Error && e.message === 'PLAY_OCCUPIED' ? 409 : 503,
+        'INVITE_UNAVAILABLE',
+        'プレイ中は先に終了してください。接続準備中は少し待ってください。',
+      );
+    }
   });
-  app.post('/api/admin/reset', async (_req, res) => { await access.clear(); res.json({ ok: true }); });
+  app.post('/api/admin/reset', async (_req, res) => {
+    await access.clear();
+    res.json({ ok: true });
+  });
   finishApp(app);
   return { app, initialToken: admin.initialToken };
 }

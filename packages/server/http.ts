@@ -1,4 +1,9 @@
-import express, { type ErrorRequestHandler, type Express, type Request, type Response } from 'express';
+import express, {
+  type ErrorRequestHandler,
+  type Express,
+  type Request,
+  type Response,
+} from 'express';
 import type { Server } from 'node:http';
 import { z } from 'zod';
 export const BODY_LIMIT = 32 * 1024;
@@ -25,7 +30,8 @@ export function finishApp(app: Express): void {
   const handler: ErrorRequestHandler = (error: unknown, _req: Request, res: Response, _next) => {
     const status = (error as { status?: number })?.status;
     if (status === 413) errorResponse(res, 413, 'BODY_TOO_LARGE', '送信内容が上限を超えています。');
-    else if (status && status >= 400 && status < 500) errorResponse(res, 400, 'INVALID_REQUEST', '送信内容を確認してください。');
+    else if (status && status >= 400 && status < 500)
+      errorResponse(res, 400, 'INVALID_REQUEST', '送信内容を確認してください。');
     else errorResponse(res, 500, 'INTERNAL_ERROR', '処理に失敗しました。');
   };
   app.use(handler);

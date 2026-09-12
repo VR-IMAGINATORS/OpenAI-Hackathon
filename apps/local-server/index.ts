@@ -9,7 +9,10 @@ try {
   });
   configureServer(server);
   installShutdown(server);
-  server.on('error', () => { console.error('Local server could not start. Check its configuration and port.'); process.exitCode = 1; });
+  server.on('error', () => {
+    console.error('Local server could not start. Check its configuration and port.');
+    process.exitCode = 1;
+  });
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Local server configuration is invalid.');
   process.exitCode = 1;
