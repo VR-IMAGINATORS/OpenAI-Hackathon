@@ -17,18 +17,23 @@
     "build": "npm run check && vite build && tsc -p tsconfig.server.json",
     "start": "node dist/server/apps/local-server/index.js",
     "start:relay": "node dist/server/apps/relay/index.js",
-    "validate:scenario": "tsx tools/validate-scenario.ts"
+    "validate:scenario": "tsx tools/validate-scenario.ts",
+    "play:mobile": "npm run build && node --import tsx tools/mobile.ts",
+    "play:mobile:start": "node --import tsx tools/mobile.ts"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "zod": "^4.3.6",
-    "dotenv": "^17.2.3"
+    "sharp": "^0.35.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.15.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.1.1",

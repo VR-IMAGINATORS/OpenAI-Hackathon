@@ -55,3 +55,29 @@ Windows PowerShellの実行ポリシーでnpm.ps1が拒否される場合は `np
 - 接続不可: relayの稼働とRELAY_URLを確認。認証解除ではネットワーク問題は解決しない。
 - 設定エラー: 該当JSON/環境設定を修正して再起動。成功を装うフォールバックはしない。
 - スマホ音声は将来HTTPS/tunnelとマイク許可が必要。PCのlocalhost表示や狭幅レイアウト確認は実スマホ音声検証の代わりではない。
+
+## モバイル試遊版を起動する
+
+音声会話はGPT-Live、写真認識と攻略判定はResponses APIを使います。ゲームの判断・シナリオ・状態は起動したPCに保持します。生成画像・動画・緊迫イベントは後続開発です。
+
+1. 運営PCで `.env.relay.example` を `.env.relay.local` へコピーし、合言葉とlive設定を有効にします。APIキーは運営PCだけに設定します。`RELAY_TOKEN_TTL_SECONDS` は900を使用します。ファイル内に同名変数を重複させないでください。
+2. 運営PCで `npm run dev:relay` を起動します。審査員が別PCなら、運営relayをHTTPSで提供し、そのoriginを審査員側 `.env.local` の `RELAY_URL` に指定します。審査員の `.env.local` にAPIキーは不要です。
+3. ゲーム起動PCに [cloudflared](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) をインストールします。Windowsは `winget install --id Cloudflare.cloudflared --exact`、その後ターミナルを開き直してください。自動インストールは行いません。
+4. ゲーム起動PCで `npm ci`、続けて `npm run play:mobile` を実行します。ビルド後にゲームとトンネルが起動し、HTTPSの疎通確認後にターミナルへQRを表示します。
+5. スマホのカメラでQRを読み取ります。PC管理リンクでもQRを表示できます。招待は5分・一度限り。同じPCで遊ぶ場合は管理画面の「このPCでプレイする」を開きます。
+6. 必要なら合言葉を入力し、音声接続をタップしてマイクを許可します。開始後、写真を撮って使い方を声で伝え、認識の短文を確認して「これで実行」を押します。
+7. 終了はCtrl+C。PC管理画面でプレイ破棄・QR再発行もできます。
+
+既にビルド済みなら `npm run play:mobile:start` で起動できます。初期設定は `scenarios/mobile-playtest.json`（緊迫イベント無効）です。`.env.local` の `SCENARIO_PATH` がある場合はそちらを優先します。
+
+`PUBLIC_GAME_URL=https://...` を `.env.local` に指定すると、既に設定した別のHTTPSトンネルを使えます。転送先は `http://127.0.0.1:4310`。PC管理の4312と運営relayの4311はゲーム用トンネルへ公開しません。URLにパス・クエリ・認証情報は指定できません。
+
+Quick Tunnelは試遊向けで稼働保証がなく、既存のcloudflared設定がある場合は起動できないことがあります。ツールは既存設定を変更しません。トンネルで画面が開いても、回線がWebRTCを制限すると音声がつながらない場合があります。その場合はスマホの携帯回線やPCのテザリングで確認してください。
+
+### 実APIの運用上限
+
+初期の音声接続上限は10分、1認証tokenで作成3回・Responses40回、同時音声1接続。全体の上限は運営設定で必須指定します。音声のheartbeatが30秒途絶するとrelayが切断します。終了未確認の接続は枠を保持し、新規作成を止めます。
+
+ゲーム時計は5分で、操作不能のAI待ち・接続復旧時だけ停止します。待機の合計は60秒まで。撮影や通常の会話では時計が進みます。終了/失効時は写真と会話をメモリから破棄し、再起動でプレイは失われます。
+
+回数上限はメモリ管理で、relay再起動で戻ります。金額の絶対上限ではありません。運営が利用状況を確認し、不要になったrelayを停止してください。実API試験の成功、スマホ実機での撮影・音声、面白さは自動テストとは別に確認します。
