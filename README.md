@@ -32,7 +32,7 @@ npm run dev:all
 | packages/shared/ | 通信型とシナリオ検証 |
 | scenarios/ | プランナーが編集するJSON |
 | specs/web-foundation/ | Web版の合意・仕様・計画・タスク・検証 |
-| skills/call-to-past/ | 既存Codex試作。ドッグフーディング用の参考 |
+| .agents/skills/call-to-past/ | 既存Codex試作。ドッグフーディング用の参考 |
 
 [構成と境界](docs/architecture.md) / [シナリオ編集](docs/planner-guide.md) / [ゲームの合意事項](specs/web-foundation/game-direction.md)。
 
@@ -74,7 +74,23 @@ npm run build
 [AGENTS.md](AGENTS.md)が共通指示の正本で、[CLAUDE.md](CLAUDE.md)も同じ方針を参照します。
 レビュー実行台帳 .specworkflow/review/ はGit対象外、仕様・設計判断は記録します。
 
-旧試作の利用方法は [旧スキル](skills/call-to-past/SKILL.md)、[旧仕様/検証](specs/call-to-past/verification.md)。
+旧試作の利用方法は [旧スキル](.agents/skills/call-to-past/SKILL.md)、[旧仕様/検証](specs/call-to-past/verification.md)。
 旧試作のルールやテスト結果を、Web版の確定事項・実績として扱いません。
 
 次の開発は [後続の進め方](specs/web-foundation/next-steps.md) を参照してください。
+
+## ドッグフーディング用のCodex試作
+
+このリポジトリをCodexで開くと、`.agents/skills/call-to-past/` がプロジェクト用スキルとして検出されます。ユーザー領域へのコピーは不要です。表示されない場合は新しいセッションを開始してください。
+
+```text
+$call-to-past を使って、新しいゲームを日本語で始めてください。
+```
+
+実行スクリプトと素材は、読み込んだ `SKILL.md` のあるフォルダを基準に参照します。プレイ記録は作業フォルダ内の `runs/call-to-past/` へ保存するため、通常はリポジトリルートから実行します。[CLI手順](.agents/skills/call-to-past/references/cli.md)も参照してください。
+
+試作のテスト（リポジトリルート、ネットワーク・有料生成なし。Windowsでは `py` も使用可能）:
+
+```powershell
+python -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests -v
+```

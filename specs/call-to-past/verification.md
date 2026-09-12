@@ -92,3 +92,8 @@ rootと別SolがCRVの29採用フレームと終盤3画像を確認し、階段�
 独立Solの最終判定はApprove（Blocker/High/Mediumなし）。正本で全62件成功・skip 0、quick_validate成功。dist/call-to-past-0.3.0.zipは19ファイル、archive SHA-256 48208b26157b1ff5a5ecc4a1a32ce04ea818552f998db091fef2743d49de2c13。インストール先の全19ファイルをmanifestと照合し不一致0件。
 
 更新後スキル自身で実生成テスト用generate preflightを実行。gpt-image-2.5-flare、low、1536x1024、n=1、max_retries=0としてready=true、send_state=not_sentを確認後、利用者へ正確な内容と概算0.02 USDを提示し「OK」の承認を取得。承認JSONとrequest manifestを照合して1回だけ送信し、response_received、request ID req_801687a7a53a4fa683ab31b97da20d7d、13.984秒、PNG 1536x1024、2,278,897 bytesを確認した。SHA-256はC84517345B57DA857DECB1A6F75E83D6275D21588DE9489533FECFCBFF62F200。目視で空の廃病院隔離室、診察椅子、曇った観察窓、閉じた非常扉、緑のランプを確認し、人物・手持ち道具・可読文字・UI・流血・追加パズルは見られなかった。再送0件。実請求額は請求明細未確認。
+## スキル配置変更（2026-09-12）
+
+`.agents/skills/call-to-past/` へ移動。スクリプト・同梱素材は読み込んだ SKILL.md の親フォルダ、プレイ記録は作業フォルダを基準に統一した。上記の旧配置パスは当時の検証記録として残す。
+
+`py -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests -v` を実行し、62件すべて成功。README とスキル内 Markdown のローカルリンクも存在確認済み。有料API送信、実画像・実動画生成、新規セッションでの自動検出は今回未実施。

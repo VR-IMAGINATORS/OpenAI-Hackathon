@@ -6,7 +6,7 @@
 
 写真と音声で伝える使い方をAIが理解し、未来の脱出を助けるゲームを4人日程度で開発する。そのためのREADME・指示書・設定・起動と通信の基盤を整える。
 今回の完成範囲は**画面、ローカルサーバー、中継サーバー、モックによる通信確認**。GPT-Live音声、AI判定、画像・動画生成、実ゲーム進行と公開運用は後続実装。モック成功は実APIの成功を意味しない。
-既存 skills/call-to-past/ と specs/call-to-past/ はドッグフーディング用の参考。Web版の仕様・承認・検証実績として流用しない。ゲーム全体の合意は [game-direction.md](game-direction.md)。
+既存 .agents/skills/call-to-past/ と specs/call-to-past/ はドッグフーディング用の参考。Web版の仕様・承認・検証実績として流用しない。ゲーム全体の合意は [game-direction.md](game-direction.md)。
 
 ## 受け入れ条件
 

@@ -8,7 +8,7 @@
 
 送信直前に [fal公式H3 Turbo I2Vページ](https://fal.ai/models/minimax/h3-max-turbo/image-to-video) で動画単価を確認し、同時点のUSD/JPYを用意する。`pricing-checked-at` はタイムゾーン付きISO-8601で記録する。24時間を超えた見積、未来日時、非fal URL、非有限値・0以下の単価/為替、不整合なUSD/JPY計算は拒否される。
 
-PowerShell例。`$CallToPast`、`$Session`、単価、為替、日時は実値へ置き換える。
+PowerShell例。`$CallToPast` は読み込んだ `SKILL.md` の親フォルダの絶対パスに設定する（[CLI 手順](cli.md)参照）。作業フォルダはプレイ用のフォルダのまま維持する。`$Session`、単価、為替、日時も実値へ置き換える。
 
 ```powershell
 $CallToPast = "<INSTALLED_CALL_TO_PAST_SKILL>"

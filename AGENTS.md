@@ -4,7 +4,7 @@
 
 写真と音声で伝える工夫をAIが理解し、未来の脱出を助けるWebゲーム。短いハッカソンで体験の核を完成させる。
 会話で合意した方向性は specs/web-foundation/game-direction.md、今回の土台の受け入れ条件はspecs/web-foundation/spec.md。
-既存 skills/call-to-past/ と specs/call-to-past/ はドッグフーディング用参考。Web版の仕様・承認・検証成功を引き継がない。
+既存 .agents/skills/call-to-past/ と specs/call-to-past/ はドッグフーディング用参考。Web版の仕様・承認・検証成功を引き継がない。
 別プロジェクトの履歴もこのリポジトリの作業状態として扱わない。
 
 ## 構成の境界
