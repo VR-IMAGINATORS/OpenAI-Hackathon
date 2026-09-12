@@ -1,11 +1,15 @@
 # Call to the Past CLI
 
-`scripts/game.py` is the state authority. It prints JSON to stdout, prints a JSON error to stderr, and exits with code `2` for rejected input. Run it with Python 3.10+ and Pillow installed. All examples below assume the repository root as the current directory.
+`scripts/game.py` is the state authority. It prints JSON to stdout, prints a JSON error to stderr, and exits with code `2` for rejected input. Run it with Python 3.10+ and Pillow installed. Keep the current directory at your chosen play workspace (normally the repository root). Resolve scripts and bundled assets from the loaded SKILL.md directory, independently of the current directory. Do not change into the skill directory: runs/call-to-past is relative to the play workspace. On Windows, py may be used in place of python.
 
 ```powershell
-$Game = "skills/call-to-past/scripts/game.py"
-$Master = "skills/call-to-past/assets/masters.json"
+# Set this to the absolute parent directory of the loaded SKILL.md.
+$CallToPast = "<ABSOLUTE_CALL_TO_PAST_SKILL_DIRECTORY>"
+$Game = Join-Path $CallToPast "scripts/game.py"
+$Master = Join-Path $CallToPast "assets/masters.json"
 ```
+
+When running from this repository root, initialize `$CallToPast` with `(Resolve-Path ".agents/skills/call-to-past").Path` before setting `$Game` and `$Master`. For a separately installed copy, use its actual directory instead.
 
 ## Start and inspect
 

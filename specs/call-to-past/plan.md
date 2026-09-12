@@ -4,7 +4,7 @@
 
 ## 構成
 
-skills/call-to-past/にSKILL.md、agents/openai.yaml、assets/masters.json、references、scripts、testsを置く。Python3.10+の標準ライブラリを基本とし、画像確認にはPillow、動画送信には同梱H3ランタイムとfal_client、動画QCにはffprobe/ffmpegを使う。イベント画像は同梱Flare CLIからOpenAI Images APIを使う。CLIは隔離した検証済みSDK範囲、無課金preflight、OpenAI用キーの厳密選択、承認manifest照合、max_retries=0、新規出力の排他的予約、PNG検証を担当する。
+.agents/skills/call-to-past/にSKILL.md、agents/openai.yaml、assets/masters.json、references、scripts、testsを置く。Python3.10+の標準ライブラリを基本とし、画像確認にはPillow、動画送信には同梱H3ランタイムとfal_client、動画QCにはffprobe/ffmpegを使う。イベント画像は同梱Flare CLIからOpenAI Images APIを使う。CLIは隔離した検証済みSDK範囲、無課金preflight、OpenAI用キーの厳密選択、承認manifest照合、max_retries=0、新規出力の排他的予約、PNG検証を担当する。
 
 game.pyはローカルCLIとimport可能なAPI。開始→prepare→認識確認→判定→commit→画像添付→次行動、終端では物語→H3→動画提示→リザルト。pending ID、revision、現在障害を照合し、ファイルロック下の原子的置換で状態を確定する。新規画像はセッションへコピーしハッシュを保存。判定JSONには新規物、合成、状態変化、成功boolean、根拠を記載する。回数や結末の値は受け付けない。
 

@@ -4,11 +4,11 @@
 
 Codexの会話で写真を送り、1週間後の自分を助ける脱出ゲームの試作スキルです。3つの障害を1つずつ攻略し、最大4行動。1回の写真は2枚までで、持越品だけなら写真なしでも挑めます。
 
-- スキル: [skills/call-to-past/SKILL.md](skills/call-to-past/SKILL.md)
+- スキル: [.agents/skills/call-to-past/SKILL.md](.agents/skills/call-to-past/SKILL.md)
 - 仕様と進捗: [specs/call-to-past/tasks.md](specs/call-to-past/tasks.md)
 - 検証結果と制約: [specs/call-to-past/verification.md](specs/call-to-past/verification.md)
 
-インストール後、新しいCodexセッションで次のように呼び出します。
+このリポジトリを Codex で開くと、`.agents/skills/call-to-past/` がプロジェクト用スキルとして検出されます。ユーザー領域へのコピーは不要です。表示されない場合は新しいセッションを開始し、次のように呼び出します。
 
 ```text
 $call-to-past を使って、新しいゲームを日本語で始めてください。
@@ -20,10 +20,12 @@ $call-to-past を使って、新しいゲームを日本語で始めてくださ
 
 Python3.10+とPillowが必要です。H3 Max Turbo I2Vの実行コードは`call-to-past`へ同梱済みで、別途`h3-video`をインストールする必要はありません。動画生成にはfal_client、ffmpeg/ffprobe、FAL_KEYを使います。内蔵画像ツールはFlareの明示指定に対応していません。判定にはSol highサブエージェントを使用します。
 
-開発用テスト（ネットワーク・有料生成なし）:
+実行スクリプトと同梱素材は、読み込んだ `SKILL.md` のあるフォルダを基準に参照します。プレイ記録は現在の作業フォルダの `runs/call-to-past/` に保存するため、通常はリポジトリルートを作業フォルダにしてください。[CLI 手順](.agents/skills/call-to-past/references/cli.md)に配置先の指定方法を記載しています。
+
+開発用テスト（リポジトリルートで実行、ネットワーク・有料生成なし。Windows は `python` の代わりに `py` も使用できます）:
 
 ```powershell
-python -X utf8 -m unittest discover -s skills/call-to-past/tests -v
+python -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests -v
 ```
 
 模擬テストの成功は、実写真・実生成の通し確認やゲームの面白さを保証しません。現状は上記の検証結果を参照してください。
