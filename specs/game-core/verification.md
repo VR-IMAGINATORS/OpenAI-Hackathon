@@ -98,3 +98,11 @@ PC上のブラウザ受信時刻とサーバー記録時刻から算出した単
 ## P2 本編統合の検証（2026-09-13）
 
 全140件の自動テスト、npm run build、Chromeでのcore/legacy両smokeが成功。AI・WebRTC・マイクはfakeで、実Liveの追加成功を意味しない。詳細は[tasks/P2.md](tasks/P2.md)。本編の実機では写真送信後の用途質問、相談では回数不変、指示後に1回のみ判定、最後の結果音声を確認する。メッセンジャー履歴・画像演出はまだ後続工程。
+
+## P3〜P6 統合（2026-09-13）
+
+- npm test: 172/172成功。npm run build成功。変更コードに限定したPrettier check成功（リポジトリ全体の既存改行差分は今回の検証と分離）。
+- core-result-store 9件、core-result-http 3件、core-scene-http 5件、core-media 15件を含む。
+- Chrome: core-smoke（日英、390px/1280px、復帰、画像と会話）とlegacy mobile-smoke成功。実HTTP+Chromeでも開始画像・写真アップロード・認識原文・自動行動1回・合格画像表示を確認。API/マイクはfake。
+- 画像未検査時非公開、reject2回でfailed、終了後配送、新旧play分離、drain abortと後着非公開、認証TTL後の読取と保持期限境界を確認。
+- 画像モデル利用可否/意味的検査精度、実Live本編のテンポ、実スマホ、AWS5人・実配置は未実施。次の人間試遊はdocs/game-core.mdの順でまとめて行う。

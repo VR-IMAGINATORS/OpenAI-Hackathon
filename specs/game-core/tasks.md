@@ -1,6 +1,6 @@
 # Game core 実装タスク
 
-Status: P2 runtime integrated and fake verification passed; real Live gate pending (2026-09-13)
+Status: P3–P6 integrated; automated and browser verification passed; real API/device gates pending (2026-09-13)
 
 [承認済み計画](plan.md)に基づくGitHub Issue一覧。チェックは実装と各Issueの検証ゲートが完了してから更新する。
 
@@ -42,3 +42,11 @@ Status: P2 runtime integrated and fake verification passed; real Live gate pendi
 ### P2 本編統合
 
 ユーザーの続行指示を受け、本編への意図分類・行動予約・結果通知を統合。全140件の自動テストとChromeのfake検証を通過。実Liveで本編のテンポと終端音声を確認するゲートは保留。工程は[tasks/P2.md](tasks/P2.md)。
+
+### P3〜P6 本編体験の統合
+
+ユーザーが「履歴・画像も実装してからまとめて検証」を指定したため、実機ゲートを成功扱いせず実装を先行。メッセンジャーUI、所有者限定feed/assets、画像生成→重大矛盾検査、終了後保持、日英選択、配布設定と手順を統合。
+
+全172テスト、変更コードのPrettier check、ビルド、Chrome模擬検証を通過。実HTTPサーバーとChromeの写真→自動実行→検査済み画像も接続確認（有料API/マイクだけfake）。実Live本編・生成精度・スマホ撮影・AWS5人の確認は未実施。P0/P4/P7の実機を含む全面完了チェックは保留する。
+
+工程: [P3a](tasks/P3a-store.md)、[P3b](tasks/P3b.md)、[P4](tasks/P4.md)、[P5/P6](tasks/P5-P6.md)。試遊は[動作確認手順](../../docs/game-core.md)。
