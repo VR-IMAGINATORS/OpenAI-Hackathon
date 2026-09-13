@@ -162,6 +162,19 @@ async function service(config: DeployConfig, deps: DeployDependencies): Promise<
     throw new Error('Service configuration mismatch');
   return entry;
 }
+class ApplicationRequestError extends Error {
+  constructor(readonly status: number) {
+    super('Application request failed');
+  }
+}
+function retryableHealthFailure(error: unknown): boolean {
+  if (error instanceof ApplicationRequestError)
+    return [404, 408, 429, 500, 502, 503, 504].includes(error.status);
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
+  );
+}
 async function jsonRequest(
   deps: DeployDependencies,
   url: string,
@@ -172,7 +185,7 @@ async function jsonRequest(
     redirect: 'error',
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new Error('Application request failed');
+  if (!response.ok) throw new ApplicationRequestError(response.status);
   const text = await response.text();
   if (Buffer.byteLength(text) > 16384) throw new Error('Application response too large');
   return JSON.parse(text);
@@ -253,10 +266,16 @@ export async function deploy(config: DeployConfig, deps: DeployDependencies): Pr
       current.currentDeployment?.state === 'ACTIVE' &&
       current.currentDeployment.containers.app?.image === image
     ) {
-      const health = await jsonRequest(deps, config.publicUrl + '/healthz');
-      if (health.version === config.version) {
-        deps.log('deployment_confirmed', config.version, image);
-        return;
+      try {
+        const health = await jsonRequest(deps, config.publicUrl + '/healthz');
+        if (health.version === config.version) {
+          deps.log('deployment_confirmed', config.version, image);
+          return;
+        }
+      } catch (error) {
+        // AWS can mark the deployment ACTIVE before its public endpoint is ready.
+        // Only the read-only health check is retried, within the existing deadline.
+        if (!retryableHealthFailure(error)) throw error;
       }
     }
     await deps.sleep(5000);

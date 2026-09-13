@@ -31,10 +31,14 @@ function harness(
     mismatchedBoot?: boolean;
     failDeploy?: boolean;
     initial?: boolean;
+    healthStatus?: number;
+    healthFailures?: number;
+    healthNetworkFailure?: boolean;
   } = {},
 ) {
   let time = 0,
     deployed = false;
+  let healthAttempts = 0;
   const events: string[] = [],
     temporaryFiles: string[] = [],
     logs: unknown[] = [];
@@ -88,8 +92,13 @@ function harness(
       const path = new URL(url).pathname;
       events.push((init?.method ?? 'GET') + path);
       assert.equal(init?.redirect, 'error');
-      if (path === '/healthz')
+      if (path === '/healthz') {
+        if (deployed && healthAttempts++ < (options.healthFailures ?? 0)) {
+          if (options.healthNetworkFailure) throw new TypeError('fetch failed');
+          return json({}, options.healthStatus ?? 503);
+        }
         return json({ version: deployed ? sha : oldSha, bootId: 'old-boot' });
+      }
       assert.equal(
         (init?.headers as Record<string, string>).Authorization,
         'Bearer ' + env.OPS_TOKEN,
@@ -217,4 +226,30 @@ test('Lightsail push parses the unique registration sentence instead of expectin
   assert.deepEqual(parseAwsOutput('get-container-services', '{"containerServices":[]}'), {
     containerServices: [],
   });
+});
+
+test('deployment waits for transient endpoint readiness without repeating deployment', async () => {
+  for (const healthNetworkFailure of [false, true]) {
+    const h = harness({ initial: true, healthFailures: 2, healthNetworkFailure });
+    await deploy({ ...config(), initial: true }, h.deps);
+    assert.equal(h.events.filter((e) => e === 'create-container-service-deployment').length, 1);
+    assert.equal(h.events.filter((e) => e === 'GET/healthz').length, 3);
+  }
+});
+test('persistent endpoint unavailability times out; authentication errors fail immediately', async () => {
+  const unavailable = harness({ initial: true, healthFailures: 1000 });
+  await assert.rejects(
+    deploy({ ...config(), initial: true }, unavailable.deps),
+    /verification timed out/,
+  );
+  assert.equal(
+    unavailable.events.filter((e) => e === 'create-container-service-deployment').length,
+    1,
+  );
+  const forbidden = harness({ initial: true, healthFailures: 1000, healthStatus: 403 });
+  await assert.rejects(
+    deploy({ ...config(), initial: true }, forbidden.deps),
+    /Application request failed/,
+  );
+  assert.equal(forbidden.events.filter((e) => e === 'GET/healthz').length, 1);
 });
