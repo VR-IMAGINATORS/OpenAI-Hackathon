@@ -21,6 +21,7 @@
 SpecWorkflow (spec-workflow@spec-workflow)を使用する。
 - 新規機能はcreate-feature-spec→create-feature-plan→create-feature-tasks。小さく手順が明確な修正は直接進める。
 - implement-feature、review-orchestratorは必要に応じ使用。実行前に該当SKILL.mdを読む。
+- ハッカソン中は、ユーザーから明示的な指示があるまでマルチレビューを実行しない。
 - 仕様はspecs/<feature>/、判断は.specworkflow/discussions/、教訓は.specworkflow/lessons.md。
 - レビュー実行台帳.specworkflow/review/はGit管理しない。未実施のレビュー/検証を成功と記録しない。
 - 既存の未コミット変更、試作、ユーザーの企画資料を勝手に上書き/削除しない。

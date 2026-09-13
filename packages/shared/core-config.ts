@@ -36,6 +36,15 @@ export const coreConfigSchema = z
     conversation: z.object({ ja: localeConversationSchema, en: localeConversationSchema }).strict(),
     judgment: z.object({ physicality: text, ambiguity: text, partialProgress: text }).strict(),
     visualInspection: z.object({ majorContradictions: text }).strict(),
+    timeWarning: z
+      .object({
+        enabled: z.boolean(),
+        thresholdSeconds: z.number().int().min(1).max(3600),
+        deliveryInstructions: localizedTextSchema,
+        message: localizedTextSchema,
+      })
+      .strict()
+      .optional(),
     chatGroupingGapMs: z.number().int().min(0).max(10000),
   })
   .strict();

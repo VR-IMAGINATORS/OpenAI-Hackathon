@@ -131,6 +131,14 @@ export function createHostedApp(
           now,
           snapshot,
           {
+            notice: (text) =>
+              safeDisplay(() =>
+                results.appendMessage(id, {
+                  side: 'assistant',
+                  kind: 'system',
+                  text: text.slice(0, 4000),
+                }),
+              ),
             transcript: (fragment) => safeDisplay(() => results.appendTranscript(id, fragment)),
             photos: async (photos) => {
               try {

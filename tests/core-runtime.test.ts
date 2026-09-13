@@ -84,11 +84,15 @@ async function setup(
     },
     () => now,
   );
-  const snapshot = new ScenarioCatalog({
-    scenarioPath: 'scenarios/mobile-playtest.json',
-    coreConfigPath: 'config/game-core.json',
-  }).current('ja');
+  const snapshot = structuredClone(
+    new ScenarioCatalog({
+      scenarioPath: 'scenarios/mobile-playtest.json',
+      coreConfigPath: 'config/game-core.json',
+    }).current('ja'),
+  );
   const queue = new PhotoQueue();
+  const notices: string[] = [];
+  const scenes: any[] = [];
   const runtime = new GameRuntime(
     randomUUID(),
     600000,
@@ -98,7 +102,17 @@ async function setup(
     queue,
     () => now,
     snapshot,
-    undefined,
+    {
+      transcript() {},
+      async photos() {},
+      scene(input) {
+        scenes.push(input);
+      },
+      ended() {},
+      notice(text) {
+        notices.push(text);
+      },
+    },
     traceEnabled,
   );
   t.after(async () => {
@@ -116,6 +130,9 @@ async function setup(
   let time = 10;
   return {
     runtime,
+    snapshot,
+    notices,
+    scenes,
     calls,
     generation: live.generation,
     photo,
@@ -149,7 +166,8 @@ test('runtime accepts correction while classification is pending and discards th
     return {
       kind: 'consult',
       evidenceSeq: context.conversation.eligibleEvidenceSeq,
-      reason: 'まだ切らずに相談する',
+      reason: '質問の分類理由',
+      answer: 'まだ切らずに相談する',
     };
   });
   await h.runtime.photos(randomUUID(), [h.photo]);
@@ -177,7 +195,8 @@ test('runtime consult consumes no action and a subsequent directive executes onc
       : {
           kind: 'consult',
           evidenceSeq: context.conversation.eligibleEvidenceSeq,
-          reason: '切れるか相談中',
+          reason: '質問の分類理由',
+          answer: '切れるか相談中',
         },
   );
   await h.runtime.photos(randomUUID(), [h.photo]);
@@ -275,4 +294,114 @@ test('diagnostics are absent when not enabled', async (t) => {
   await h.say('ハサミで切って');
   assert.equal(h.runtime.state().diagnosticsAvailable, undefined);
   assert.deepEqual(h.runtime.trace(), { entries: [] });
+});
+
+test('time warning uses game time once, includes instruction and survives reconnect without repetition', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
+  h.runtime.game.clock.remainingMs = 60000;
+  h.runtime.tick();
+  assert.equal(h.notices.length, 0);
+  h.setNow(1001);
+  h.runtime.tick();
+  assert.equal(h.notices.length, 1);
+  const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.ok(
+    commands.some((c) => c.type === 'session.instructions.append' && c.delegation_id === null),
+  );
+  assert.ok(
+    commands.some((c) => c.type === 'session.commentary.append' && c.content.includes('60秒')),
+  );
+  h.runtime.tick();
+  assert.equal(h.notices.length, 1);
+  await h.runtime.live(randomUUID(), 'new offer');
+  h.runtime.heartbeat('connected');
+  h.runtime.tick();
+  assert.equal(h.notices.length, 1);
+});
+
+test('time warning respects pause, disabled setting, configured message and terminal state', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
+  const warning = h.snapshot.coreConfig.timeWarning!;
+  warning.thresholdSeconds = 30;
+  warning.message.ja = 'あと{thresholdSeconds}秒未満です';
+  h.runtime.game.clock.remainingMs = 29999;
+  h.runtime.game.clock.pause('test');
+  h.setNow(2000);
+  h.runtime.tick();
+  assert.equal(h.notices.length, 0);
+  assert.equal(h.runtime.game.clock.remainingMs, 29999);
+  h.runtime.game.clock.resume('test');
+  warning.enabled = false;
+  h.runtime.tick();
+  assert.equal(h.notices.length, 0);
+  warning.enabled = true;
+  h.runtime.tick();
+  assert.deepEqual(h.notices, ['あと30秒未満です']);
+  const ended = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
+  ended.runtime.game.clock.remainingMs = 0;
+  ended.runtime.tick();
+  assert.equal(ended.runtime.state().status, 'lost');
+  assert.deepEqual(ended.notices, []);
+});
+
+test('consult speaks answer rather than classification reason and action speaks latest situation with image', async (t) => {
+  const contexts: any[] = [];
+  const h = await setup(t, (context) => {
+    contexts.push(context);
+    return context.conversation.fragments.some((f: any) => f.delta === '切って')
+      ? execute(context)
+      : {
+          kind: 'consult',
+          evidenceSeq: context.conversation.eligibleEvidenceSeq,
+          reason: 'INTERNAL_ROUTING_REASON',
+          answer: '手首はまだ縄で縛られているよ。',
+        };
+  });
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await h.say('今どういう状況？');
+  await h.delegate();
+  await until(() =>
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.some((c) => c.content === '手首はまだ縄で縛られているよ。'),
+  );
+  assert.equal(contexts[0].game.publicState.situation, h.runtime.game.situation);
+  assert.equal(contexts[0].game.obstacle, undefined);
+  assert.equal(
+    JSON.stringify(h.runtime.pollCommands(h.generation, 0)).includes('INTERNAL_ROUTING_REASON'),
+    false,
+  );
+  await h.say('切って');
+  await h.delegate();
+  await until(() => h.calls.judge === 1 && h.runtime.state().actionsRemaining === 3);
+  assert.ok(
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.some(
+        (c) =>
+          c.type === 'session.commentary.append' &&
+          c.content === '現在の状況: ' + h.runtime.game.situation,
+      ),
+  );
+  assert.equal(h.scenes.length, 2);
+  assert.equal(h.scenes[1].situation, h.runtime.game.situation);
+});
+
+test('runtime missing delegation requests recovery but never judges, then announces timeout', async (t) => {
+  const h = await setup(t, execute);
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await h.say('切って');
+  h.setNow(4001);
+  h.runtime.tick();
+  await until(() =>
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.some((c) => c.type === 'session.instructions.append'),
+  );
+  assert.equal(h.calls.judge, 0);
+  assert.equal(h.runtime.state().actionsRemaining, 4);
+  h.setNow(24002);
+  h.runtime.tick();
+  assert.equal(h.notices.length, 1);
+  assert.equal(h.calls.judge, 0);
 });

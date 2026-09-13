@@ -7,7 +7,13 @@ import { classifyCoreIntent } from './core-intent-ai.js';
 import { GameSession, GameError } from './game.js';
 import { createGameAI } from './game-ai.js';
 import { decodePhotos } from './photo.js';
-import { liveInstructions, openingCommand, factCommand, liveEventSchema } from './live.js';
+import {
+  liveInstructions,
+  openingCommand,
+  factCommand,
+  factCommands,
+  liveEventSchema,
+} from './live.js';
 import type { Scenario } from '../../packages/shared/scenario.js';
 import type { LiveCommand } from '../../packages/shared/game.js';
 import type { AiService } from '../../packages/server/ai-service.js';
@@ -24,6 +30,7 @@ export interface RuntimePresentation {
     facts: import('../../packages/shared/conversation.js').GameFacts;
     situation: string;
   }): void;
+  notice?(text: string): void;
   ended(state: import('../../packages/shared/game.js').PublicGameState): void;
 }
 type Cached<T> = { digest: string; epoch: number; promise: Promise<T> };
@@ -52,6 +59,8 @@ export class GameRuntime {
   private epoch = 1;
   private openingIssued = false;
   private seen = new Set<string>();
+  private maintenanceTimer?: ReturnType<typeof setInterval>;
+  private timeWarningSent = false;
   private transcriptTimer?: ReturnType<typeof setTimeout>;
   private liveRequests = new Map<
     string,
@@ -85,6 +94,7 @@ export class GameRuntime {
       now,
       () => {
         clearTimeout(this.transcriptTimer);
+        clearInterval(this.maintenanceTimer);
         this.seen.clear();
         this.intents?.stop();
         this.traceEntries = [];
@@ -123,6 +133,7 @@ export class GameRuntime {
             snapshot: coreSnapshot,
             conversation: context,
             game: {
+              publicState: this.publicContext(),
               status: this.game.status,
               situation: this.game.situation,
               obstacle: coreSnapshot.scenarioV2.obstacles[this.game.obstacleIndex],
@@ -181,23 +192,50 @@ export class GameRuntime {
               this.traceEntries.shift();
           }
           const messageId = randomUUID();
-          this.enqueue(
-            factCommand(
-              '確定結果: ' + result.narrative + ' 現在の状況: ' + this.game.situation,
-              delegation.id,
-            ),
-          );
-          const command = this.enqueue(
-            { ...factCommand(result.narrative, delegation.id), type: 'session.commentary.append' },
+          this.sendFacts('確定結果: ' + result.narrative, delegation.id);
+          this.sendFacts(this.currentSituation(), delegation.id);
+          const command = this.speak(result.narrative, delegation.id, messageId);
+          if (!this.game.terminal) this.speak(this.currentSituation(), delegation.id);
+          this.presentScene(
+            result.narrative + '\n' + this.currentSituation(),
             messageId,
+            command?.seq ?? null,
           );
-          this.presentScene(result.narrative, messageId, command?.seq ?? null);
         },
         onDecision: (decision, delegation) => {
           this.recordDiagnostic('decision_accepted', decision.kind);
-          if (decision.kind !== 'execute')
-            this.enqueue(factCommand(decision.reason, delegation.id));
+          if (decision.kind === 'consult') {
+            this.sendFacts(this.currentSituation(), delegation.id);
+            this.speak(decision.answer ?? this.currentSituation(), delegation.id);
+          } else if (decision.kind === 'wait') {
+            this.sendFacts(
+              this.words(
+                'まだ行動は予約されていません。未完の指示や訂正を待ってください。',
+                'No action is reserved. Wait for the user to finish or correct the request.',
+              ),
+              delegation.id,
+            );
+          }
         },
+        onExpired: () => this.recoveryNotice('delegation_expired'),
+        onMissingDelegation: (decision) => {
+          this.recordDiagnostic('delegation_missing', decision.kind);
+          if (!this.valid() || this.game.status !== 'playing') return;
+          this.sendFacts(this.currentSituation());
+          if (decision.kind === 'execute') {
+            this.enqueue({
+              ...factCommand(
+                this.words(
+                  '未処理の実行指示があります。行動はまだ予約も実行もされていません。最新の指示と訂正をclientへ委譲してください。確定結果が届くまで成功したと伝えないでください。',
+                  'There is an unhandled action request. No action is reserved or executed. Delegate the latest request and corrections to the client. Do not claim success before the confirmed server result.',
+                ),
+              ),
+              type: 'session.instructions.append',
+            });
+          } else if (decision.kind === 'consult')
+            this.speak(decision.answer ?? this.currentSituation());
+        },
+        onRecoveryExpired: () => this.recoveryNotice('recovery_expired'),
         onError: (error) => {
           const code =
             error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message)
@@ -207,12 +245,82 @@ export class GameRuntime {
           if (this.valid()) {
             this.game.error =
               '処理できませんでした。行動は消費していません。指示をもう一度話してください。';
-            this.enqueue(factCommand(this.game.error));
+            this.speak(this.game.error);
           }
           this.syncCore();
         },
       });
+      this.maintenanceTimer = setInterval(() => this.tick(), 1000);
+      this.maintenanceTimer.unref();
     }
+  }
+  private publicContext() {
+    return {
+      status: this.game.status,
+      situation: this.game.situation,
+      actionsRemaining: this.game.scenario.rules.maxActions - this.game.actionsUsed,
+      lastResult: this.game.lastResult,
+      recognizedItems: this.game.proposal?.items.map(({ name }) => name) ?? [],
+      inventory: this.game.inventory.map(({ name, status }) => ({ name, status })),
+    };
+  }
+  private currentSituation() {
+    return this.words('現在の状況: ', 'Current situation: ') + this.game.situation;
+  }
+  private sendFacts(text: string, delegationId: string | null = null) {
+    for (const command of factCommands(text, delegationId)) this.enqueue(command);
+  }
+  private speak(text: string, delegationId: string | null = null, messageId: string | null = null) {
+    let first: ReturnType<GameRuntime['enqueue']>;
+    for (const command of factCommands(text, delegationId)) {
+      const queued = this.enqueue({ ...command, type: 'session.commentary.append' }, messageId);
+      first ??= queued;
+    }
+    return first;
+  }
+  private recoveryNotice(stage: string) {
+    if (!this.valid() || this.game.status !== 'playing' || this.game.state().busy) return;
+    this.recordDiagnostic(stage);
+    const text = this.words(
+      '指示の処理を完了できませんでした。もう一度、どう使うか教えてください。',
+      'I could not finish processing that request. Please tell me how to use it again.',
+    );
+    this.game.error = text;
+    this.speak(text);
+    this.presentation?.notice?.(text);
+  }
+  /** Server-owned maintenance; also callable with the injected clock in tests. */
+  tick() {
+    if (this.disposed || !this.coreSnapshot) return;
+    this.game.check();
+    if (!this.valid()) return;
+    const state = this.game.state();
+    if (
+      state.status !== 'playing' ||
+      state.voiceState !== 'connected' ||
+      state.paused ||
+      state.busy
+    )
+      return;
+    this.intents?.tick();
+    const warning = this.coreSnapshot.coreConfig.timeWarning;
+    if (
+      !warning?.enabled ||
+      this.timeWarningSent ||
+      state.remainingMs >= warning.thresholdSeconds * 1000
+    )
+      return;
+    this.timeWarningSent = true;
+    const locale = this.coreSnapshot.locale;
+    const text = warning.message[locale].replaceAll(
+      '{thresholdSeconds}',
+      String(warning.thresholdSeconds),
+    );
+    for (const command of factCommands(warning.deliveryInstructions[locale]))
+      this.enqueue({ ...command, type: 'session.instructions.append' });
+    this.speak(text);
+    this.presentation?.notice?.(text);
+    this.recordDiagnostic('time_warning');
   }
   private syncCore(changed = false) {
     if (!this.ledger) return;
@@ -552,6 +660,7 @@ export class GameRuntime {
   }
   dispose() {
     this.disposed = true;
+    clearInterval(this.maintenanceTimer);
     this.traceEntries = [];
     this.intents?.stop();
     this.ledger?.stop();
