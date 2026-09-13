@@ -717,24 +717,8 @@ export default function PlayScreen({
               </button>
             </div>
           )}
-          {!ended && (photos.length > 0 || draftPhoto) && (
+          {!ended && draftPhoto && (
             <div className="messenger-attachments">
-              {photos.map((photo, index) => (
-                <div className="messenger-attachment" key={photo.preview}>
-                  <img
-                    src={photo.preview}
-                    alt={t('送信した道具の写真 ', 'Sent object photo ') + (index + 1)}
-                  />
-                  <button
-                    aria-label={t('写真 ', 'Remove photo ') + (index + 1) + t(' を取り消す', '')}
-                    disabled={busy || state.busy || !!draftPhoto || !!retryPhotos}
-                    onClick={() => void sendPhotos(photos.filter((_, i) => i !== index))}
-                  >
-                    ×
-                  </button>
-                  <small>{t('送信済み', 'Sent')}</small>
-                </div>
-              ))}
               {draftPhoto && (
                 <section
                   className="messenger-draft"

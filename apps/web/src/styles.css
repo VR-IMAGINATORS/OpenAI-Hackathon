@@ -1738,34 +1738,6 @@ h1 span {
   overflow-x: auto;
   padding: 4px 6px 10px;
 }
-.messenger-attachment {
-  position: relative;
-  flex-shrink: 0;
-  width: 64px;
-  text-align: center;
-}
-.messenger-attachment img {
-  width: 58px;
-  height: 58px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-.messenger-attachment button {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 28px;
-  height: 28px;
-  background: #14212bec;
-  color: white;
-  border: 1px solid #647c87;
-  border-radius: 50%;
-}
-.messenger-attachment small {
-  display: block;
-  font-size: 9px;
-  color: #91a6ae;
-}
 .messenger-draft {
   display: flex;
   align-items: center;

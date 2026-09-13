@@ -439,6 +439,16 @@ const fs = require('node:fs');
     await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).click();
     await page.waitForTimeout(500);
     assert.equal(photoIds.length, 2);
+    assert.equal(
+      await page.locator('.messenger-composer img').count(),
+      0,
+      'sent photos leave the composer',
+    );
+    assert.equal(
+      await page.locator('.messenger-attachments').count(),
+      0,
+      'only unsent drafts appear above the composer',
+    );
     assetBytes = Buffer.from(
       await page.evaluate(() => {
         const c = document.createElement('canvas');
