@@ -40,6 +40,12 @@ export class GameRuntime {
     shortReason: string;
     durationMs: number;
   }[] = [];
+  private diagnostics: { at: number; stage: string; code?: string }[] = [];
+  private recordDiagnostic(stage: string, code?: string) {
+    if (!this.traceEnabled || this.game.terminal) return;
+    this.diagnostics.push({ at: this.now(), stage, ...(code ? { code } : {}) });
+    if (this.diagnostics.length > 128) this.diagnostics.shift();
+  }
   private actionInFlight = false;
   private stateVersion = 0;
   private previousState = '';
@@ -82,6 +88,7 @@ export class GameRuntime {
         this.seen.clear();
         this.intents?.stop();
         this.traceEntries = [];
+        this.diagnostics = [];
         if (['won', 'lost'].includes(this.game.status) && !this.actionInFlight) {
           this.presentScene(this.game.situation);
         }
@@ -102,9 +109,15 @@ export class GameRuntime {
         ledger: this.ledger,
         now,
         classify: async (context) => {
-          if (this.game.state().busy || this.notificationFailed)
+          if (this.game.state().busy || this.notificationFailed) {
+            this.recordDiagnostic(
+              'classification_skipped',
+              this.notificationFailed ? 'notification_failed' : 'busy',
+            );
             return { kind: 'wait', reason: '処理中です。完了してからもう一度話してください。' };
-          return classifyCoreIntent({
+          }
+          this.recordDiagnostic('classification_started');
+          const decision = await classifyCoreIntent({
             respond: (body) => ai.respond(id, body),
             model: models.responseModel,
             snapshot: coreSnapshot,
@@ -120,10 +133,13 @@ export class GameRuntime {
             },
             photos: this.game.photos,
           });
+          this.recordDiagnostic('classification_returned', decision.kind);
+          return decision;
         },
         execute: async (intent, context, delegation) => {
           this.check();
           this.game.currentContextVersion = this.ledger!.captureUnconsumedContext().contextVersion;
+          this.recordDiagnostic('action_reserving');
           const ticket = this.game.reserveAction(
             intent,
             context.contextVersion,
@@ -138,11 +154,13 @@ export class GameRuntime {
             ),
             type: 'session.commentary.append',
           });
+          this.recordDiagnostic('judgment_started');
           const judgmentStarted = now();
           this.actionInFlight = true;
           let result;
           try {
             result = await this.game.judgeAction(ticket);
+            this.recordDiagnostic('judgment_committed');
           } finally {
             this.actionInFlight = false;
           }
@@ -176,10 +194,16 @@ export class GameRuntime {
           this.presentScene(result.narrative, messageId, command?.seq ?? null);
         },
         onDecision: (decision, delegation) => {
+          this.recordDiagnostic('decision_accepted', decision.kind);
           if (decision.kind !== 'execute')
             this.enqueue(factCommand(decision.reason, delegation.id));
         },
-        onError: () => {
+        onError: (error) => {
+          const code =
+            error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message)
+              ? error.message
+              : 'PROCESSING_ERROR';
+          this.recordDiagnostic('error', code);
           if (this.valid()) {
             this.game.error =
               '処理できませんでした。行動は消費していません。指示をもう一度話してください。';
@@ -212,7 +236,20 @@ export class GameRuntime {
     }
   }
   trace() {
-    return { entries: this.game.terminal ? [] : structuredClone(this.traceEntries) };
+    if (this.game.terminal || !this.traceEnabled) return { entries: [] };
+    const context = this.ledger?.captureUnconsumedContext();
+    return {
+      entries: structuredClone(this.traceEntries),
+      diagnostics: structuredClone(this.diagnostics),
+      status: this.game.status,
+      voiceState: this.game.voiceState,
+      busy: this.game.state().busy,
+      photoCount: this.game.photos.length,
+      recognizedItemCount: this.game.proposal?.items.length ?? 0,
+      eligibleEvidenceCount: context?.eligibleEvidenceSeq.length ?? 0,
+      userFragmentCount: context?.fragments.filter((f) => f.speaker === 'user').length ?? 0,
+      delegations: this.intents?.snapshot() ?? [],
+    };
   }
   private words(ja: string, en: string) {
     return this.coreSnapshot?.locale === 'en' ? en : ja;
@@ -233,6 +270,7 @@ export class GameRuntime {
       ...(this.coreSnapshot
         ? {
             automaticActions: true,
+            ...(this.traceEnabled ? { diagnosticsAvailable: true } : {}),
             locale: this.coreSnapshot.locale,
             transcript:
               this.ledger
@@ -358,6 +396,7 @@ export class GameRuntime {
         this.check(epoch);
         await this.presentation?.photos(photos);
         this.syncCore(true);
+        this.recordDiagnostic('photo_recognized');
         this.intents?.onContextChanged();
         if (this.coreSnapshot && this.game.proposal && photos.length) {
           this.enqueue(
@@ -398,6 +437,7 @@ export class GameRuntime {
       const event = liveEventSchema.parse(raw);
       this.syncCore();
       if (event.type === 'session.delegation.created') {
+        this.recordDiagnostic('delegation_received');
         if (!this.game.terminal)
           this.intents!.acceptDelegation({
             id: event.delegation.id,
@@ -413,6 +453,11 @@ export class GameRuntime {
           startMs: event.start_ms,
           endMs: event.end_ms,
         });
+        if (fragment?.speaker === 'user')
+          this.recordDiagnostic(
+            'user_transcript_received',
+            fragment.executionEligible ? 'eligible' : 'ineligible',
+          );
         if (fragment) this.presentation?.transcript(fragment);
         this.syncCore();
         if (!this.game.terminal) this.intents!.onContextChanged();
