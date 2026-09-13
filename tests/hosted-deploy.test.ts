@@ -49,14 +49,15 @@ function harness(
         return {
           containerServices: [
             {
-              serviceName: 'game-dev',
+              containerServiceName: 'game-dev',
               url: env.PUBLIC_APP_URL + '/',
               scale: 1,
               power: 'micro',
-              state: 'RUNNING',
+              state: options.initial && !deployed ? 'READY' : 'RUNNING',
+              nextDeployment: null,
               currentDeployment:
                 options.initial && !deployed
-                  ? undefined
+                  ? null
                   : {
                       state: 'ACTIVE',
                       containers: { app: { image: deployed ? image : ':game-dev.old.1' } },
@@ -69,6 +70,7 @@ function harness(
         const file = args[args.indexOf('--cli-input-json') + 1].slice(7);
         temporaryFiles.push(file);
         const document = JSON.parse(await readFile(file, 'utf8'));
+        assert.equal(document.serviceName, 'game-dev');
         assert.equal(document.containers.app.environment.OPENAI_API_KEY, env.OPENAI_API_KEY);
         assert.equal(document.containers.app.image, image);
         if (options.failDeploy) throw new Error('fake failure');

@@ -39,3 +39,11 @@
 ## 文書更新
 
 README・docs/development.md・docs/architecture.md・docs/hosting.md・AGENTS.mdを現行構成へ同期しました。AGENTS.mdは自動承認レビューで一度保留となりましたが、ユーザーの明示承認後に旧構成・設定先・起動コマンドの記述を更新しました。秘密保護・承認・ワークフローのルールは保持しています。実装変更はなく、文書差分を確認しました。AWS等の未実施項目は上記のままです。
+
+## 初回AWSデプロイの実確認（2026-09-13）
+
+PR #16のマージコミット233dd5c64d3dc98054f3fe6c72b22717526bbd1eでActions run 34728247924を実行。buildとGitHub OIDCによるAWS認証は成功しました。配信はサービス照合で失敗し、デプロイ成功には至っていません。
+
+AWS ContainerService応答の正しい項目はcontainerServiceNameですが、配信実装とfake応答がserviceNameになっていました。公式仕様に合わせたfake応答でService configuration mismatchを再現し、応答型と照合を修正。送信するdeployment documentのserviceNameは正しいため維持しました。初回READY/null状態を含む配信テスト7件、TypeScript、対象ファイルの書式確認が成功。修正版のAWS配信は未実施です。
+
+公式仕様: https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_ContainerService.html

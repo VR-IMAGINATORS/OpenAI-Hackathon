@@ -15,13 +15,13 @@ export interface DeployConfig {
   opsToken: string;
 }
 export interface ServiceInfo {
-  serviceName: string;
+  containerServiceName: string;
   url: string;
   power: string;
   scale: number;
   state: string;
-  currentDeployment?: { state: string; containers: Record<string, { image: string }> };
-  nextDeployment?: { state: string };
+  currentDeployment?: { state: string; containers: Record<string, { image: string }> } | null;
+  nextDeployment?: { state: string } | null;
 }
 export interface DeployDependencies {
   aws(args: string[]): Promise<unknown>;
@@ -136,7 +136,9 @@ async function service(config: DeployConfig, deps: DeployDependencies): Promise<
     '--region',
     config.region,
   ])) as { containerServices?: ServiceInfo[] };
-  const entry = result.containerServices?.find((item) => item.serviceName === config.serviceName);
+  const entry = result.containerServices?.find(
+    (item) => item.containerServiceName === config.serviceName,
+  );
   if (
     !entry ||
     entry.scale !== 1 ||
