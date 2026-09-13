@@ -301,6 +301,38 @@ elif command == 'result':
         report = json.loads(output.getvalue())
         return report, Path(report["receipt_file"])
 
+    def test_start_only_submission_and_receipt_preserve_absent_end(self) -> None:
+        self.end = None
+        run_dir = self.prepare("start-only")
+        manifest_path = run_dir / "approval-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertIsNone(manifest["end_image"])
+        self.assertFalse(list((run_dir / "approval-snapshot").glob("end*")))
+        self.approve(run_dir)
+        with mock.patch.dict(os.environ, {"FAL_KEY": ""}, clear=False):
+            self.assertEqual(self.submit(run_dir), 0)
+            _, receipt_path = self.recover_result(run_dir)
+        calls = [json.loads(line) for line in (self.h3_skill / "calls.log").read_text(encoding="utf-8").splitlines()]
+        self.assertIn("--start-image", calls[0])
+        self.assertNotIn("--end-image", calls[0])
+        receipt = media.validate_result_receipt(run_dir, receipt_path)
+        self.assertIsNone(receipt["end_image_sha256"])
+        receipt["end_image_sha256"] = "A" * 64
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        with self.assertRaisesRegex(media.BridgeError, "end image hash"):
+            media.validate_result_receipt(run_dir, receipt_path)
+
+    def test_removing_approved_end_image_is_rejected(self) -> None:
+        run_dir = self.prepare("remove-end")
+        self.approve(run_dir)
+        path = run_dir / "approval-manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["end_image"] = None
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaises(media.BridgeError):
+            self.submit(run_dir)
+        self.assertFalse((run_dir / "submission-attempt.json").exists())
+
     def test_prepare_snapshots_exact_inputs_and_exposes_cost_prompt_and_hashes(self) -> None:
         run_dir = self.prepare(seed=42)
         manifest_path = run_dir / "approval-manifest.json"

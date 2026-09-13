@@ -1072,6 +1072,16 @@ def ending_packet(session_dir: str | Path) -> dict[str, Any]:
         "scene": {"id": scene["id"], "name": scene["name"], "description": scene["description"], "anchor": scene["anchor"], "mystery": state["scenario"]["mystery"]},
         "events": events, "inventory": _public_inventory(state),
         "derived_outcome": {"type": state["ending"]["type"], "cleared_count": state["ending"]["cleared_count"], "attempts": state["ending"]["attempts"]},
+        "escape_evidence": {
+            "escaped": len(state["cleared"]) == 3,
+            "action_limit_reached": state["attempts"] == MAX_ACTIONS,
+            "remaining_obstacles": [
+                {"id": gid, "name": gimmicks[gid]["name"],
+                 "observation": gimmicks[gid]["observation"], "mechanism": gimmicks[gid]["mechanism"],
+                 "attempted": any(event["gimmick_id"] == gid for event in state["events"])}
+                for gid in state["scenario"]["order"] if gid not in state["cleared"]
+            ],
+        },
         "start_frame": events[-1]["image"] if events and events[-1]["media_status"] == "ready" else None,
         "ending_image": state["ending"]["ending_image"], "story": state["ending"]["story"],
         "visual_constraints": {"person": "gender-neutral adult; face hidden or no higher than the mouth", "continuity_anchor": scene["anchor"], "duration_seconds": 15, "resolution": "768P"},

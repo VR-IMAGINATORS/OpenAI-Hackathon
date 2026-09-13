@@ -1,5 +1,13 @@
 # H3エンディング動画CLI
 
+エンドタイトルと視覚VFXは最終プロンプトへ含め、H3で本編と同時生成する方針。[文字制作手順](ending.md)に従い、指定ラベルと文字禁止の矛盾を解消してからprepareする。音声禁止は画面内の指定タイトルを禁止する意味ではない。後付け合成を標準工程にしない。文字入り版は新しい入力として承認対象を固定し、過去の文字なし版の承認を流用しない。
+
+## 2026-09-13 比較試作の追加方針
+
+ユーザーの希望により、終了済みプレイの比較試作では開始画像だけのI2Vを利用できる。`media.py prepare`で`--end-image`を省略し、manifestの`end_image`とreceiptの`end_image_sha256`を明示的なnullにする。省略した画像はアップロードも送信もしない。承認対象は開始画像・prompt・costの3ファイルとmanifestで、終了画像なしを提示する。終了画像ありの既存runは従来どおり照合する。承認後に有無を変更してはならない。
+
+今回の別版試作には以下の「開始/終了画像必須」「4ファイル」に優先して適用する。通常プレイの`game.py attach-ending/attach-video`契約はまだ終了画像を前提としており、この追加対応は別版の準備・送信・回収・提示まで。通常プレイ登録やWeb統合済みとは扱わない。
+
 この経路は本スキルに同梱した `minimax/h3-max-turbo/image-to-video` の実装を使い、**768P・15秒・1本・balanced** に固定する。別途`h3-video`スキルをインストールする必要はない。開始画像と終了画像は必須で、同じピクセル寸法・縦横比にする。R2V、複数候補、別尺、別解像度への切替は、この承認枠に含めない。`--seed` は比較目的などで利用者が値を明示した場合だけ `prepare` に加える。
 
 `media.py` はローカル準備、承認記録、一度だけの送信、保存済みrequest IDの回収を分離する。今回のスキル実装承認はfalへの外部送信承認ではない。`approve` は、利用者から既に得た具体的な承認をそのまま保存するだけであり、コマンド実行自体が承認を作ることはない。
@@ -106,24 +114,8 @@ python $Media result `
 
 result成功時は同じ取得ディレクトリへ `receipt.json` を排他的に保存し、標準出力の `receipt_file` にそのパスを返す。receiptはversion 1、endpoint、保存済みrequest ID、承認manifest SHA-256、開始・終了画像SHA-256、実際に取得した `ending.mp4` のSHA-256とbytes、完了日時を固定する。作成前後にmanifest、承認、4スナップショット、保存済みrequest IDを再照合するが、既に承認・送信済みの結果回収なので価格の24時間鮮度は要求しない。ゲームへ動画を添付するときは、このreceiptとH3 runを一緒に渡し、receiptまたは動画が後から変わっていないことを照合する。
 
-## 6. 動画QC
+## 6. 回収と人による確認
 
-動画を取得してから、同梱QCスクリプトの検査を新しい出力先で実行する。
+回収成功とreceipt・実ファイルの照合を確認して、動画をそのまま提示する。生成後の内容確認は人が担当する。自動QC、フレーム抽出、映像視聴、音声試聴は追加実行しない。生成成功を演出・物理・音声の合格と記録しない。同梱verify_and_concat.pyは明示的な技術検査依頼があった場合の道具として残す。
 
-```powershell
-python "$CallToPast\scripts\verify_and_concat.py" `
-  --clip "<RETRIEVED_ENDING_MP4>" `
-  --output "$Run\qc\ending-qc-copy.mp4" `
-  --report "$Run\qc\report.json" `
-  --qa-dir "$Run\qc\frames" `
-  --expected-duration 15 `
-  --sample-count 12
-
-ffprobe -v error `
-  -show_entries "stream=index,codec_type,codec_name,width,height,avg_frame_rate,sample_rate,channels:format=duration" `
-  -of json "<RETRIEVED_ENDING_MP4>"
-```
-
-環境音・効果音を予定しているため、ffprobe結果にaudio streamがない動画は合格にしない。`verify_and_concat.py` のA/V差判定は音声なしでも真になり得るので、音声streamの存在と実際の聞こえ方を別に確認する。
-
-さらに動画を15秒すべて再生し、開始/終了フレームへの整合、同一人物・衣装・空間、顔が目まで露出していないこと、実際の行動とエンドの一致、字幕・タイトル混入、音量・SEを目視・試聴する。12枚の均等抽出は途中破綻の標本であり、全フレーム確認済みとは扱わない。これらを実行していないローカルテストは「H3実生成・動画QA済み」と報告しない。
+音は効果音・環境音のみ。言葉・歌・BGMをプロンプトへ追加しない。

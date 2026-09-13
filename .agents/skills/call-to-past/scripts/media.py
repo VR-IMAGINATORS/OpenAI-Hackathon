@@ -352,12 +352,12 @@ def ensure_file(path: Path, label: str) -> Path:
 def prepare(args: argparse.Namespace) -> int:
     prompt_source = ensure_file(args.prompt_file, "prompt")
     start_source = ensure_file(args.start_image, "start image")
-    end_source = ensure_file(args.end_image, "end image")
+    end_source = ensure_file(args.end_image, "end image") if args.end_image else None
     cost_source = ensure_file(args.cost_plan, "cost plan")
     prompt_text = read_prompt(prompt_source)
     start_size = image_dimensions(start_source)
-    end_size = image_dimensions(end_source)
-    if start_size != end_size:
+    end_size = image_dimensions(end_source) if end_source else None
+    if end_size is not None and start_size != end_size:
         raise BridgeError(
             "start and end images must have identical dimensions and aspect ratio"
         )
@@ -370,11 +370,11 @@ def prepare(args: argparse.Namespace) -> int:
     snapshot_dir.mkdir()
     prompt_snapshot = snapshot_dir / "prompt.txt"
     start_snapshot = snapshot_dir / f"start{safe_suffix(start_source)}"
-    end_snapshot = snapshot_dir / f"end{safe_suffix(end_source)}"
+    end_snapshot = snapshot_dir / f"end{safe_suffix(end_source)}" if end_source else None
     cost_snapshot = snapshot_dir / "cost-plan.json"
     prompt_hash = copy_snapshot(prompt_source, prompt_snapshot)
     start_hash = copy_snapshot(start_source, start_snapshot)
-    end_hash = copy_snapshot(end_source, end_snapshot)
+    end_hash = copy_snapshot(end_source, end_snapshot) if end_source else None
     cost_hash = copy_snapshot(cost_source, cost_snapshot)
 
     divisor = math.gcd(*start_size)
@@ -414,7 +414,7 @@ def prepare(args: argparse.Namespace) -> int:
             "width": end_size[0],
             "height": end_size[1],
             "aspect_ratio": aspect_ratio,
-        },
+        } if end_source else None,
         "cost": {
             "snapshot": str(cost_snapshot.relative_to(run_dir)),
             "sha256": cost_hash,
@@ -463,8 +463,12 @@ def load_manifest(run_dir: Path, *, fresh_price: bool) -> tuple[Path, dict[str, 
     if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
         raise BridgeError("approval manifest seed is invalid")
 
+    if "end_image" not in manifest:
+        raise BridgeError("approval manifest must explicitly record end_image or null")
     for label in ("prompt", "start_image", "end_image"):
         record = manifest.get(label)
+        if label == "end_image" and record is None:
+            continue
         if not isinstance(record, dict):
             raise BridgeError(f"approval manifest {label} is invalid")
         snapshot = resolve_snapshot(run_dir, record.get("snapshot"), label)
@@ -485,7 +489,7 @@ def load_manifest(run_dir: Path, *, fresh_price: bool) -> tuple[Path, dict[str, 
                 or [width, height] != [recorded_width, recorded_height]
             ):
                 raise BridgeError(f"{label} dimensions changed")
-    if (
+    if manifest["end_image"] is not None and (
         manifest["start_image"].get("width") != manifest["end_image"].get("width")
         or manifest["start_image"].get("height") != manifest["end_image"].get("height")
         or manifest["start_image"].get("aspect_ratio")
@@ -795,7 +799,8 @@ def submit(args: argparse.Namespace) -> int:
 
     prompt = resolve_snapshot(run_dir, manifest["prompt"]["snapshot"], "prompt")
     start = resolve_snapshot(run_dir, manifest["start_image"]["snapshot"], "start image")
-    end = resolve_snapshot(run_dir, manifest["end_image"]["snapshot"], "end image")
+    end = (resolve_snapshot(run_dir, manifest["end_image"]["snapshot"], "end image")
+           if manifest["end_image"] is not None else None)
     cost = resolve_snapshot(run_dir, manifest["cost"]["snapshot"], "cost plan")
     command = [
         sys.executable,
@@ -807,8 +812,6 @@ def submit(args: argparse.Namespace) -> int:
         str(prompt),
         "--start-image",
         str(start),
-        "--end-image",
-        str(end),
         "--duration",
         str(DURATION_SECONDS),
         "--resolution",
@@ -828,6 +831,8 @@ def submit(args: argparse.Namespace) -> int:
         "--output-dir",
         str(output_dir),
     ]
+    if end is not None:
+        command.extend(["--end-image", str(end)])
     seed = manifest["settings"].get("seed")
     if seed is not None:
         command.extend(["--seed", str(seed)])
@@ -983,7 +988,7 @@ def validate_result_receipt(run_dir: Path, receipt_path: Path) -> dict[str, Any]
         raise BridgeError("result receipt manifest hash does not match the approved run")
     if receipt.get("start_image_sha256") != manifest["start_image"]["sha256"]:
         raise BridgeError("result receipt start image hash does not match the approved run")
-    if receipt.get("end_image_sha256") != manifest["end_image"]["sha256"]:
+    if receipt.get("end_image_sha256") != (manifest["end_image"]["sha256"] if manifest["end_image"] is not None else None):
         raise BridgeError("result receipt end image hash does not match the approved run")
 
     video = receipt.get("video")
@@ -1129,7 +1134,7 @@ def recovery(args: argparse.Namespace) -> int:
             "request_id": request_id,
             "manifest_sha256": manifest_hash,
             "start_image_sha256": manifest["start_image"]["sha256"],
-            "end_image_sha256": manifest["end_image"]["sha256"],
+            "end_image_sha256": (manifest["end_image"]["sha256"] if manifest["end_image"] is not None else None),
             "video": {
                 "file": "ending.mp4",
                 "sha256": sha256_file(video_output),
@@ -1180,7 +1185,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--run-dir", type=Path, required=True)
     prepare_parser.add_argument("--prompt-file", type=Path, required=True)
     prepare_parser.add_argument("--start-image", type=Path, required=True)
-    prepare_parser.add_argument("--end-image", type=Path, required=True)
+    prepare_parser.add_argument("--end-image", type=Path, help="Optional last frame; omission is recorded as null")
     prepare_parser.add_argument("--cost-plan", type=Path, required=True)
     prepare_parser.add_argument("--seed", type=int)
     prepare_parser.set_defaults(func=prepare)

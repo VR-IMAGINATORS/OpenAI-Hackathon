@@ -532,6 +532,28 @@ class GameCoreTests(unittest.TestCase):
             with self.assertRaises(game.GameError):
                 game.prepare_action(session, {"event_id": "extra", "intent": "続ける", "photo_paths": [str(self.photo)], "inventory_ids": [], "combine": None})
 
+    def test_ending_evidence_distinguishes_unattempted_obstacles_and_escape(self) -> None:
+        for outcomes in ([False, True, False, True], [True, True, True], [False] * 4):
+            session = self.session()
+            with self.assertRaises(game.GameError):
+                game.ending_packet(session)
+            for index, success in enumerate(outcomes):
+                self.play_action(session, f"evidence-{index}", success)
+            evidence = game.ending_packet(session)["escape_evidence"]
+            state = json.loads((session / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(evidence["escaped"], sum(outcomes) == 3)
+            self.assertEqual(evidence["action_limit_reached"], len(outcomes) == 4)
+            remaining = evidence["remaining_obstacles"]
+            self.assertEqual([item["id"] for item in remaining], state["scenario"]["order"][sum(outcomes):])
+            if outcomes == [False, True, False, True]:
+                self.assertEqual(len(remaining), 1)
+                self.assertFalse(remaining[0]["attempted"])
+                expected = next(g for g in sample_master()["gimmicks"] if g["id"] == remaining[0]["id"])
+                self.assertEqual(remaining[0]["mechanism"], expected["mechanism"])
+                self.assertEqual(remaining[0]["observation"], expected["observation"])
+            if outcomes == [False] * 4:
+                self.assertEqual([item["attempted"] for item in remaining], [True, False, False])
+
     def test_ending_packet_uses_only_final_event_image_as_start_frame(self) -> None:
         session = self.session(session_id="final-frame")
         final_image = self.root / "final-event.png"
