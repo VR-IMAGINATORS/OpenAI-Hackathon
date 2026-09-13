@@ -14,6 +14,12 @@
 
 ## 1. 最新価格からcost-planを作る
 
+### 明示指定された480Pの別版試作
+
+ユーザーが480Pを指定した場合、通常の768P設定は維持し、`ending-remakes/<revision>/`に別保存する。見積の`--resolution 480P`に加え、`media.py prepare --resolution 480P`を指定する。省略時は768P。解像度はcost-plan・manifest・送信引数で一致を検証する。回収まで同じ承認・再送防止・receiptの工程を使う。
+
+480P試作は通常プレイの`attach-video`へ登録しない。同コマンドの768P検査は維持する。回収した別版をそのまま提示し、必要な技術検査では480ピクセルの辺・15秒・音声streamを確認する。内容レビューは人が担当する。
+
 送信直前に [fal公式H3 Turbo I2Vページ](https://fal.ai/models/minimax/h3-max-turbo/image-to-video) で動画単価を確認し、同時点のUSD/JPYを用意する。`pricing-checked-at` はタイムゾーン付きISO-8601で記録する。24時間を超えた見積、未来日時、非fal URL、非有限値・0以下の単価/為替、不整合なUSD/JPY計算は拒否される。
 
 PowerShell例。`$CallToPast` は読み込んだ `SKILL.md` の親フォルダの絶対パスに設定する（[CLI 手順](cli.md)参照）。作業フォルダはプレイ用のフォルダのまま維持する。`$Session`、単価、為替、日時も実値へ置き換える。
