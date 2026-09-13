@@ -248,7 +248,7 @@ elif command == 'result':
         )
         return skill
 
-    def prepare(self, run_name: str = "run", *, seed=None) -> Path:
+    def prepare(self, run_name: str = "run", *, seed=None, resolution="768P") -> Path:
         run_dir = self.root / run_name
         result = quiet_call(
             media.prepare,
@@ -259,6 +259,7 @@ elif command == 'result':
                 end_image=self.end,
                 cost_plan=self.cost_plan,
                 seed=seed,
+                resolution=resolution,
             ),
         )
         self.assertEqual(result, 0)
@@ -461,6 +462,38 @@ elif command == 'result':
                 with mock.patch.object(media, "run_dependency", side_effect=fake_run):
                     self.assertEqual(quiet_call(media.submit, args), 0)
         self.assertTrue((run_dir / "submission-success.json").is_file())
+    def test_480p_preview_submits_approved_resolution_and_recovers(self) -> None:
+        plan = json.loads(self.cost_plan.read_text(encoding="utf-8"))
+        plan["resolution"] = "480P"
+        self.cost_plan.write_text(json.dumps(plan), encoding="utf-8")
+        run_dir = self.prepare("preview-480", resolution="480P")
+        self.approve(run_dir)
+        with mock.patch.dict(os.environ, {"FAL_KEY": ""}, clear=False):
+            self.assertEqual(self.submit(run_dir), 0)
+            self.assertEqual(quiet_call(media.recovery, namespace(
+                command="result", run_dir=run_dir, credentials_file=self.credentials)), 0)
+        calls = [json.loads(line) for line in
+                 (self.h3_skill / "calls.log").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(calls[0][calls[0].index("--resolution") + 1], "480P")
+        self.assertTrue(list((run_dir / "h3" / "retrievals").glob("*/receipt.json")))
+
+    def test_480p_requires_matching_explicit_resolution(self) -> None:
+        plan = json.loads(self.cost_plan.read_text(encoding="utf-8"))
+        plan["resolution"] = "480P"
+        self.cost_plan.write_text(json.dumps(plan), encoding="utf-8")
+        with self.assertRaisesRegex(media.BridgeError, "resolution must match"):
+            self.prepare("mismatched-default")
+        self.assertFalse((self.root / "mismatched-default").exists())
+
+    def test_manifest_resolution_must_match_cost_snapshot(self) -> None:
+        run_dir = self.prepare("resolution-tamper")
+        path = run_dir / "approval-manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["settings"]["resolution"] = "480P"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(media.BridgeError, "resolution differs"):
+            media.load_manifest(run_dir, fresh_price=False)
+
     def test_submit_is_one_attempt_and_replay_is_blocked(self) -> None:
         run_dir = self.prepare("replay")
         self.approve(run_dir, "表示された同一ハッシュの15秒動画1本を承認します。")

@@ -23,6 +23,7 @@ from typing import Any, Iterable
 ENDPOINT = "minimax/h3-max-turbo/image-to-video"
 MODE = "i2v"
 RESOLUTION = "768P"
+SUPPORTED_RESOLUTIONS = ("480P", "768P")
 DURATION_SECONDS = 15
 REQUEST_COUNT = 1
 PROMPT_EXPANSION_MODE = "balanced"
@@ -202,8 +203,8 @@ def validate_cost_plan(
     missing = sorted(required - set(plan))
     if missing:
         raise BridgeError(f"cost plan is missing required fields: {', '.join(missing)}")
-    if plan["mode"] != MODE or plan["resolution"] != RESOLUTION:
-        raise BridgeError("cost plan must be I2V at 768P")
+    if plan["mode"] != MODE or plan["resolution"] not in SUPPORTED_RESOLUTIONS:
+        raise BridgeError("cost plan must be I2V at 480P or 768P")
     durations = plan["durations_seconds"]
     request_count = plan["request_count"]
     if (
@@ -363,6 +364,9 @@ def prepare(args: argparse.Namespace) -> int:
         )
     plan = load_json_object(cost_source, "cost plan")
     cost_summary = validate_cost_plan(plan)
+    resolution = getattr(args, "resolution", RESOLUTION)
+    if resolution not in SUPPORTED_RESOLUTIONS or plan["resolution"] != resolution:
+        raise BridgeError("cost plan resolution must match the requested resolution")
 
     run_dir = args.run_dir.resolve()
     run_dir.mkdir(parents=True, exist_ok=False)
@@ -386,7 +390,7 @@ def prepare(args: argparse.Namespace) -> int:
         "settings": {
             "mode": MODE,
             "duration_seconds": DURATION_SECONDS,
-            "resolution": RESOLUTION,
+            "resolution": resolution,
             "request_count": REQUEST_COUNT,
             "request_slot": 1,
             "prompt_expansion_mode": PROMPT_EXPANSION_MODE,
@@ -446,7 +450,6 @@ def load_manifest(run_dir: Path, *, fresh_price: bool) -> tuple[Path, dict[str, 
     expected_settings = {
         "mode": MODE,
         "duration_seconds": DURATION_SECONDS,
-        "resolution": RESOLUTION,
         "request_count": REQUEST_COUNT,
         "request_slot": 1,
         "prompt_expansion_mode": PROMPT_EXPANSION_MODE,
@@ -455,6 +458,8 @@ def load_manifest(run_dir: Path, *, fresh_price: bool) -> tuple[Path, dict[str, 
     settings = manifest.get("settings")
     if not isinstance(settings, dict):
         raise BridgeError("approval manifest settings are invalid")
+    if settings.get("resolution") not in SUPPORTED_RESOLUTIONS:
+        raise BridgeError("approval manifest resolution is invalid")
     for field, expected in expected_settings.items():
         actual = settings.get(field)
         if type(actual) is not type(expected) or actual != expected:
@@ -509,6 +514,8 @@ def load_manifest(run_dir: Path, *, fresh_price: bool) -> tuple[Path, dict[str, 
     if plan != cost.get("plan"):
         raise BridgeError("cost plan snapshot no longer matches the approval manifest")
     validate_cost_plan(plan, now=utc_now(), enforce_fresh=fresh_price)
+    if plan["resolution"] != settings["resolution"]:
+        raise BridgeError("cost plan resolution differs from approval manifest")
     return manifest_path, manifest
 
 
@@ -815,7 +822,7 @@ def submit(args: argparse.Namespace) -> int:
         "--duration",
         str(DURATION_SECONDS),
         "--resolution",
-        RESOLUTION,
+        manifest["settings"]["resolution"],
         "--prompt-expansion-mode",
         PROMPT_EXPANSION_MODE,
         "--cost-plan",
@@ -1187,6 +1194,8 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--start-image", type=Path, required=True)
     prepare_parser.add_argument("--end-image", type=Path, help="Optional last frame; omission is recorded as null")
     prepare_parser.add_argument("--cost-plan", type=Path, required=True)
+    prepare_parser.add_argument("--resolution", choices=SUPPORTED_RESOLUTIONS, default=RESOLUTION,
+                                help="Default 768P; 480P is for separately saved preview runs")
     prepare_parser.add_argument("--seed", type=int)
     prepare_parser.set_defaults(func=prepare)
 

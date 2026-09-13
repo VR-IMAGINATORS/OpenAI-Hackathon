@@ -685,7 +685,7 @@ class GameCoreTests(unittest.TestCase):
         self.assertEqual(fallback["media_status"], "waived")
 
     def test_start_only_live_ending_completes_without_end_image(self) -> None:
-        for outcome, successes, label in (("happy", [True]*3, "TRUE END"), ("normal", [True, True, False, False], "NORMAL END"), ("bad", [False]*4, "BAD END")):
+        for outcome, successes, label in (("happy", [True]*3, "SUCCESS!!"), ("normal", [True, True, False, False], "to be continued..."), ("bad", [False]*4, "to be continued...")):
             with self.subTest(outcome=outcome):
                 live = self.session(mode="live", session_id="start-only-"+outcome)
                 for index, success in enumerate(successes):
@@ -698,6 +698,8 @@ class GameCoreTests(unittest.TestCase):
                 self.assertTrue(packet["production"]["generate_end_frame"])
                 self.assertEqual(packet["production"]["input_mode"], "start_and_end_frames")
                 self.assertEqual(packet["production"]["title_mode"], "end_frame_embedded")
+                self.assertEqual(packet["production"]["title_position"], "lower_center" if outcome == "happy" else "lower_right")
+                self.assertEqual(packet["production"]["title_transition"], "brief_amber_light_sweep_then_stable_hold")
                 self.assertEqual(packet["production"]["continuity_reference"], packet["start_frame"])
                 self.story(live)
                 run, receipt = self.h3_receipt(live, with_end=False)
