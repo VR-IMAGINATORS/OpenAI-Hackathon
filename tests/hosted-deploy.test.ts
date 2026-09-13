@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
@@ -252,4 +253,17 @@ test('persistent endpoint unavailability times out; authentication errors fail i
     /Application request failed/,
   );
   assert.equal(forbidden.events.filter((e) => e === 'GET/healthz').length, 1);
+});
+
+test('deployment script loads with native Node strip-only TypeScript and no dev runtime', () => {
+  execFileSync(
+    process.execPath,
+    [
+      '--experimental-strip-types',
+      '--input-type=module',
+      '-e',
+      "await import('./tools/deploy.ts')",
+    ],
+    { stdio: 'pipe' },
+  );
 });

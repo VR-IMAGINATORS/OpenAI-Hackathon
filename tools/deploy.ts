@@ -163,8 +163,10 @@ async function service(config: DeployConfig, deps: DeployDependencies): Promise<
   return entry;
 }
 class ApplicationRequestError extends Error {
-  constructor(readonly status: number) {
+  readonly status: number;
+  constructor(status: number) {
     super('Application request failed');
+    this.status = status;
   }
 }
 function retryableHealthFailure(error: unknown): boolean {
