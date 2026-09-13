@@ -1,6 +1,6 @@
 # データモデル — game-core
 
-Status: draft。plan.mdと同時承認。本文の型はアプリ内部型でありLive APIの型ではない。
+Status: approved (2026-09-13)。plan.mdと同時承認。本文の型はアプリ内部型でありLive APIの型ではない。
 
 ## エンティティ
 

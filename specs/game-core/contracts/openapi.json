@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Game core API delta",
-    "version": "0.1.0-draft",
-    "description": "hosted-multiplayer/contracts/openapi.yamlへの追加/上書き契約。bootstrap/state/photo/start/end/control/live/heartbeatの基本契約は継承しplan §7の追加を適用。全APIで既存Host/Origin検証・認証・レート制限を維持。 認証付き応答（エラー含む）はprivate,no-store / Vary:Cookie / nosniff。"
+    "version": "0.1.0",
+    "description": "hosted-multiplayer/contracts/openapi.yamlへの追加/上書き契約。bootstrap/state/photo/start/end/control/live/heartbeatの基本契約は継承しplan §7の追加を適用。全APIで既存Host/Origin検証・認証・レート制限を維持。 認証付き応答（エラー含む）はprivate,no-store / Vary:Cookie / nosniff。 2026-09-13に計画と同時承認。"
   },
   "security": [
     {
