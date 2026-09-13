@@ -611,7 +611,7 @@ export function createHostedApp(
     const { clientId, epoch } = credentials(req);
     registry.heartbeat(auth, play.id, clientId, epoch, body.voiceState);
     // A closed peer can be a page reload. Only /end explicitly ends a game.
-    r.game.heartbeat(body.voiceState === 'closed' ? 'disconnected' : body.voiceState);
+    r.heartbeat(body.voiceState === 'closed' ? 'disconnected' : body.voiceState);
     if (['disconnected', 'failed', 'closed'].includes(body.voiceState)) {
       const confirmed = await ai.closeLive(play.id);
       if (!confirmed) await registry.end(play);

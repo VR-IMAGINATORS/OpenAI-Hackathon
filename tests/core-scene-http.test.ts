@@ -118,7 +118,12 @@ async function setup(t: TestContext, reject = false) {
           .status,
         200,
       );
-      assert.equal((await request('/api/play/start', play, {})).status, 200);
+      const again = await request('/api/play/heartbeat', play, {
+        generation,
+        voiceState: 'connected',
+      });
+      assert.equal(again.status, 200);
+      assert.equal((await again.json()).state.status, 'playing');
     }
     return play;
   }

@@ -34,12 +34,13 @@ export const liveEventSchema = z.union([
 export function liveInstructions(state: PublicGameState, snapshot?: ScenarioSnapshot) {
   if (snapshot)
     return [
-      'あなたは未来で閉じ込められた相手。選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
-      '導入ではアプリの最初の呼びかけを待つ。返事が来たら状況を短く説明し、写真を送ると道具として使えると伝える。写真受信通知後に「これをどう使う？」と聞く。準備ができたら画面のプレイ開始で本編に入る。',
+      '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
+      '導入ではアプリの最初の呼びかけを待ち、openingMessageの内容を伝えて写真を待つ。接続後はそのまま本編で、開始ボタンや準備完了の確認はない。現在の状況画像はアプリが並行して生成・送信する。画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
       '本編の用途相談や実行指示、訂正の判断が必要ならclientへ委譲する。委譲は作業依頼であり、行動成功を確定しない。復唱や確認の質問、実行ボタンは挟まない。指示を受け付けた時の「やってみる」と結果の発話はアプリのcommentary通知に任せ、重ねて同じ相づちを話さない。',
       '途中の間や未完の発言で勝手に行動しない。質問と指示を区別する。判定中も会話できるが次の行動は予約せず、現在の結果後に指示を改めてもらう。攻略ヒントは尋ねられたときだけ段階的に出す。特殊能力を付与しない。',
       snapshot.coreConfig.conversation[snapshot.locale].liveInstructions,
       JSON.stringify({
+        openingMessage: snapshot.coreConfig.conversation[snapshot.locale].openingMessage,
         locale: snapshot.locale,
         status: state.status,
         title: state.title,
@@ -75,13 +76,16 @@ function limitLiveContent(content: string) {
 export function openingCommand(
   state: PublicGameState,
   locale: 'ja' | 'en' = 'ja',
+  snapshot?: ScenarioSnapshot,
 ): LiveCommand | null {
   if (state.status !== 'briefing') return null;
   return {
     ...factCommand(
-      locale === 'en'
-        ? 'Open the call by saying: Can you hear me? I’m trapped here. If you can hear my voice, please answer. Then wait for their reply.'
-        : '最初の呼びかけです。「聞こえる…？ よかった、誰かにつながった。閉じ込められているんだ。声が届いていたら、返事をしてくれる？」と短く話し、返事を待ってください。',
+      snapshot
+        ? 'The call is connected and the game has begun. Deliver the configured openingMessage in the selected language, then wait for the user. The initial situation image is being sent by the app.'
+        : locale === 'en'
+          ? 'Open the call by saying: Can you hear me? I’m trapped here. If you can hear my voice, please answer. Then wait for their reply.'
+          : '最初の呼びかけです。「聞こえる…？ よかった、誰かにつながった。閉じ込められているんだ。声が届いていたら、返事をしてくれる？」と短く話し、返事を待ってください。',
     ),
     type: 'session.commentary.append',
   };

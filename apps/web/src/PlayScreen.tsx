@@ -212,7 +212,7 @@ export default function PlayScreen({
     const connection = live.current;
     if (
       voice !== 'connected' ||
-      state.status !== 'briefing' ||
+      (state.status !== 'briefing' && !(state.automaticActions && state.status === 'playing')) ||
       blockedAudio ||
       !connection?.opening
     )
@@ -228,7 +228,8 @@ export default function PlayScreen({
         openingDelivered.current ||
         live.current !== connection ||
         connection.state !== 'connected' ||
-        current.current.status !== 'briefing'
+        (current.current.status !== 'briefing' &&
+          !(current.current.automaticActions && current.current.status === 'playing'))
       )
         return;
       if (connection.send([connection.opening!])) markOpeningDelivered();
@@ -734,7 +735,7 @@ export default function PlayScreen({
               {time(state.waitingRemainingMs)})
             </p>
           )}
-          {state.status === 'briefing' && (
+          {state.status === 'briefing' && !state.automaticActions && (
             <section className="tutorial-panel">
               <p className="play-eyebrow">{t('はじめての通信', 'Your first call')}</p>
               <h2>
@@ -771,7 +772,7 @@ export default function PlayScreen({
               </ol>
             </section>
           )}
-          {state.status === 'briefing' && (
+          {state.status === 'briefing' && !state.automaticActions && (
             <button
               className="primary-button start-button"
               onClick={() => void start()}

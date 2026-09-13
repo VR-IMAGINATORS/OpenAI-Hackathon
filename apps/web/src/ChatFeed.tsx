@@ -213,7 +213,7 @@ export default function ChatFeed({
       aria-label={locale === 'ja' ? '未来との会話' : 'Conversation with the future'}
     >
       <div className="chat-heading">
-        <span>{locale === 'ja' ? '未来のあなた' : 'Your future self'}</span>
+        <span>{locale === 'ja' ? '未来のあなたのAI' : 'Your future AI'}</span>
         <small>
           {locale === 'ja' ? '写真と声でつながる' : 'Connected through photos and voice'}
         </small>
@@ -276,8 +276,8 @@ export default function ChatFeed({
                       ? 'あなた'
                       : 'You'
                     : locale === 'ja'
-                      ? '未来のあなた'
-                      : 'Your future self'}
+                      ? '未来のあなたのAI'
+                      : 'Your future AI'}
                 </span>
                 {m.text && <p>{m.text}</p>}
                 {m.assetIds.map((id) => (

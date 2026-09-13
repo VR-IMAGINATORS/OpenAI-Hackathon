@@ -255,6 +255,8 @@ const fs = require('node:fs');
       }
       if (url.pathname === '/api/play/heartbeat') {
         state.voiceState = body.voiceState;
+        if (body.voiceState === 'connected' && state.status === 'briefing')
+          state.status = 'playing';
       }
       if (url.pathname === '/api/play/start') state.status = 'playing';
       if (url.pathname === '/api/play/photos') {
@@ -347,8 +349,10 @@ const fs = require('node:fs');
     await page.getByRole('button', { name: '合言葉で参加' }).click();
     await enterCall();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
+    await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));
+    assert.equal(state.status, 'playing');
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'core-result'));
-    await page.getByRole('button', { name: /状況を聞いたら、プレイ開始/ }).click();
+    assert.equal(await page.getByRole('button', { name: /状況を聞いたら、プレイ開始/ }).count(), 0);
     await page.evaluate(() =>
       window.__emit({
         type: 'session.input_transcript.delta',
@@ -504,7 +508,10 @@ const fs = require('node:fs');
     await page.getByRole('combobox').selectOption('en');
     await enterCall(true);
     await page.getByText('Voice connected', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Begin the escape', exact: false }).waitFor();
+    assert.equal(
+      await page.getByRole('button', { name: 'Begin the escape', exact: false }).count(),
+      0,
+    );
     assert.equal(await page.getByRole('combobox').count(), 0, 'locale is fixed during play');
     await page.reload();
     await page.getByRole('button', { name: 'Reconnect here', exact: false }).waitFor();

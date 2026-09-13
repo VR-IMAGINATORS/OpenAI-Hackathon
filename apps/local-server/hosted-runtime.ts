@@ -323,7 +323,7 @@ export class GameRuntime {
         this.game.heartbeat('connecting');
         const opening = this.openingIssued
           ? null
-          : openingCommand(this.game.state(), this.coreSnapshot?.locale);
+          : openingCommand(this.game.state(), this.coreSnapshot?.locale, this.coreSnapshot);
         this.openingIssued = true;
         return { sdp: answer.transport.sdp, generation: this.game.generation, opening };
       } finally {
@@ -449,6 +449,13 @@ export class GameRuntime {
     }
     return [];
   }
+  heartbeat(voice: Parameters<GameSession['heartbeat']>[0]) {
+    this.game.heartbeat(voice);
+    // Start only once, after the answered call actually connects.
+    if (this.coreSnapshot && voice === 'connected' && this.game.status === 'briefing') {
+      this.start();
+    }
+  }
   start(): LiveCommand[] {
     this.check();
     const wasBriefing = this.game.status === 'briefing';
@@ -459,7 +466,7 @@ export class GameRuntime {
     this.game.start();
     if (wasBriefing) this.presentScene(this.game.situation);
     this.syncCore(true);
-    return wasBriefing
+    return wasBriefing && !this.coreSnapshot
       ? [
           factCommand(
             this.words(

@@ -15,6 +15,7 @@ const classificationExampleSchema = z
 const localeConversationSchema = z
   .object({
     liveInstructions: text,
+    openingMessage: text,
     classificationExamples: z.array(classificationExampleSchema).min(3).max(30),
   })
   .strict()

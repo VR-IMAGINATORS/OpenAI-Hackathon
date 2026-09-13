@@ -112,3 +112,11 @@ PC上のブラウザ受信時刻とサーバー記録時刻から算出した単
 ユーザー提供の仮動画と着信SEを追加。認証後「体験を始める」→動画終了/右下Skip→Calling/応答する→マイク許可とLive接続→既存の呼びかけ。動画・着信中はプレイ枠やAI要求を作らない。リプレイ時は言語選択から新しい導入、進行中の再読込は既存プレイへ復帰する。
 
 npm run buildと対象Prettier check成功。Chromeのopening-smoke/core-smoke/mobile-smoke成功。動画の実メタデータ読込、終了/Skip、autoplay拒否時再生案内、着信音停止、応答前のmic/create/Liveゼロを確認。マイクと音声再生はfakeで、実スマホでの音量・音声付きautoplayは未確認。コピーしたMP4/MP3のSHA-256は添付原本と一致。
+
+## 2026-09-13 着信応答から直接プレイ
+
+- coreではLive接続完了のheartbeatで本編と時計を開始し、最初の状況画像を生成する。繰り返しheartbeatでも初期画像は1件。
+- 追加の開始ボタンと旧チュートリアルを表示せず、説明から写真送信へ続く。
+- conversation.ja/en.openingMessageを導入台詞としてLiveへ渡す。役割は未来の本人ではなく未来の本人を支援するAI。
+- npm run build成功、npm test 172件成功。
+- Chrome core-smoke / mobile-smoke / opening-smoke成功。自動開始後のopening送信、日英UI、動画・着信、写真送信・再接続を確認。AI・マイクは模擬。実Liveの説明内容・テンポは未確認。
