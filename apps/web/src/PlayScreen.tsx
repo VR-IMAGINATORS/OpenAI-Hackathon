@@ -532,6 +532,21 @@ export default function PlayScreen({
       setBusy(false);
     }
   }
+  async function downloadDiagnostics() {
+    try {
+      const trace = await playRequest('/api/play/trace', undefined, 'GET', { playId });
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'game-diagnostics.json';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setError(message(error));
+    }
+  }
   async function end() {
     if (locked.current) return;
     locked.current = true;
@@ -653,6 +668,11 @@ export default function PlayScreen({
             <span aria-hidden="true">⌄</span>
           </summary>
           <div className="messenger-info-body">
+            {state.diagnosticsAvailable && !ended && (
+              <button onClick={() => void downloadDiagnostics()}>
+                {t('診断JSONを保存', 'Save diagnostics JSON')}
+              </button>
+            )}
             <p>{ended ? state.lastResult?.narrative : state.situation}</p>
             <p>
               {t('障害', 'Obstacle')} {state.obstacle.index + 1} / {state.obstacle.count}

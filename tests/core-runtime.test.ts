@@ -40,6 +40,7 @@ async function setup(
   t: TestContext,
   classify: (context: any) => unknown | Promise<unknown>,
   recognizeGate?: Promise<void>,
+  traceEnabled = false,
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0 };
@@ -97,6 +98,8 @@ async function setup(
     queue,
     () => now,
     snapshot,
+    undefined,
+    traceEnabled,
   );
   t.after(async () => {
     runtime.dispose();
@@ -238,4 +241,38 @@ test('terminal voice grace retains generation, rejects stale polls and closes at
     () => h.say('終了後の指示'),
     (e: any) => e.status === 410,
   );
+});
+
+test('diagnostics distinguish missing delegation, wait and expiration without raw speech or photos', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: '未完了' }), undefined, true);
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await h.say('ハサミで切って');
+  let trace = h.runtime.trace();
+  assert.equal(trace.photoCount, 1);
+  assert.equal(trace.recognizedItemCount, 1);
+  assert.equal(trace.userFragmentCount, 1);
+  assert.equal(trace.delegations?.length, 0);
+  assert.ok(trace.diagnostics?.some((d) => d.stage === 'user_transcript_received'));
+  await h.delegate();
+  await until(
+    () => h.runtime.trace().diagnostics?.some((d) => d.stage === 'decision_accepted') ?? false,
+  );
+  trace = h.runtime.trace();
+  assert.ok(
+    trace.diagnostics?.some((d) => d.stage === 'classification_returned' && d.code === 'wait'),
+  );
+  assert.equal(trace.delegations?.[0].status, 'pending');
+  assert.equal(JSON.stringify(trace).includes('ハサミで切って'), false);
+  assert.equal(JSON.stringify(trace).includes(h.photo), false);
+  h.setNow(22000);
+  assert.equal(h.runtime.trace().delegations?.[0].status, 'expired');
+  h.runtime.game.end('expired');
+  assert.deepEqual(h.runtime.trace(), { entries: [] });
+});
+
+test('diagnostics are absent when not enabled', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: '未完了' }));
+  await h.say('ハサミで切って');
+  assert.equal(h.runtime.state().diagnosticsAvailable, undefined);
+  assert.deepEqual(h.runtime.trace(), { entries: [] });
 });

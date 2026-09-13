@@ -49,6 +49,7 @@ export interface LiveCommand {
 }
 export interface PublicGameState {
   automaticActions?: boolean;
+  diagnosticsAvailable?: boolean;
   locale?: 'ja' | 'en';
   stateVersion?: number;
   id: string;
