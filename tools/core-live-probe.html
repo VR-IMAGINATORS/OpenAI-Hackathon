@@ -108,8 +108,15 @@
   </section>
   <script type="module">
     const $ = (id) => document.getElementById(id);
-    const token = location.hash.slice(1);
-    history.replaceState(null, '', location.pathname);
+    const incomingToken = location.hash.slice(1);
+    let token = incomingToken;
+    try {
+      if (incomingToken) sessionStorage.setItem('core-live-probe-token', incomingToken);
+      else token = sessionStorage.getItem('core-live-probe-token') ?? '';
+      if (incomingToken) history.replaceState(null, '', location.pathname);
+    } catch {
+      // Keep the fragment when storage is unavailable so reload still works.
+    }
     let fixtures = [],
       photo = '',
       peer,
