@@ -33,6 +33,19 @@ class StagingTests(unittest.TestCase):
             self.assertEqual((path/"a/video-prompt.txt").read_bytes(),(path/"b/video-prompt.txt").read_bytes())
             with self.assertRaises(FileExistsError): staging.compile_plan(source,path/"a")
 
+    def test_title_follows_reveal_and_does_not_ban_itself(self):
+        p=scene(); p.update(ending_title="NORMAL END", title_at=12)
+        staging.validate(p)
+        text=staging.prompt(p)
+        self.assertIn('"NORMAL END"', text)
+        self.assertNotIn("No captions, subtitles, labels", text)
+        p["title_at"]=10
+        with self.assertRaisesRegex(ValueError, "follow outcome"):
+            staging.validate(p)
+        p.update(title_at=12, ending_title="WRONG END")
+        with self.assertRaisesRegex(ValueError, "ending_title"):
+            staging.validate(p)
+
     def test_continuous_collision_detects_crossing_between_endpoints(self):
         p=scene(); prop=p["entities"][1]
         prop["keys"]=[{"t":0,"position":[3,1.5,1.8]},{"t":15,"position":[3.9,1.5,1.8]}]

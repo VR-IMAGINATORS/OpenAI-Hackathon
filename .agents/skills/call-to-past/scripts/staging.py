@@ -105,6 +105,10 @@ def validate(plan):
     require(plan.get("version") == 1, "version must be 1")
     require(number(plan.get("duration")) and 0 < plan["duration"] <= 60, "invalid duration")
     duration = plan["duration"]
+    if "ending_title" in plan:
+        require(plan["ending_title"] in ("TRUE END", "NORMAL END", "BAD END"), "invalid ending_title")
+        require(number(plan.get("title_at")) and 0 <= plan["title_at"] < duration - .6, "invalid title_at")
+        require(plan["title_at"] > plan["reveal"]["at"], "title must follow outcome reveal")
     require(vec(plan.get("room")) and min(plan["room"]) > 0, "invalid room")
     require(number(plan.get("max_speed")) and plan["max_speed"] > 0, "invalid max_speed")
     for key in ("continuity", "outcome"):
@@ -184,7 +188,7 @@ def xyz(p):
 def prompt(plan):
     lines = [f"{plan['duration']}-second realistic cinematic 3D mystery ending.", plan["continuity"],
              "SPATIAL CONTRACT: meters; x right, y up, z deeper into room. Room dimensions "+xyz(plan["room"])+". Coordinates describe one fixed world, never relocate its walls or devices between shots.",
-             "Only environmental ambience and physical sound effects. NO speech, dialogue, narration, whispering words, singing or music. No captions, subtitles, labels or UI.",
+             "Only environmental ambience and physical sound effects. NO speech, dialogue, narration, whispering words, singing or music. No explanatory subtitles or UI. Only the explicitly specified ending title may appear as added text.",
              "FIXED OUTCOME (internal direction, do not display as text): "+plan["outcome"],
              f"Reveal the outcome devices only from {plan['reveal']['at']:.1f}s in the final scene; never earlier."]
     for e in plan["entities"]:
@@ -198,6 +202,8 @@ def prompt(plan):
     for i,s in enumerate(plan["shots"]):
         lines.append(f"SHOT {i+1}, {s['from']:g}-{s['to']:g}s: "+("Start at reference frame. " if i == 0 else "Explicit editorial hard cut, not object teleportation. ")+f"Camera fixed at {xyz(s['position'])}, looking at {xyz(s['target'])}, vertical field of view {s['fov']} degrees. {s['action']} SOUND: {s['sound']}")
     lines.append("Preserve continuous object positions across cuts. No wall penetration, duplicated tools, support changes, new gameplay action, extra cleared obstacle or human face reveal. Match start and end references at their respective times, not by morphing the room.")
+    if "ending_title" in plan:
+        lines.append(f'At {plan["title_at"]:g}s, introduce exactly "{plan["ending_title"]}" as a single-line screen-space title in reserved negative space, clear of the person and outcome evidence. Bold off-white sans-serif, a narrow amber edge, one short scale overshoot and light sweep; settle within 0.6 seconds and hold crisp through the end. Cast no light onto the room or devices. No earlier title or additional text. Use only the established physical sound, no synthetic title sting.')
     return "\n\n".join(lines)+"\n"
 
 

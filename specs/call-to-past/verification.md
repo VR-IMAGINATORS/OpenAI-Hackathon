@@ -121,3 +121,9 @@ staging.pyを追加。共通の座標・寸法・支持・直線軌道・固定�
 映画版と文字入り版を実生成。文字入り版はrequest ID `01a09a93-0f20-7890-9353-d27174b6fde2`、15秒・768P・balanced・開始画像のみ。回収とreceipt/動画ハッシュ照合済み。内容品質・採用は人のレビュー待ち。動画・写真・承認記録はGit対象外のrunsに保持する。
 
 ブランチ保存前に `py -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests` を実行し72件成功。課金なしの自動テストであり、新しいゲームの実プレイ検証ではない。
+
+## 2026-09-13 開始画像のみの通常プレイ対応
+
+別セッションが終了画像を生成した報告を受け、入口・Story.md・CLI・通常登録・仕様・研究資料まで[影響調査](../../.specworkflow/discussions/2026-09-13-ending-start-only-impact.md)を実施。別版だけの例外を廃止し、新規/再開も開始画像1枚、終了画像とゲーム中の絵コンテなし、エンドタイトル/VFXのH3同時生成へ統一した。
+
+`py -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests`は77件成功。True/Normal/Badの終了画像なしlive登録→表示→結果、receipt欠落/不一致と開始素材改ざんの拒否、既存2画像互換、開発用タイトル出力を確認。動画はテスト用でffprobeをスタブにしており、今回の実API生成・別セッション実プレイ・内容品質を成功とは記録しない。Markdownローカルリンク検査とgit diff --checkも成功。

@@ -103,12 +103,11 @@ The next action is then available, but final `media_complete` remains `false` un
 
 ## Ending, video, and result release
 
-After three clears or four committed actions:
+After three clears or four committed actions, follow ending.md: generate/reuse one start frame, no end frame or storyboard. Prepare and recover H3 using h3-cli.md, then register directly:
 
 ```powershell
 python -X utf8 $Game ending-packet --session "runs/call-to-past/<session-id>"
 python -X utf8 $Game attach-story --session "runs/call-to-past/<session-id>" --story-json "story.json"
-python -X utf8 $Game attach-ending --session "runs/call-to-past/<session-id>" --file "C:/absolute/path/ending.png" --media-kind generated --provenance "Codex native image tool; model name undisclosed"
 python -X utf8 $Game attach-video --session "runs/call-to-past/<session-id>" --file "C:/absolute/path/ending.mp4" --media-kind generated --h3-run "C:/absolute/path/h3-run" --receipt "h3/retrievals/<retrieval-id>/receipt.json" --provenance "H3 Turbo receipt verified"
 ```
 
@@ -124,7 +123,7 @@ python -X utf8 $Game attach-video --session "runs/call-to-past/<session-id>" --f
 
 The outcome type and counts remain code-derived. The first accepted story is stored with a hash and cannot be silently replaced. A live result has no static title fallback and stays unavailable until this story exists.
 
-For live attachment, free-text provenance is insufficient. The core requires the receipt saved by `media.py result` and binds it to the H3 run's manifest, approval, saved request ID, input snapshots, receipt-adjacent video, current source video, and game ending-image hash. SHA casing is normalized. It also runs `ffprobe` and requires 15 seconds ±0.25, a 768-pixel frame dimension, and at least one audio stream. Motion, face framing, continuity, and overall visual quality still require human review. Rehearsal media remains separate and must not supply live H3 evidence.
+For live attachment, free-text provenance is insufficient. The core requires the receipt saved by `media.py result` and binds it to the H3 run's manifest, approval, saved request ID, input snapshots, receipt-adjacent video, current source video, and, only for an approved two-image run, the registered game ending-image hash. The standard start-only run requires explicit null end_image and end_image_sha256 and needs no attach-ending call. SHA casing is normalized. It also runs `ffprobe` and requires 15 seconds ±0.25, a 768-pixel frame dimension, and at least one audio stream. Motion, face framing, continuity, and overall visual quality still require human review. Rehearsal media remains separate and must not supply live H3 evidence.
 
 After the caller actually displays the attached video to the user, explicitly record that fact, then reveal the result:
 

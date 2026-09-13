@@ -16,4 +16,4 @@ WebサーバーなしのためOpenAPIは適用外。CLIのJSON入出力例と厳
 
 物語・タイトル・工夫への評価は履歴から都度作成してattach-storyに保存する。エンド種別・行動数・解除数はその文章から変更できない。イベント画像の修正版は次のprepareや物語作成へ進む前に限り、過去ファイルを保持して同じeventに追記し、回数は変えない。個別イベントの画像waiveも同じ期限で明示理由を記録して文章版へ進む。ending-packetは最後のイベント画像と最終在庫を含む。
 
-H3 resultのreceiptはversion/endpoint/request_id/manifest_sha256/start_image_sha256/end_image_sha256/video（file/sha256/bytes）/completed_atを持つ。送信時のsubmission-attempt.approval_sha256と現approval.json、saved request ID、success記録、承認素材を照合。live attach-videoはh3-runとreceiptを要求し、動画本体と終了画像を検証する。
+H3 resultのreceiptはversion/endpoint/request_id/manifest_sha256/start_image_sha256/end_image_sha256/video（file/sha256/bytes）/completed_atを持つ。送信時のsubmission-attempt.approval_sha256と現approval.json、saved request ID、success記録、承認素材を照合。live attach-videoはh3-runとreceiptを要求し、動画本体と承認素材を検証する。標準はmanifest.end_imageとreceipt.end_image_sha256を明示的なnullとし、state.ending.ending_imageがnullでも登録できる。旧2画像runでは登録済み終了画像のハッシュ照合を維持する。ending-packet.productionには開始画像のみ、終了画像・絵コンテ生成なし、確定ラベル、H3同時文字生成を明示する。
