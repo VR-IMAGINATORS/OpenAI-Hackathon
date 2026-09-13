@@ -127,3 +127,10 @@ npm run buildと対象Prettier check成功。Chromeのopening-smoke/core-smoke/m
 - Zodの判別共用体はランタイム検証用に残し、送信用は通常のunionからanyOfを生成する。
 - 同じ模擬発話の実API要求が修正後200/completed。実写真・実Liveでの通しプレイは未確認。
 - oneOf禁止とstrict object/all branchesを検証する回帰テスト追加。npm test 173件成功、npm run build成功。
+
+## 2026-09-13 本編を単一のメッセンジャー画面へ統合
+
+- 通話・残り資源・状況詳細・持ち物・撮影・ライブラリ・送信・終了をアプリ内へ配置。写真プレビューは送信欄へ表示。
+- npm run build成功。Chrome core-smoke / mobile-smoke / opening-smoke成功。
+- 320×568、390×844、1280×900で画面外の操作欄やページスクロールがなく、会話領域を独立スクロールできることを検証。カメラ/ライブラリアイコンからの選択、プレビュー取り消し、送信・再試行、再接続・終了後表示を模擬API/マイクで確認。
+- スマホ幅のプレビューを目視確認。物理端末のカメラ・OS写真選択画面・実Liveでの検証は未実施。

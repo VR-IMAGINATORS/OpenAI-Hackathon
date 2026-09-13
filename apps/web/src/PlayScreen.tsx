@@ -559,6 +559,301 @@ export default function PlayScreen({
     state.proposal.items.length > 0 &&
     !!state.proposal.usage.trim() &&
     state.proposal.inputRevision === state.inputRevision;
+
+  if (state.automaticActions) {
+    const cameraDisabled =
+      voice !== 'connected' ||
+      busy ||
+      state.busy ||
+      photos.length >= state.maxPhotos ||
+      !!uncertainAction ||
+      !!draftPhoto ||
+      !!retryPhotos;
+    return (
+      <main className="messenger-app" aria-label={t('未来とのメッセンジャー', 'Future messenger')}>
+        <header className="messenger-header">
+          <div className="messenger-avatar" aria-hidden="true">
+            AI
+          </div>
+          <div className="messenger-contact">
+            <h1>{t('未来のあなたのAI', 'Your future AI')}</h1>
+            <span>CALL TO THE PAST</span>
+          </div>
+          {!ended && (
+            <button
+              className="messenger-hangup"
+              aria-label={t('プレイを終了', 'End game')}
+              onClick={() => void end()}
+              disabled={busy}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 15v-4c5-5 13-5 18 0v4h-5v-4M8 11v4H3" />
+              </svg>
+            </button>
+          )}
+        </header>
+        <section
+          className={'messenger-call voice-' + voice}
+          aria-label={t('音声接続', 'Voice connection')}
+        >
+          <span className="messenger-dot" aria-hidden="true" />
+          <strong>
+            {ended
+              ? t('通話終了', 'Call ended')
+              : locale === 'ja'
+                ? voiceLabels[voice]
+                : {
+                    connecting: 'Connecting',
+                    connected: 'Voice connected',
+                    disconnected: 'Voice disconnected',
+                    failed: 'Unable to connect voice',
+                    closed: 'Voice not connected',
+                  }[voice]}
+          </strong>
+          {!ended && voice !== 'connected' && (
+            <button disabled={busy} onClick={() => void connect()}>
+              {busy
+                ? t('接続準備中…', 'Connecting…')
+                : hasControl
+                  ? t('音声を接続 / 再開する', 'Connect / resume voice')
+                  : t('この画面で再接続', 'Reconnect here')}
+            </button>
+          )}
+          {blockedAudio && !ended && (
+            <button
+              onClick={() =>
+                void live.current
+                  ?.resumeAudio()
+                  .then(() => setBlockedAudio(false))
+                  .catch(() => setError(t('音声を再生できません。', 'Unable to play audio.')))
+              }
+            >
+              {t('タップして相手の音声を再生', 'Tap to play incoming audio')}
+            </button>
+          )}
+        </section>
+        <details className="messenger-info">
+          <summary>
+            <span>
+              {ended
+                ? state.status === 'won'
+                  ? t('脱出できた！', 'You escaped!')
+                  : t('接続を終了しました', 'Call ended')
+                : state.obstacle.title}
+            </span>
+            {!ended && (
+              <span className="messenger-counters">
+                <span aria-label={t('残り時間', 'Time left')}>{time(state.remainingMs)}</span>
+                <span>
+                  {state.actionsRemaining}
+                  {t(' 回', ' actions')}
+                </span>
+              </span>
+            )}
+            <span aria-hidden="true">⌄</span>
+          </summary>
+          <div className="messenger-info-body">
+            <p>{ended ? state.lastResult?.narrative : state.situation}</p>
+            <p>
+              {t('障害', 'Obstacle')} {state.obstacle.index + 1} / {state.obstacle.count}
+            </p>
+            {state.inventory.length > 0 && (
+              <>
+                <h2>{t('未来へ送ったもの', 'Sent to the future')}</h2>
+                <ul>
+                  {state.inventory.map((item) => (
+                    <li key={item.id}>
+                      {item.name} ·{' '}
+                      {item.status === 'available'
+                        ? t('使用できる', 'Available')
+                        : item.status === 'damaged'
+                          ? t('破損あり', 'Damaged')
+                          : t('使用済み', 'Used')}
+                      <p>{item.description}</p>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </details>
+        <ChatFeed
+          embedded
+          playId={playId}
+          locale={locale}
+          sentMessageIds={sentMessageIds}
+          connected={voice === 'connected'}
+          generation={state.generation}
+        />
+        <footer className="messenger-composer">
+          {state.paused && !ended && (
+            <p className="messenger-notice" role="status">
+              {t('接続・処理待ち：時計は停止中', 'Waiting: timer paused')} (
+              {time(state.waitingRemainingMs)})
+            </p>
+          )}
+          {(error || state.error) && (
+            <p className="messenger-notice messenger-error" role="alert">
+              {error || state.error}
+            </p>
+          )}
+          {retryPhotos && !ended && (
+            <div className="messenger-retry">
+              <p>{t('写真の送信を完了できませんでした。', 'Photo upload did not complete.')}</p>
+              <button
+                disabled={busy}
+                onClick={() => void sendPhotos(retryPhotos.photos, retryPhotos.requestId)}
+              >
+                {t('写真の送信を再試行', 'Retry photo upload')}
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => {
+                  setRetryPhotos(null);
+                  setError('');
+                }}
+              >
+                {t('この写真の送信を取り消す', 'Cancel this upload')}
+              </button>
+            </div>
+          )}
+          {!ended && (photos.length > 0 || draftPhoto) && (
+            <div className="messenger-attachments">
+              {photos.map((photo, index) => (
+                <div className="messenger-attachment" key={photo.preview}>
+                  <img
+                    src={photo.preview}
+                    alt={t('送信した道具の写真 ', 'Sent object photo ') + (index + 1)}
+                  />
+                  <button
+                    aria-label={t('写真 ', 'Remove photo ') + (index + 1) + t(' を取り消す', '')}
+                    disabled={busy || state.busy || !!draftPhoto || !!retryPhotos}
+                    onClick={() => void sendPhotos(photos.filter((_, i) => i !== index))}
+                  >
+                    ×
+                  </button>
+                  <small>{t('送信済み', 'Sent')}</small>
+                </div>
+              ))}
+              {draftPhoto && (
+                <section
+                  className="messenger-draft"
+                  aria-label={t('送信前の写真確認', 'Photo preview')}
+                >
+                  <img src={draftPhoto.preview} alt={t('送信前の写真', 'Photo to send')} />
+                  <div>
+                    <h2>{t('この写真を送りますか？', 'Send this photo?')}</h2>
+                    <button onClick={() => setDraftPhoto(null)}>
+                      {t('撮り直す・取り消す', 'Retake / cancel')}
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+          {!ended ? (
+            <>
+              <input
+                ref={camera}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(event) => {
+                  void choosePhoto(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+              <input
+                ref={files}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(event) => {
+                  void choosePhoto(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+              <div className="messenger-compose-row">
+                <button
+                  className="messenger-icon"
+                  aria-label={t('撮影', 'Camera')}
+                  disabled={cameraDisabled}
+                  onClick={() => camera.current?.click()}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 7h4l2-3h6l2 3h4v13H3z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </button>
+                <button
+                  className="messenger-icon"
+                  aria-label={t(
+                    '写真ライブラリ / PCのファイルから選ぶ',
+                    'Choose from photo library / files',
+                  )}
+                  disabled={cameraDisabled}
+                  onClick={() => files.current?.click()}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="3" width="18" height="18" rx="3" />
+                    <circle cx="8" cy="8" r="1" />
+                    <path d="m3 17 5-5 4 4 4-6 5 7" />
+                  </svg>
+                </button>
+                <div className="messenger-voice-placeholder">
+                  {draftPhoto
+                    ? t('写真を送信 →', 'Send photo →')
+                    : t('使い方は声で伝えてね', 'Tell me how to use it')}
+                  <small>
+                    {state.photoCount} / {state.maxPhotos}
+                  </small>
+                </div>
+                <button
+                  className="messenger-icon messenger-send"
+                  aria-label={t('この写真を送信', 'Send photo')}
+                  disabled={
+                    !draftPhoto || busy || state.busy || !!retryPhotos || voice !== 'connected'
+                  }
+                  onClick={() => {
+                    if (!draftPhoto) return;
+                    const next = [...photos, draftPhoto].slice(0, state.maxPhotos);
+                    setDraftPhoto(null);
+                    void sendPhotos(next);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m5 12 7-7 7 7M12 5v15" />
+                  </svg>
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="messenger-ended">
+              <button
+                onClick={invalid ? onExit : onReplay}
+                disabled={!invalid && lifecycle !== 'terminal'}
+              >
+                {invalid
+                  ? t('合言葉で参加し直す', 'Join again with passphrase')
+                  : t('もう一度プレイ', 'Play again')}
+              </button>
+            </div>
+          )}
+          {['closing', 'quarantined'].includes(lifecycle) && (
+            <p className="messenger-notice" role="status">
+              {lifecycle === 'closing'
+                ? t('音声の終了を確認しています。', 'Waiting for the call to end.')
+                : t(
+                    '音声の終了を確認できません。運営による確認が必要です。',
+                    'Unable to confirm the call ended. Please contact the host.',
+                  )}
+            </p>
+          )}
+        </footer>
+      </main>
+    );
+  }
   return (
     <main className="play-shell">
       <header className="play-header">

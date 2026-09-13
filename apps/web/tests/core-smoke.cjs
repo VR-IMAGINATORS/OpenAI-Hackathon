@@ -351,6 +351,35 @@ const fs = require('node:fs');
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));
     assert.equal(state.status, 'playing');
+    async function assertMessengerLayout() {
+      assert.equal(await page.locator('main').count(), 1);
+      assert.equal(await page.locator('.play-actions, .play-header, .play-story').count(), 0);
+      const layout = await page.evaluate(() => {
+        const app = document.querySelector('.messenger-app').getBoundingClientRect();
+        const composer = document.querySelector('.messenger-composer').getBoundingClientRect();
+        const feed = document.querySelector('.chat-messages').getBoundingClientRect();
+        return {
+          fits: app.left >= 0 && app.right <= innerWidth + 1 && app.bottom <= innerHeight + 1,
+          composerInside: composer.top >= app.top && composer.bottom <= app.bottom + 1,
+          feedVisible: feed.height > 70 && feed.bottom <= composer.top + 1,
+          noPageScroll: document.documentElement.scrollHeight <= innerHeight + 1,
+        };
+      });
+      assert.deepEqual(layout, {
+        fits: true,
+        composerInside: true,
+        feedVisible: true,
+        noPageScroll: true,
+      });
+    }
+    await assertMessengerLayout();
+    await page.screenshot({ path: 'artifacts/messenger-active-mobile.png', fullPage: true });
+    await page.setViewportSize({ width: 320, height: 568 });
+    await assertMessengerLayout();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await assertMessengerLayout();
+    await page.screenshot({ path: 'artifacts/messenger-active-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'core-result'));
     assert.equal(await page.getByRole('button', { name: /状況を聞いたら、プレイ開始/ }).count(), 0);
     await page.evaluate(() =>
@@ -391,12 +420,20 @@ const fs = require('node:fs');
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
       'base64',
     );
+    const cameraChoice = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '撮影', exact: true }).click();
+    await (await cameraChoice).setFiles({ name: 'camera.png', mimeType: 'image/png', buffer: png });
+    await page.getByRole('button', { name: '撮り直す・取り消す', exact: true }).click();
+    const libraryChoice = page.waitForEvent('filechooser');
     await page
-      .locator('input[type=file]')
-      .last()
-      .setInputFiles({ name: 'tool.png', mimeType: 'image/png', buffer: png });
+      .getByRole('button', { name: '写真ライブラリ / PCのファイルから選ぶ', exact: true })
+      .click();
+    await (await libraryChoice).setFiles({ name: 'tool.png', mimeType: 'image/png', buffer: png });
     await page.getByRole('heading', { name: 'この写真を送りますか？' }).waitFor();
     assert.equal(photoIds.length, 0, 'photo is not sent before preview confirmation');
+    assert.equal(await page.locator('.messenger-composer .messenger-draft').count(), 1);
+    await assertMessengerLayout();
+    await page.screenshot({ path: 'artifacts/messenger-draft-mobile.png', fullPage: true });
     await page.getByRole('button', { name: 'この写真を送信', exact: true }).click();
     await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).waitFor();
     await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).click();
