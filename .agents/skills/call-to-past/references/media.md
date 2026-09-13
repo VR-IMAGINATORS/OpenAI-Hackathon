@@ -14,6 +14,8 @@ OpenAI Images APIの `gpt-image-2.5-flare` を `quality=low`、`1536x1024`、1�
 
 最初の結果画像を人物・衣装・空間の基準として保存する。以後はその基準と直前の結果画像、今回の物体写真を参照する。写真原本を変えず、生成したファイルをイベントへ添付・コピーする。1回の判定に必要なのは1枚。失敗時の再生成は同じevent IDに結び付ける。
 
+[Story.md](../Story.md)の実体を持たないAIと緊急端末の設定に合わせる。操作主体を描くために人型AIや余分な手を足さず、道具が対象へ力を伝える状態を見せる。端末を見せる場合は最初の位置・外観を固定し、既存画像と矛盾する場合は画面外に置く。
+
 ## プロンプトの骨格
 
 ```text
@@ -21,6 +23,8 @@ High-quality realistic 3D mystery adventure game still, cinematic lighting, land
 The same androgynous adult survivor throughout: charcoal hooded jacket, plain gray trousers,
 no identifiable face; rear view or crop at mouth level, never eyes or full face, no gore.
 Future AI physically operates the materialized object(s) at the caller's direction.
+The AI is disembodied and controls only the materialized tools through its emergency
+terminal. No humanoid AI, robot, extra hands, or direct force on an obstacle without a tool.
 SCENE ANCHOR: [保存されたscene anchor、既存の基準画像]
 CURRENT EVENT ONLY: [そのイベントで試した障害、行動、確定済み成否]
 MATERIALIZED OBJECTS: [写真由来の物と観察された材質・形]
