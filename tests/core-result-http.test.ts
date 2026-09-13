@@ -1,0 +1,216 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
+import { test, type TestContext } from 'node:test';
+import sharp from 'sharp';
+import { createHostedApp } from '../apps/server/app.js';
+import { loadHostedConfig } from '../apps/server/config.js';
+
+async function setup(t: TestContext) {
+  let now = 0;
+  const config = loadHostedConfig({
+    HOSTED_NO_ENV_FILE: '1',
+    APP_PASSPHRASE: 'test-only-result-password',
+    AI_MODE: 'mock',
+  });
+  const hosted = createHostedApp(config, {
+    now: () => now,
+    wallNow: () => Date.UTC(2026, 8, 13),
+    log: () => {},
+  });
+  const server = hosted.app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const origin = 'http://127.0.0.1:' + (server.address() as AddressInfo).port;
+  config.allowedHosts.add(new URL(origin).host);
+  config.allowedOrigins.add(origin);
+  t.after(async () => {
+    await hosted.dispose();
+    server.closeAllConnections();
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+  async function request(
+    path: string,
+    options: {
+      cookie?: string;
+      playId?: string;
+      clientId?: string;
+      body?: unknown;
+      method?: string;
+    } = {},
+  ) {
+    const response = await fetch(origin + path, {
+      method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
+      headers: {
+        Origin: origin,
+        'Content-Type': 'application/json',
+        ...(options.cookie ? { Cookie: options.cookie } : {}),
+        ...(options.playId ? { 'X-Play-Id': options.playId } : {}),
+        ...(options.clientId ? { 'X-Client-Id': options.clientId, 'X-Control-Epoch': '1' } : {}),
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    return response;
+  }
+  async function login() {
+    const response = await request('/api/auth', {
+      body: { passphrase: 'test-only-result-password' },
+    });
+    assert.equal(response.status, 200);
+    return response.headers.get('set-cookie')!.split(';')[0]!;
+  }
+  async function create(cookie: string, locale: 'ja' | 'en' = 'ja') {
+    const clientId = randomUUID(),
+      requestId = randomUUID();
+    const response = await request('/api/plays', { cookie, body: { clientId, requestId, locale } });
+    assert.equal(response.status, 201);
+    return { clientId, requestId, ...(await response.json()) };
+  }
+  return {
+    hosted,
+    request,
+    login,
+    create,
+    advance: (ms: number) => {
+      now += ms;
+    },
+  };
+}
+function privateResponse(response: Response) {
+  assert.match(response.headers.get('cache-control') ?? '', /no-store/);
+  assert.match(response.headers.get('vary') ?? '', /Cookie/i);
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+}
+
+test('HTTP feed/assets require owner but no control lease and expose only JPEG bytes', async (t) => {
+  const f = await setup(t),
+    alice = await f.login(),
+    bob = await f.login(),
+    play = await f.create(alice);
+  const message = f.hosted.results.appendMessage(play.playId, {
+    side: 'user',
+    kind: 'transcript',
+    text: 'え、これを切って',
+  });
+  const bytes = await sharp({ create: { width: 10, height: 10, channels: 3, background: 'red' } })
+    .jpeg()
+    .toBuffer();
+  const assetId = await f.hosted.results.putAsset(play.playId, {
+    kind: 'photo',
+    bytes,
+    mime: 'image/jpeg',
+  });
+  f.hosted.results.appendMessage(play.playId, {
+    side: 'user',
+    kind: 'photo',
+    text: '',
+    assetIds: [assetId],
+  });
+  for (const path of ['/api/play/feed', '/api/play/assets/' + assetId]) {
+    let response = await f.request(path, { playId: play.playId });
+    assert.equal(response.status, 401);
+    privateResponse(response);
+    response = await f.request(path, { cookie: bob, playId: play.playId });
+    assert.equal(response.status, 404);
+    privateResponse(response);
+    response = await f.request(path, { cookie: alice, playId: play.playId });
+    assert.equal(response.status, 200);
+    privateResponse(response);
+    if (path.endsWith('feed')) {
+      const feed = await response.json();
+      assert.equal(feed.upserts[0].text, 'え、これを切って');
+      assert.equal(feed.reset, true);
+      assert.equal(feed.locale, 'ja');
+    } else {
+      assert.match(response.headers.get('content-type') ?? '', /image\/jpeg/);
+      assert.equal(Buffer.from(await response.arrayBuffer())[0], 255);
+    }
+  }
+  const incremental = await f.request('/api/play/feed?after=' + message.updatedVersion, {
+    cookie: alice,
+    playId: play.playId,
+  });
+  assert.equal((await incremental.json()).reset, false);
+  assert.equal(
+    (await f.request('/api/play/feed?after=99999', { cookie: alice, playId: play.playId })).status,
+    400,
+  );
+});
+
+test('locale is fixed on request replay and stateVersion is stable until state changes', async (t) => {
+  const f = await setup(t),
+    cookie = await f.login(),
+    play = await f.create(cookie, 'en');
+  const same = await f.request('/api/plays', {
+    cookie,
+    body: { clientId: play.clientId, requestId: play.requestId, locale: 'en' },
+  });
+  assert.equal(same.status, 200);
+  const conflict = await f.request('/api/plays', {
+    cookie,
+    body: { clientId: play.clientId, requestId: play.requestId, locale: 'ja' },
+  });
+  assert.equal(conflict.status, 409);
+  const first = await (await f.request('/api/play/state', { cookie, playId: play.playId })).json();
+  const second = await (await f.request('/api/play/state', { cookie, playId: play.playId })).json();
+  assert.equal(first.state.locale, 'en');
+  assert.ok(first.state.stateVersion >= 1);
+  assert.equal(second.state.stateVersion, first.state.stateVersion);
+  const ended = await f.request('/api/play/end', {
+    cookie,
+    playId: play.playId,
+    clientId: play.clientId,
+    body: {},
+  });
+  assert.equal(ended.status, 200);
+  const last = await (await f.request('/api/play/state', { cookie, playId: play.playId })).json();
+  assert.ok(last.state.stateVersion > first.state.stateVersion);
+});
+
+test('retained results survive authentication expiry for reads only, then expire without extension', async (t) => {
+  const f = await setup(t),
+    cookie = await f.login(),
+    play = await f.create(cookie);
+  const token = cookie.slice('play_session='.length);
+  f.hosted.sessions.authorize(token).expiresAt = 100;
+  f.hosted.results.appendMessage(play.playId, {
+    side: 'assistant',
+    kind: 'result',
+    text: '保持された結果',
+  });
+  assert.equal(
+    (
+      await f.request('/api/play/end', {
+        cookie,
+        playId: play.playId,
+        clientId: play.clientId,
+        body: {},
+      })
+    ).status,
+    200,
+  );
+  f.advance(101);
+  await f.hosted.tick();
+  const restored = await f.request('/api/session', { cookie });
+  assert.equal(restored.status, 200);
+  assert.equal((await restored.json()).playId, play.playId);
+  const retained = await f.request('/api/play/feed', { cookie, playId: play.playId });
+  assert.equal(retained.status, 200);
+  const until = (await retained.json()).retainUntil;
+  assert.ok(until);
+  assert.equal((await f.request('/api/play/state', { cookie, playId: play.playId })).status, 200);
+  assert.equal(
+    (
+      await f.request('/api/plays', {
+        cookie,
+        body: { clientId: randomUUID(), requestId: randomUUID(), locale: 'ja' },
+      })
+    ).status,
+    410,
+  );
+  f.advance(299_898);
+  assert.equal((await f.request('/api/play/feed', { cookie, playId: play.playId })).status, 200);
+  f.advance(1);
+  await f.hosted.tick();
+  assert.equal((await f.request('/api/play/feed', { cookie, playId: play.playId })).status, 410);
+});

@@ -16,6 +16,14 @@ export interface AiConfig {
   globalResponseAttempts: number;
   outputTokens: number;
   timeoutMs: number;
+  imageModel: string;
+  inspectionModel: string;
+  imageRequestsPerMinute: number;
+  imageConcurrent: number;
+  inspectionConcurrent: number;
+  globalImageAttempts: number;
+  globalInspectionAttempts: number;
+  imageJobTimeoutMs: number;
 }
 
 /** Receives already-loaded settings; never reads a private environment file. */
@@ -31,6 +39,11 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
       if (!values[name]?.trim()) throw new Error(name + ' required');
     }
   }
+  if (mode === 'live' && values.NODE_ENV === 'production') {
+    for (const name of ['AI_GLOBAL_IMAGE_ATTEMPTS', 'AI_GLOBAL_INSPECTION_ATTEMPTS']) {
+      if (!values[name]?.trim()) throw new Error(name + ' required');
+    }
+  }
   function model(name: string, fallback: string): string {
     const value = values[name] ?? fallback;
     if (!/^[-a-zA-Z0-9.]+$/.test(value)) throw new Error(name + ' invalid');
@@ -38,7 +51,21 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
   }
   const liveModel = model('LIVE_MODEL', 'gpt-live-1');
   const responseModel = model('RESPONSE_MODEL', 'gpt-5.6-terra');
+  const imageModel = model('IMAGE_MODEL', 'gpt-image-2.5-flare');
+  const inspectionModel = model('IMAGE_INSPECTION_MODEL', 'gpt-5.6-luna');
+  if (imageModel !== 'gpt-image-2.5-flare' || inspectionModel !== 'gpt-5.6-luna')
+    throw new Error('Unsupported media model');
+  if (positiveInteger(values, 'IMAGE_JOB_TIMEOUT_SECONDS', 150, 300) < 30)
+    throw new Error('IMAGE_JOB_TIMEOUT_SECONDS invalid');
   return {
+    imageModel,
+    inspectionModel,
+    imageRequestsPerMinute: positiveInteger(values, 'IMAGE_REQUESTS_PER_MINUTE', 5, 1000),
+    imageConcurrent: positiveInteger(values, 'IMAGE_CONCURRENT', 2, 5),
+    inspectionConcurrent: positiveInteger(values, 'IMAGE_INSPECTION_CONCURRENT', 2, 5),
+    globalImageAttempts: positiveInteger(values, 'AI_GLOBAL_IMAGE_ATTEMPTS', 100),
+    globalInspectionAttempts: positiveInteger(values, 'AI_GLOBAL_INSPECTION_ATTEMPTS', 100),
+    imageJobTimeoutMs: positiveInteger(values, 'IMAGE_JOB_TIMEOUT_SECONDS', 150, 300) * 1000,
     mode,
     apiKey: mode === 'live' ? values.OPENAI_API_KEY : undefined,
     liveModel,
@@ -46,7 +73,7 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
     liveModels: [liveModel],
     responseModels: [responseModel],
     liveAttemptsPerPlay: positiveInteger(values, 'AI_LIVE_ATTEMPTS_PER_PLAY', 3, 100),
-    responsesPerPlay: positiveInteger(values, 'AI_RESPONSES_PER_PLAY', 40, 1000),
+    responsesPerPlay: positiveInteger(values, 'AI_RESPONSES_PER_PLAY', 80, 1000),
     responseConcurrentPerPlay: positiveInteger(values, 'AI_RESPONSE_CONCURRENT_PER_PLAY', 1, 100),
     liveConcurrentGlobal: positiveInteger(
       values,

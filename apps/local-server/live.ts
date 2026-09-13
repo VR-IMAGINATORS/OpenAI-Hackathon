@@ -72,11 +72,16 @@ function limitLiveContent(content: string) {
   return result;
 }
 
-export function openingCommand(state: PublicGameState): LiveCommand | null {
+export function openingCommand(
+  state: PublicGameState,
+  locale: 'ja' | 'en' = 'ja',
+): LiveCommand | null {
   if (state.status !== 'briefing') return null;
   return {
     ...factCommand(
-      '最初の呼びかけです。「聞こえる…？ よかった、誰かにつながった。閉じ込められているんだ。声が届いていたら、返事をしてくれる？」と短く話し、返事を待ってください。',
+      locale === 'en'
+        ? 'Open the call by saying: Can you hear me? I’m trapped here. If you can hear my voice, please answer. Then wait for their reply.'
+        : '最初の呼びかけです。「聞こえる…？ よかった、誰かにつながった。閉じ込められているんだ。声が届いていたら、返事をしてくれる？」と短く話し、返事を待ってください。',
     ),
     type: 'session.commentary.append',
   };

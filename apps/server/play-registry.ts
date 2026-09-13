@@ -28,7 +28,12 @@ export interface PlayRuntime<T, R = unknown> extends Controller {
 }
 
 export interface PlayRegistryOptions<T, R> {
-  factory: (id: string, deadline: number) => T;
+  factory: (
+    id: string,
+    deadline: number,
+    owner: AuthSession,
+    request: { locale?: 'ja' | 'en' },
+  ) => T;
   expire: (runtime: T) => void;
   close: (runtime: T) => Promise<boolean>;
   snapshot: (runtime: T) => R;
@@ -39,6 +44,7 @@ export interface PlayRegistryOptions<T, R> {
   capacity?: number;
   ttlMs?: number;
   recoveryMs?: number;
+  resultTtlMs?: number;
 }
 
 /** Owns admission and deadlines; game and provider implementations are injected. */
@@ -72,10 +78,13 @@ export class PlayRegistry<T, R = unknown> {
 
   create(
     owner: AuthSession,
-    request: { requestId: string; clientId: string },
+    request: { requestId: string; clientId: string; locale?: 'ja' | 'en' },
   ): { play: PlayRuntime<T, R>; reused: boolean } {
     if (owner.lastCreateRequestId === request.requestId) {
-      if (owner.lastCreateClientId !== request.clientId)
+      if (
+        owner.lastCreateClientId !== request.clientId ||
+        owner.lastCreateLocale !== request.locale
+      )
         throw new SessionError('PLAY_CONFLICT', 409);
       const play = owner.lastCreatePlayId ? this.plays.get(owner.lastCreatePlayId) : undefined;
       if (!play) throw new SessionError('PLAY_EXPIRED', 410);
@@ -107,12 +116,13 @@ export class PlayRegistry<T, R = unknown> {
     this.plays.set(play.id, play);
     owner.activePlayId = play.id;
     try {
-      play.runtime = this.options.factory(play.id, play.deadline);
+      play.runtime = this.options.factory(play.id, play.deadline, owner, request);
     } catch (error) {
       this.plays.delete(play.id);
       owner.activePlayId = previous?.id ?? null;
       throw error;
     }
+    owner.lastCreateLocale = request.locale;
     owner.lastCreateRequestId = request.requestId;
     owner.lastCreateClientId = request.clientId;
     owner.lastCreatePlayId = play.id;
@@ -227,7 +237,7 @@ export class PlayRegistry<T, R = unknown> {
       }
       play.runtime = null;
       play.lifecycle = confirmed ? 'terminal' : 'quarantined';
-      if (confirmed) play.terminalUntil = this.now() + 120_000;
+      if (confirmed) play.terminalUntil = this.now() + (this.options.resultTtlMs ?? 120_000);
     })();
     return play.closingPromise;
   }

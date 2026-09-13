@@ -13,6 +13,19 @@ import type { LiveCommand } from '../../packages/shared/game.js';
 import type { AiService } from '../../packages/server/ai-service.js';
 import type { PhotoQueue } from '../server/photo-queue.js';
 
+export interface RuntimePresentation {
+  transcript(fragment: import('../../packages/shared/conversation.js').TranscriptFragment): void;
+  photos(photos: import('./photo.js').GamePhoto[]): Promise<void>;
+  scene(input: {
+    messageId: string;
+    text: string;
+    commandSeq: number | null;
+    generation: number;
+    facts: import('../../packages/shared/conversation.js').GameFacts;
+    situation: string;
+  }): void;
+  ended(state: import('../../packages/shared/game.js').PublicGameState): void;
+}
 type Cached<T> = { digest: string; epoch: number; promise: Promise<T> };
 export class GameRuntime {
   readonly game: GameSession;
@@ -20,6 +33,16 @@ export class GameRuntime {
   private intents?: IntentCoordinator;
   private outbox?: LiveOutbox;
   private notificationFailed = false;
+  private traceEntries: {
+    actionId: string;
+    configDigest: string;
+    interpretation: string;
+    shortReason: string;
+    durationMs: number;
+  }[] = [];
+  private actionInFlight = false;
+  private stateVersion = 0;
+  private previousState = '';
   private epoch = 1;
   private openingIssued = false;
   private seen = new Set<string>();
@@ -42,6 +65,8 @@ export class GameRuntime {
     private queue: PhotoQueue,
     private now = () => performance.now(),
     readonly coreSnapshot?: ScenarioSnapshot,
+    private readonly presentation?: RuntimePresentation,
+    private readonly traceEnabled = false,
   ) {
     ai.register(id, deadline);
     this.game = new GameSession(
@@ -56,6 +81,11 @@ export class GameRuntime {
         clearTimeout(this.transcriptTimer);
         this.seen.clear();
         this.intents?.stop();
+        this.traceEntries = [];
+        if (['won', 'lost'].includes(this.game.status) && !this.actionInFlight) {
+          this.presentScene(this.game.situation);
+        }
+        this.presentation?.ended(this.state());
         this.closingAt = Math.min(
           deadline,
           now() + (['won', 'lost'].includes(this.game.status) ? 12_000 : 0),
@@ -102,12 +132,36 @@ export class GameRuntime {
             context.controllerEpoch,
           );
           this.enqueue({
-            ...factCommand('わかった、それでやってみる！', delegation.id),
+            ...factCommand(
+              this.words('わかった、それでやってみる！', 'Got it. I’ll try that!'),
+              delegation.id,
+            ),
             type: 'session.commentary.append',
           });
-          const result = await this.game.judgeAction(ticket);
+          const judgmentStarted = now();
+          this.actionInFlight = true;
+          let result;
+          try {
+            result = await this.game.judgeAction(ticket);
+          } finally {
+            this.actionInFlight = false;
+          }
           if (this.disposed || context.controllerEpoch !== this.epoch) return;
           this.syncCore();
+          if (this.traceEnabled && !this.game.terminal) {
+            this.traceEntries.push({
+              actionId: ticket.id,
+              configDigest: coreSnapshot.digest,
+              interpretation: intent.usage.slice(0, 1000),
+              shortReason: result.shortReason.slice(0, 1000),
+              durationMs: Math.max(0, Math.round(now() - judgmentStarted)),
+            });
+            while (
+              this.traceEntries.length > 128 ||
+              Buffer.byteLength(JSON.stringify(this.traceEntries)) > 64 * 1024
+            )
+              this.traceEntries.shift();
+          }
           const messageId = randomUUID();
           this.enqueue(
             factCommand(
@@ -115,10 +169,11 @@ export class GameRuntime {
               delegation.id,
             ),
           );
-          this.enqueue(
+          const command = this.enqueue(
             { ...factCommand(result.narrative, delegation.id), type: 'session.commentary.append' },
             messageId,
           );
+          this.presentScene(result.narrative, messageId, command?.seq ?? null);
         },
         onDecision: (decision, delegation) => {
           if (decision.kind !== 'execute')
@@ -150,18 +205,35 @@ export class GameRuntime {
   }
   private enqueue(command: LiveCommand, messageId: string | null = null) {
     try {
-      this.outbox?.append(command, messageId);
+      return this.outbox?.append(command, messageId);
     } catch {
       this.notificationFailed = true;
       this.game.error = '音声通知の上限です。画面で結果を確認してください。';
     }
   }
+  trace() {
+    return { entries: this.game.terminal ? [] : structuredClone(this.traceEntries) };
+  }
+  private words(ja: string, en: string) {
+    return this.coreSnapshot?.locale === 'en' ? en : ja;
+  }
+  private presentScene(text: string, messageId = randomUUID(), commandSeq: number | null = null) {
+    this.presentation?.scene({
+      messageId,
+      text,
+      commandSeq,
+      generation: this.game.generation,
+      facts: structuredClone(this.game.facts),
+      situation: this.game.situation,
+    });
+  }
   state() {
-    return {
+    const state = {
       ...this.game.state(),
       ...(this.coreSnapshot
         ? {
             automaticActions: true,
+            locale: this.coreSnapshot.locale,
             transcript:
               this.ledger
                 ?.captureUnconsumedContext()
@@ -172,6 +244,12 @@ export class GameRuntime {
           }
         : {}),
     };
+    const serialized = JSON.stringify(state);
+    if (serialized !== this.previousState) {
+      this.previousState = serialized;
+      this.stateVersion++;
+    }
+    return { ...state, stateVersion: this.stateVersion };
   }
   pollCommands(generation: number, ackThrough: number) {
     this.game.check();
@@ -243,7 +321,9 @@ export class GameRuntime {
         this.notificationFailed = false;
         this.seen.clear();
         this.game.heartbeat('connecting');
-        const opening = this.openingIssued ? null : openingCommand(this.game.state());
+        const opening = this.openingIssued
+          ? null
+          : openingCommand(this.game.state(), this.coreSnapshot?.locale);
         this.openingIssued = true;
         return { sdp: answer.transport.sdp, generation: this.game.generation, opening };
       } finally {
@@ -276,6 +356,7 @@ export class GameRuntime {
         this.check(epoch);
         await this.game.finishPhotos(photos, ticket);
         this.check(epoch);
+        await this.presentation?.photos(photos);
         this.syncCore(true);
         this.intents?.onContextChanged();
         if (this.coreSnapshot && this.game.proposal && photos.length) {
@@ -283,7 +364,12 @@ export class GameRuntime {
             factCommand('写真の認識: ' + this.game.proposal.items.map((i) => i.name).join('、')),
           );
           this.enqueue({
-            ...factCommand('写真が届いたよ。これをどう使う？'),
+            ...factCommand(
+              this.words(
+                '写真が届いたよ。これをどう使う？',
+                'I got the photo. How should I use this?',
+              ),
+            ),
             type: 'session.commentary.append',
           });
         }
@@ -319,7 +405,7 @@ export class GameRuntime {
             offsetMs: event.offset_ms,
           });
       } else {
-        this.ledger!.append({
+        const fragment = this.ledger!.append({
           eventId: event.event_id,
           generation,
           speaker: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
@@ -327,6 +413,7 @@ export class GameRuntime {
           startMs: event.start_ms,
           endMs: event.end_ms,
         });
+        if (fragment) this.presentation?.transcript(fragment);
         this.syncCore();
         if (!this.game.terminal) this.intents!.onContextChanged();
       }
@@ -370,11 +457,15 @@ export class GameRuntime {
       if (evidence.length) this.ledger.consume(evidence);
     }
     this.game.start();
+    if (wasBriefing) this.presentScene(this.game.situation);
     this.syncCore(true);
     return wasBriefing
       ? [
           factCommand(
-            '導入チュートリアルは終了。本編を開始し、制限時間が進んでいます。現在の障害について相談を続けてください。',
+            this.words(
+              '導入チュートリアルは終了。本編を開始し、制限時間が進んでいます。現在の障害について相談を続けてください。',
+              'The tutorial is over. The game and countdown have started. Continue discussing the current obstacle.',
+            ),
           ),
         ]
       : [];
@@ -409,6 +500,7 @@ export class GameRuntime {
   }
   dispose() {
     this.disposed = true;
+    this.traceEntries = [];
     this.intents?.stop();
     this.ledger?.stop();
     clearTimeout(this.transcriptTimer);

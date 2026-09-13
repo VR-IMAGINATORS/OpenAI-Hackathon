@@ -109,7 +109,7 @@ test('HTTP new plays use edited settings; invalid config preserves existing game
   const firstOwner = await auth(),
     secondOwner = await auth(),
     thirdOwner = await auth();
-  const firstRequest = { requestId: randomUUID(), clientId: randomUUID() };
+  const firstRequest = { requestId: randomUUID(), clientId: randomUUID(), locale: 'ja' };
   assert.equal((await post('/api/plays', firstRequest, firstOwner)).status, 201);
   const first = [...hosted.registry.plays.values()][0].runtime!;
   const title = first.game.state().title;
@@ -117,8 +117,13 @@ test('HTTP new plays use edited settings; invalid config preserves existing game
   changed.title.ja = 'Updated new play';
   writeFileSync(scenarioPath, JSON.stringify(changed));
   assert.equal(
-    (await post('/api/plays', { requestId: randomUUID(), clientId: randomUUID() }, secondOwner))
-      .status,
+    (
+      await post(
+        '/api/plays',
+        { requestId: randomUUID(), clientId: randomUUID(), locale: 'ja' },
+        secondOwner,
+      )
+    ).status,
     201,
   );
   const second = [...hosted.registry.plays.values()][1].runtime!;
@@ -129,7 +134,7 @@ test('HTTP new plays use edited settings; invalid config preserves existing game
   assert.equal((await post('/api/plays', firstRequest, firstOwner)).status, 200);
   const denied = await post(
     '/api/plays',
-    { requestId: randomUUID(), clientId: randomUUID() },
+    { requestId: randomUUID(), clientId: randomUUID(), locale: 'ja' },
     thirdOwner,
   );
   assert.equal(denied.status, 503);

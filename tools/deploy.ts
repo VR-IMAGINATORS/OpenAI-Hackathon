@@ -68,8 +68,24 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     AI_GLOBAL_RESPONSE_ATTEMPTS: required('AI_GLOBAL_RESPONSE_ATTEMPTS'),
     LIVE_MODEL: env.LIVE_MODEL || 'gpt-live-1',
     RESPONSE_MODEL: env.RESPONSE_MODEL || 'gpt-5.6-terra',
+    IMAGE_MODEL: env.IMAGE_MODEL || 'gpt-image-2.5-flare',
+    IMAGE_INSPECTION_MODEL: env.IMAGE_INSPECTION_MODEL || 'gpt-5.6-luna',
+    AI_GLOBAL_IMAGE_ATTEMPTS: required('AI_GLOBAL_IMAGE_ATTEMPTS'),
+    AI_GLOBAL_INSPECTION_ATTEMPTS: required('AI_GLOBAL_INSPECTION_ATTEMPTS'),
+    IMAGE_REQUESTS_PER_MINUTE: env.IMAGE_REQUESTS_PER_MINUTE || '5',
+    IMAGE_CONCURRENT: env.IMAGE_CONCURRENT || '2',
+    IMAGE_INSPECTION_CONCURRENT: env.IMAGE_INSPECTION_CONCURRENT || '2',
+    IMAGE_JOB_TIMEOUT_SECONDS: env.IMAGE_JOB_TIMEOUT_SECONDS || '150',
+    RESULT_TTL_SECONDS: env.RESULT_TTL_SECONDS || '300',
+    AI_RESPONSES_PER_PLAY: env.AI_RESPONSES_PER_PLAY || '80',
+    ENABLE_GAME_TRACE: '0',
   };
-  for (const name of ['AI_GLOBAL_LIVE_ATTEMPTS', 'AI_GLOBAL_RESPONSE_ATTEMPTS']) {
+  for (const name of [
+    'AI_GLOBAL_LIVE_ATTEMPTS',
+    'AI_GLOBAL_RESPONSE_ATTEMPTS',
+    'AI_GLOBAL_IMAGE_ATTEMPTS',
+    'AI_GLOBAL_INSPECTION_ATTEMPTS',
+  ]) {
     if (!/^[1-9]\d*$/.test(environment[name]) || Number(environment[name]) > 1000000)
       throw new Error(name + ' invalid');
   }

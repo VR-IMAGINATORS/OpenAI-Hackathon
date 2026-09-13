@@ -142,7 +142,7 @@ test('core voice instructions execute once through HTTP and deliver final-genera
   assert.match(cookie, /HttpOnly/);
   assert.match(cookie, /SameSite=Strict/);
   owner = cookie.split(';')[0]!;
-  const created = await request('/api/plays', { requestId: randomUUID(), clientId });
+  const created = await request('/api/plays', { requestId: randomUUID(), clientId, locale: 'ja' });
   playId = created.data.playId;
   epoch = created.data.controlEpoch;
   const live = await request('/api/play/live', {

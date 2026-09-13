@@ -80,6 +80,29 @@ const fs = require('node:fs');
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       recoveryExpiresAt: null,
     });
+    let assetBytes,
+      assetReads = 0;
+    let feedVersion = 1,
+      removed = [];
+    let feedMessages = [
+      {
+        id: 'message-1',
+        createdOrder: 1,
+        updatedVersion: 1,
+        side: 'assistant',
+        kind: 'result',
+        text: '扉が開いた！',
+        assetIds: [],
+        imageSlot: {
+          status: 'generating',
+          assetId: null,
+          errorCode: null,
+          deadline: new Date(Date.now() + 150000).toISOString(),
+        },
+        relatedCommandSeq: 1,
+        liveGeneration: 1,
+      },
+    ];
     let failAction = true;
     const actionIds = [];
     let state = {
@@ -143,6 +166,8 @@ const fs = require('node:fs');
             },
             409,
           );
+        assert.ok(['ja', 'en'].includes(body.locale));
+        state.locale = body.locale;
         createIds.push(body.requestId);
         if (createFailure) {
           createFailure = false;
@@ -154,6 +179,21 @@ const fs = require('node:fs');
         return respond(route, { ...envelope(), playId: 'play-one', controlEpoch: epoch }, 201);
       }
       assert.equal(route.request().headers()['x-play-id'], 'play-one');
+      if (url.pathname === '/api/play/assets/scene-1') {
+        assetReads++;
+        if (assetReads > 1) await new Promise((resolve) => setTimeout(resolve, 350));
+        return route.fulfill({ status: 200, contentType: 'image/jpeg', body: assetBytes });
+      }
+      if (url.pathname === '/api/play/feed')
+        return respond(route, {
+          playId: 'play-one',
+          locale: 'ja',
+          version: feedVersion,
+          reset: Number(url.searchParams.get('after')) === 0,
+          upserts: feedMessages,
+          removedIds: removed,
+          retainUntil: null,
+        });
       if (url.pathname === '/api/play/control') {
         assert.equal(body.takeover, true);
         controller = body.clientId;
@@ -237,6 +277,19 @@ const fs = require('node:fs');
       }
       if (url.pathname === '/api/play/events') {
         state.transcript += body.event.delta || '';
+        if (body.event.delta)
+          feedMessages.push({
+            id: 'user-1',
+            createdOrder: 2,
+            updatedVersion: ++feedVersion,
+            side: 'user',
+            kind: 'transcript',
+            text: body.event.delta,
+            assetIds: [],
+            imageSlot: null,
+            relatedCommandSeq: null,
+            liveGeneration: 1,
+          });
         return respond(route, { accepted: true }, 202);
       }
       if (url.pathname === '/api/play/actions') {
@@ -269,6 +322,9 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
+    await page.getByRole('combobox').selectOption('en');
+    await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
+    await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
     await page.getByRole('button', { name: '合言葉で参加' }).click();
     await page.getByRole('button', { name: '音声接続・体験開始' }).click();
@@ -297,6 +353,119 @@ const fs = require('node:fs');
       ['type', 'event_id', 'delegation_id', 'content'].sort(),
       'strip internal outbox metadata',
     );
+    await page.locator('.chat-user').getByText('これで扉を開けて', { exact: true }).waitFor();
+    await page.getByText('未来から画像を受信中…', { exact: true }).waitFor();
+    assert.equal(await page.locator('.proposal-panel').count(), 0);
+    feedMessages[0].imageSlot.status = 'failed';
+    feedMessages[0].imageSlot.errorCode = 'SCENE_RECEIVE_FAILED';
+    feedMessages[0].updatedVersion = ++feedVersion;
+    await page.getByText('未来から画像の受信に失敗しました', { exact: true }).waitFor();
+    removed = ['user-1'];
+    feedMessages = feedMessages.filter((m) => m.id !== 'user-1');
+    feedVersion++;
+    await page.waitForTimeout(650);
+    assert.equal(await page.locator('.chat-user').count(), 0);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    await page
+      .locator('input[type=file]')
+      .last()
+      .setInputFiles({ name: 'tool.png', mimeType: 'image/png', buffer: png });
+    await page.getByRole('heading', { name: 'この写真を送りますか？' }).waitFor();
+    assert.equal(photoIds.length, 0, 'photo is not sent before preview confirmation');
+    await page.getByRole('button', { name: 'この写真を送信', exact: true }).click();
+    await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).waitFor();
+    await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).click();
+    await page.waitForTimeout(500);
+    assert.equal(photoIds.length, 2);
+    assetBytes = Buffer.from(
+      await page.evaluate(() => {
+        const c = document.createElement('canvas');
+        c.width = 16;
+        c.height = 16;
+        return c.toDataURL('image/jpeg').split(',')[1];
+      }),
+      'base64',
+    );
+    feedMessages[0].imageSlot = {
+      ...feedMessages[0].imageSlot,
+      status: 'ready',
+      assetId: 'scene-1',
+      errorCode: null,
+    };
+    feedMessages[0].updatedVersion = ++feedVersion;
+    await page.locator('.chat-image').waitFor();
+    assert.equal(assetReads, 1, 'private asset fetched with owner header');
+    assert.ok((await page.locator('.chat-image').getAttribute('src')).startsWith('blob:'));
+    feedMessages.push({
+      id: 'result-without-voice',
+      createdOrder: 3,
+      updatedVersion: ++feedVersion,
+      side: 'assistant',
+      kind: 'result',
+      text: '音声が届かなくても残る結果',
+      assetIds: [],
+      imageSlot: null,
+      relatedCommandSeq: 99,
+      liveGeneration: 1,
+    });
+    await page.getByText('音声が届かなくても残る結果', { exact: true }).waitFor();
+    await page
+      .getByText('音声を送信できなかったため、文章でお届けします。', { exact: true })
+      .waitFor();
+    // Late image growth keeps the newest message visible, while user scrolling pauses following.
+    for (let i = 0; i < 7; i++)
+      feedMessages.push({
+        id: 'scroll-' + i,
+        createdOrder: 10 + i,
+        updatedVersion: ++feedVersion,
+        side: 'assistant',
+        kind: 'system',
+        text: ('追加の会話 ' + i + ' ').repeat(20),
+        assetIds: i === 6 ? ['scene-1'] : [],
+        imageSlot: null,
+        relatedCommandSeq: null,
+        liveGeneration: 1,
+      });
+    await page.locator('[data-message-id="scroll-6"] img').waitFor();
+    await page.waitForTimeout(450);
+    const bottomGap = () =>
+      page.locator('.chat-messages').evaluate((e) => e.scrollHeight - e.scrollTop - e.clientHeight);
+    assert.ok((await bottomGap()) < 3, 'late image and new messages follow to bottom');
+    await page.locator('.chat-messages').hover();
+    await page.mouse.wheel(0, -500);
+    await page.waitForTimeout(250);
+    assert.ok((await bottomGap()) > 200, 'user can scroll back into history');
+    const readingTop = await page.locator('.chat-messages').evaluate((e) => e.scrollTop);
+    feedMessages.push({
+      id: 'scroll-late',
+      createdOrder: 18,
+      updatedVersion: ++feedVersion,
+      side: 'assistant',
+      kind: 'system',
+      text: '後から届いた画像',
+      assetIds: ['scene-1'],
+      imageSlot: null,
+      relatedCommandSeq: null,
+      liveGeneration: 1,
+    });
+    await page.locator('[data-message-id="scroll-late"] img').waitFor();
+    await page.waitForTimeout(450);
+    assert.ok(
+      Math.abs((await page.locator('.chat-messages').evaluate((e) => e.scrollTop)) - readingTop) <
+        5,
+      'late image does not jump away from history being read',
+    );
+    await page.mouse.wheel(0, 10000);
+    await page.waitForTimeout(250);
+    assert.ok((await bottomGap()) < 3, 'scrolling back to bottom resumes following');
+    await page.getByRole('button', { name: 'プレイを終了', exact: true }).click();
+    assert.ok(
+      (await page.locator('.chat-image').count()) >= 1,
+      'images remain readable after call end',
+    );
     assert.deepEqual(pageErrors, []);
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
@@ -304,6 +473,41 @@ const fs = require('node:fs');
     );
     fs.mkdirSync('artifacts', { recursive: true });
     await page.screenshot({ path: 'artifacts/core-p2-mobile.png', fullPage: true });
+    await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).click();
+    state = {
+      ...state,
+      status: 'briefing',
+      title: 'The locked laboratory',
+      briefing: 'Your future self needs your help.',
+      obstacle: { ...state.obstacle, title: 'A stuck door' },
+      inputRevision: 0,
+      actionsRemaining: 4,
+    };
+    await page.getByRole('combobox').selectOption('en');
+    await page.getByRole('button', { name: 'Connect and begin', exact: false }).click();
+    await page.getByText('Voice connected', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Begin the escape', exact: false }).waitFor();
+    assert.equal(await page.getByRole('combobox').count(), 0, 'locale is fixed during play');
+    await page.reload();
+    await page.getByRole('button', { name: 'Reconnect here', exact: false }).waitFor();
+    assert.equal(
+      await page.locator('html').getAttribute('lang'),
+      'en',
+      'locale restored from state',
+    );
+    assert.deepEqual(pageErrors, []);
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      false,
+      'English mobile layout',
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      false,
+      'English PC layout',
+    );
+    await page.screenshot({ path: 'artifacts/core-p3-en-restored.png', fullPage: true });
     console.log(
       'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout. Fake API/media only.',
     );

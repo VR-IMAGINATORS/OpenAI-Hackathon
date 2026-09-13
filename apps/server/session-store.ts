@@ -6,6 +6,7 @@ export interface AuthSession {
   expiresAt: number;
   activePlayId: string | null;
   lastCreateRequestId?: string;
+  lastCreateLocale?: 'ja' | 'en';
   lastCreateClientId?: string;
   lastCreatePlayId?: string;
 }
@@ -16,6 +17,7 @@ export interface SessionStoreOptions {
   ttlMs?: number;
   capacity?: number;
   authAttemptsPerMinute?: number;
+  hasRetainedResult?: (session: AuthSession) => boolean;
   hasActivePlay?: (session: AuthSession) => boolean;
 }
 
@@ -82,9 +84,25 @@ export class SessionStore {
     return session;
   }
 
+  authorizeResult(token?: string): AuthSession {
+    if (!token) throw new SessionError('AUTH_REQUIRED', 401);
+    const session = this.lookup(token);
+    if (
+      !session ||
+      (this.now() >= session.expiresAt &&
+        !this.options.hasActivePlay?.(session) &&
+        !this.options.hasRetainedResult?.(session))
+    )
+      throw new SessionError('SESSION_EXPIRED', 410);
+    return session;
+  }
   sweep(): void {
     for (const [key, session] of this.sessions) {
-      if (this.now() >= session.expiresAt && !this.options.hasActivePlay?.(session))
+      if (
+        this.now() >= session.expiresAt &&
+        !this.options.hasActivePlay?.(session) &&
+        !this.options.hasRetainedResult?.(session)
+      )
         this.sessions.delete(key);
     }
   }

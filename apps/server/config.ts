@@ -28,6 +28,8 @@ export interface HostedConfig {
   scenario: Scenario;
   scenarioCatalog?: ScenarioCatalog;
   webRoot: string;
+  resultTtlMs?: number;
+  enableGameTrace?: boolean;
   capacity: number;
   ttlMs: number;
   recoveryMs: number;
@@ -77,6 +79,9 @@ export function loadHostedConfig(
   });
   scenarioCatalog.current('ja');
   const ai = loadAiConfig(values);
+  const resultTtlMs = positiveInteger(values, 'RESULT_TTL_SECONDS', 300, 600) * 1000;
+  if (resultTtlMs < 150_000 || resultTtlMs < ai.imageJobTimeoutMs)
+    throw new Error('RESULT_TTL_SECONDS must cover the image job deadline (at least 150 seconds)');
   const capacity = positiveInteger(values, 'MAX_PLAYERS', 5, 100);
   if (ai.liveConcurrentGlobal < capacity)
     throw new Error('AI live concurrency must cover MAX_PLAYERS');
@@ -96,6 +101,8 @@ export function loadHostedConfig(
     scenario,
     scenarioCatalog,
     webRoot: resolve(cwd, 'dist/web'),
+    resultTtlMs,
+    enableGameTrace: values.ENABLE_GAME_TRACE === '1' && values.NODE_ENV !== 'production',
     capacity,
     ttlMs: positiveInteger(values, 'PLAY_TTL_SECONDS', 600, 600) * 1000,
     recoveryMs: positiveInteger(values, 'RECOVERY_GRACE_SECONDS', 60, 60) * 1000,
