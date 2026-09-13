@@ -22,6 +22,8 @@ const env = {
   OPS_TOKEN: 'sentinel-ops-private',
   AI_GLOBAL_LIVE_ATTEMPTS: '50',
   AI_GLOBAL_RESPONSE_ATTEMPTS: '1000',
+  AI_GLOBAL_IMAGE_ATTEMPTS: '100',
+  AI_GLOBAL_INSPECTION_ATTEMPTS: '100',
 };
 const config = () => deploymentConfig(env);
 const image = ':game-dev.sha-' + sha + '.1';

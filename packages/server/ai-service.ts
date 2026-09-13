@@ -17,6 +17,17 @@ export class AiServiceError extends Error {
     super(message);
   }
 }
+export interface MediaPermit {
+  jobId: string;
+  ownerPlayId: string;
+  cancellationEpoch: number;
+  expiresAt: number;
+  generationAttempts: number;
+  inspectionAttempts: number;
+  busy: number;
+  cancelled: boolean;
+  controllers: Set<AbortController>;
+}
 interface LiveReservation {
   providerId?: string;
   pending?: Promise<unknown>;
@@ -40,6 +51,14 @@ export class AiService {
   private readonly plays = new Map<string, PlayBudget>();
   private readonly transport: OpenAITransport;
   private draining = false;
+  private readonly media = new Map<string, MediaPermit>();
+  private readonly mediaPlayAttempts = new Map<string, number>();
+  private readonly mediaPlayLimits = new Map<string, number>();
+  private imageAttempts = 0;
+  private inspectionAttempts = 0;
+  private imageBusy = 0;
+  private inspectionBusy = 0;
+  private imageStarts: number[] = [];
   private liveAttempts = 0;
   private responseAttempts = 0;
   private liveBusy = 0;
@@ -72,6 +91,167 @@ export class AiService {
       responseBusy: 0,
     });
   }
+
+  registerMedia(playId: string, jobId: string, expiresAt: number, maxActions: number): MediaPermit {
+    this.active(playId);
+    if (
+      this.media.has(jobId) ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= this.now() ||
+      expiresAt > this.now() + this.config.imageJobTimeoutMs ||
+      !Number.isInteger(maxActions) ||
+      maxActions < 1 ||
+      maxActions > 100
+    )
+      throw new AiServiceError(400, 'INVALID_MEDIA_PERMIT', 'Invalid media permit');
+    this.mediaPlayLimits.set(playId, 2 * (maxActions + 2));
+    const permit: MediaPermit = {
+      jobId,
+      ownerPlayId: playId,
+      cancellationEpoch: 0,
+      expiresAt,
+      generationAttempts: 0,
+      inspectionAttempts: 0,
+      busy: 0,
+      cancelled: false,
+      controllers: new Set(),
+    };
+    this.media.set(jobId, permit);
+    return permit;
+  }
+  cancelMedia(jobId: string): void {
+    const permit = this.media.get(jobId);
+    if (!permit) return;
+    permit.cancelled = true;
+    permit.cancellationEpoch++;
+    for (const controller of permit.controllers) controller.abort();
+    if (!permit.busy) {
+      this.media.delete(jobId);
+      if (this.plays.get(permit.ownerPlayId)?.retired) this.forget(permit.ownerPlayId);
+    }
+  }
+  releaseMedia(jobId: string): void {
+    this.cancelMedia(jobId);
+  }
+  mediaDelay(kind: 'generation' | 'inspection'): number {
+    if (this.draining) return Infinity;
+    if (kind === 'inspection')
+      return this.inspectionBusy < this.config.inspectionConcurrent ? 0 : 25;
+    if (this.imageBusy >= this.config.imageConcurrent) return 25;
+    this.imageStarts = this.imageStarts.filter((time) => time > this.now() - 60000);
+    return this.imageStarts.length < this.config.imageRequestsPerMinute
+      ? 0
+      : Math.max(1, this.imageStarts[0]! + 60000 - this.now());
+  }
+  async mediaCall(
+    jobId: string,
+    epoch: number,
+    kind: 'generation' | 'inspection',
+    body: unknown,
+    timeoutMs: number,
+  ): Promise<unknown> {
+    const permit = this.media.get(jobId);
+    if (
+      this.draining ||
+      !permit ||
+      permit.cancelled ||
+      permit.cancellationEpoch !== epoch ||
+      this.now() >= permit.expiresAt
+    )
+      throw new AiServiceError(410, 'MEDIA_EXPIRED', 'Image request expired');
+    if (kind === 'generation') {
+      const b = body as Record<string, unknown>;
+      if (
+        b.model !== this.config.imageModel ||
+        b.n !== 1 ||
+        b.size !== '1024x1024' ||
+        b.quality !== 'low' ||
+        b.output_format !== 'jpeg' ||
+        typeof b.prompt !== 'string' ||
+        b.prompt.length > 16000 ||
+        Object.keys(b).some(
+          (key) => !['model', 'n', 'size', 'quality', 'output_format', 'prompt'].includes(key),
+        )
+      )
+        throw new AiServiceError(400, 'INVALID_REQUEST', 'Invalid image request');
+      if (
+        !this.transport.createImage ||
+        permit.generationAttempts >= 2 ||
+        this.imageAttempts >= this.config.globalImageAttempts ||
+        (this.mediaPlayAttempts.get(permit.ownerPlayId) ?? 0) >=
+          (this.mediaPlayLimits.get(permit.ownerPlayId) ?? 0)
+      )
+        this.limit();
+    } else {
+      const parsed = responseRequest.safeParse(body);
+      if (
+        !parsed.success ||
+        parsed.data.model !== this.config.inspectionModel ||
+        parsed.data.input.flatMap((i) => i.content).filter((i) => i.type === 'input_image')
+          .length !== 1 ||
+        parsed.data.input
+          .flatMap((i) => i.content)
+          .some(
+            (i) =>
+              i.type === 'input_image' &&
+              Buffer.byteLength(i.image_url.slice(23), 'base64') > 1024 * 1024,
+          )
+      )
+        throw new AiServiceError(400, 'INVALID_REQUEST', 'Invalid inspection request');
+      if (
+        permit.inspectionAttempts >= 2 ||
+        this.inspectionAttempts >= this.config.globalInspectionAttempts
+      )
+        this.limit();
+    }
+    if (this.mediaDelay(kind) > 0) this.limit();
+    const controller = new AbortController();
+    permit.controllers.add(controller);
+    permit.busy++;
+    if (kind === 'generation') {
+      permit.generationAttempts++;
+      this.imageAttempts++;
+      this.imageBusy++;
+      this.imageStarts.push(this.now());
+      this.mediaPlayAttempts.set(
+        permit.ownerPlayId,
+        (this.mediaPlayAttempts.get(permit.ownerPlayId) ?? 0) + 1,
+      );
+    } else {
+      permit.inspectionAttempts++;
+      this.inspectionAttempts++;
+      this.inspectionBusy++;
+    }
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.max(1, Math.min(timeoutMs, permit.expiresAt - this.now())),
+    );
+    // Await transport settlement, including abort/read cancellation, before releasing a concurrency slot.
+    try {
+      const value = await (kind === 'generation'
+        ? this.transport.createImage!(body, controller.signal)
+        : this.transport.createResponse(body, controller.signal));
+      if (
+        controller.signal.aborted ||
+        permit.cancelled ||
+        permit.cancellationEpoch !== epoch ||
+        this.now() >= permit.expiresAt
+      )
+        throw new AiServiceError(410, 'MEDIA_EXPIRED', 'Image request expired');
+      return value;
+    } finally {
+      clearTimeout(timer);
+      permit.controllers.delete(controller);
+      permit.busy--;
+      if (kind === 'generation') this.imageBusy--;
+      else this.inspectionBusy--;
+      if (permit.cancelled && !permit.busy) {
+        this.media.delete(jobId);
+        if (this.plays.get(permit.ownerPlayId)?.retired) this.forget(permit.ownerPlayId);
+      }
+    }
+  }
+
   private active(playId: string): PlayBudget {
     if (this.draining) throw new AiServiceError(503, 'DRAINING', '更新準備中です。');
     const play = this.plays.get(playId);
@@ -246,18 +426,33 @@ export class AiService {
   forget(playId: string): boolean {
     const play = this.plays.get(playId);
     if (!play) return true;
-    if (!play.retired || play.responseBusy || (play.live && !play.live.closed)) return false;
+    if (
+      !play.retired ||
+      play.responseBusy ||
+      (play.live && !play.live.closed) ||
+      [...this.media.values()].some((p) => p.ownerPlayId === playId)
+    )
+      return false;
+    this.mediaPlayAttempts.delete(playId);
+    this.mediaPlayLimits.delete(playId);
     return this.plays.delete(playId);
   }
   async shutdown(): Promise<boolean> {
     this.draining = true;
+    for (const id of this.media.keys()) this.cancelMedia(id);
     await Promise.all([...this.plays.keys()].map((id) => this.retire(id)));
     const counts = this.snapshot();
-    return counts.liveBusy === 0 && counts.pendingCreates === 0 && counts.responseBusy === 0;
+    return (
+      counts.liveBusy === 0 &&
+      counts.pendingCreates === 0 &&
+      counts.responseBusy === 0 &&
+      counts.mediaBusy === 0
+    );
   }
   resume(): boolean {
     const counts = this.snapshot();
-    if (counts.liveBusy || counts.pendingCreates || counts.responseBusy) return false;
+    if (counts.liveBusy || counts.pendingCreates || counts.responseBusy || counts.mediaBusy)
+      return false;
     this.draining = false;
     return true;
   }
@@ -276,6 +471,11 @@ export class AiService {
   snapshot() {
     const live = [...this.plays.values()].flatMap((p) => (p.live ? [p.live] : []));
     return {
+      mediaBusy: this.imageBusy + this.inspectionBusy,
+      imageBusy: this.imageBusy,
+      inspectionBusy: this.inspectionBusy,
+      imageAttempts: this.imageAttempts,
+      inspectionAttempts: this.inspectionAttempts,
       liveBusy: this.liveBusy,
       responseBusy: this.responseBusy,
       liveAttempts: this.liveAttempts,

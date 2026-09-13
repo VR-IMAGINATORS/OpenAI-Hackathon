@@ -15,6 +15,8 @@ function fixture(t: TestContext) {
     rmSync(directory, { recursive: true, force: true });
   });
   mkdirSync(resolve(directory, 'scenarios'));
+  mkdirSync(resolve(directory, 'config'));
+  writeFileSync(resolve(directory, 'config/game-core.json'), readFileSync('config/game-core.json'));
   writeFileSync(
     resolve(directory, 'scenarios/mobile-playtest.json'),
     readFileSync('scenarios/mobile-playtest.json'),

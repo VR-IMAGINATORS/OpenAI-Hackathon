@@ -1,9 +1,11 @@
+import ChatFeed, { type Locale } from './ChatFeed.js';
+import type { CoreLiveCommand } from '../../../packages/shared/conversation.js';
 import type { HostedPlayState, ControlledPlay, PlayControl } from '../../../packages/shared/api.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PublicGameState, PlayUpdate } from '../../../packages/shared/game.js';
 import { LiveConnection, type VoiceState } from './live.js';
 import { preparePhoto, type PreparedPhoto } from './photo.js';
-import { PlayApiError, playRequest, clientId, controlHeaders } from './play-api.js';
+import { PlayApiError, playRequest, clientId, controlHeaders, setApiLocale } from './play-api.js';
 
 const voiceLabels: Record<VoiceState, string> = {
   connecting: '回線を接続中',
@@ -25,6 +27,7 @@ export default function PlayScreen({
   initialEnvelope,
   initialControl,
   preparedConnection,
+  locale: selectedLocale = 'ja',
   onExit,
   onReplay,
 }: {
@@ -32,10 +35,20 @@ export default function PlayScreen({
   initialEnvelope: HostedPlayState;
   initialControl?: PlayControl;
   preparedConnection?: LiveConnection;
+  locale?: Locale;
   onExit: () => void;
   onReplay: () => void;
 }) {
   const initialState = initialEnvelope.state;
+  const locale: Locale =
+    (initialState as PublicGameState & { locale?: Locale }).locale ?? selectedLocale;
+  useEffect(() => {
+    setApiLocale(locale);
+    document.documentElement.lang = locale;
+  }, [locale]);
+  const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
+  const [sentMessageIds, setSentMessageIds] = useState<ReadonlySet<string>>(new Set());
+  const [draftPhoto, setDraftPhoto] = useState<PreparedPhoto | null>(null);
   const control = useRef<PlayControl | null>(initialControl ?? null);
   const [lifecycle, setLifecycle] = useState(initialEnvelope.lifecycle);
   const [invalid, setInvalid] = useState(false);
@@ -61,7 +74,10 @@ export default function PlayScreen({
   async function request<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
     if (body !== undefined && !control.current)
       throw new PlayApiError(
-        'この画面で再接続して操作権を引き継いでください。',
+        t(
+          'この画面で再接続して操作権を引き継いでください。',
+          'Reconnect on this screen to take control.',
+        ),
         409,
         'CONTROL_BUSY',
       );
@@ -69,7 +85,11 @@ export default function PlayScreen({
     try {
       const result = await playRequest<T>(path, body, method, snapshot ?? { playId });
       if (body !== undefined && snapshot !== control.current)
-        throw new PlayApiError('別の画面に操作が移りました。', 409, 'CONTROL_STALE');
+        throw new PlayApiError(
+          t('別の画面に操作が移りました。', 'Control moved to another screen.'),
+          409,
+          'CONTROL_STALE',
+        );
       if (result && typeof result === 'object' && 'lifecycle' in result)
         setLifecycle((result as unknown as HostedPlayState).lifecycle);
       return result;
@@ -104,6 +124,80 @@ export default function PlayScreen({
   const camera = useRef<HTMLInputElement>(null);
   const files = useRef<HTMLInputElement>(null);
   const eventQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const commandAck = useRef({ key: '', seq: 0 });
+  useEffect(() => {
+    if (!state.automaticActions || voice !== 'connected') return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const connection = live.current,
+        owner = control.current;
+      if (cancelled || !connection || !owner || connection.state !== 'connected') return;
+      const key =
+        'callpast-commands:' + playId + ':' + connection.generation + ':' + owner.controlEpoch;
+      if (commandAck.current.key !== key) {
+        let seq = 0;
+        try {
+          const saved = Number(sessionStorage.getItem(key));
+          if (Number.isSafeInteger(saved) && saved >= 0) seq = saved;
+        } catch {}
+        commandAck.current = { key, seq };
+      }
+      try {
+        const batch = await playRequest<{
+          generation: number;
+          controlEpoch: number;
+          acknowledgedThrough: number;
+          commands: CoreLiveCommand[];
+        }>(
+          '/api/play/commands/poll',
+          { generation: connection.generation, ackThrough: commandAck.current.seq },
+          'POST',
+          owner,
+        );
+        if (
+          cancelled ||
+          live.current !== connection ||
+          control.current !== owner ||
+          batch.generation !== connection.generation ||
+          batch.controlEpoch !== owner.controlEpoch
+        )
+          return;
+        if (cancelled || live.current !== connection || control.current !== owner) return;
+        for (const command of batch.commands) {
+          if (command.seq <= commandAck.current.seq) continue;
+          if (command.seq !== commandAck.current.seq + 1)
+            throw new Error(
+              t(
+                '音声通知の順序を確認できません。再接続してください。',
+                'Unable to verify voice notification order. Please reconnect.',
+              ),
+            );
+          const { type, event_id, delegation_id, content } = command;
+          if (!connection.send([{ type, event_id, delegation_id, content }])) break;
+          commandAck.current.seq = command.seq;
+          if (command.messageId) setSentMessageIds((ids) => new Set([...ids, command.messageId!]));
+          try {
+            sessionStorage.setItem(key, String(command.seq));
+          } catch {}
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof PlayApiError && error.status === 410 && terminal(current.current)) {
+          connection.close();
+          return;
+        }
+        if (mounted.current) setError(message(error));
+      } finally {
+        if (!cancelled) timer = setTimeout(poll, 500);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state.automaticActions, voice, playId]);
   const openingDelivered = useRef(false);
   const openingKey = 'callpast-opening:' + initialState.id;
   function markOpeningDelivered() {
@@ -118,7 +212,7 @@ export default function PlayScreen({
     const connection = live.current;
     if (
       voice !== 'connected' ||
-      state.status !== 'briefing' ||
+      (state.status !== 'briefing' && !(state.automaticActions && state.status === 'playing')) ||
       blockedAudio ||
       !connection?.opening
     )
@@ -134,7 +228,8 @@ export default function PlayScreen({
         openingDelivered.current ||
         live.current !== connection ||
         connection.state !== 'connected' ||
-        current.current.status !== 'briefing'
+        (current.current.status !== 'briefing' &&
+          !(current.current.automaticActions && current.current.status === 'playing'))
       )
         return;
       if (connection.send([connection.opening!])) markOpeningDelivered();
@@ -144,6 +239,13 @@ export default function PlayScreen({
   const apply = useCallback((next: PublicGameState) => {
     if (!mounted.current || next.generation < current.current.generation) return;
     const previous = current.current;
+    if (
+      next.stateVersion !== undefined &&
+      previous.stateVersion !== undefined &&
+      next.stateVersion < previous.stateVersion
+    )
+      return;
+    if (next.automaticActions && next.actionsRemaining < previous.actionsRemaining) setPhotos([]);
     if (
       next.id === previous.id &&
       (next.inputRevision < previous.inputRevision ||
@@ -233,7 +335,7 @@ export default function PlayScreen({
         live.current?.close();
         live.current = null;
       },
-      state.status === 'expired' ? 0 : 10_000,
+      state.status === 'expired' ? 0 : 12_000,
     );
     return () => window.clearTimeout(timer);
   }, [state.status]);
@@ -264,23 +366,38 @@ export default function PlayScreen({
         eventQueue.current = eventQueue.current
           .catch(() => {})
           .then(async () => {
-            if (live.current !== connection || terminal(current.current)) return;
+            if (
+              live.current !== connection ||
+              (terminal(current.current) && !current.current.automaticActions)
+            )
+              return;
             try {
-              const update = await request<PlayUpdate>('/api/play/events', {
+              const update = await request<PlayUpdate | { accepted: true }>('/api/play/events', {
                 generation,
                 event,
               });
-              apply(update.state);
-              connection.send(update.commands);
+              if ('state' in update) {
+                apply(update.state);
+                connection.send(update.commands);
+              }
               if (changesInput && mounted.current) setLostInput(false);
             } catch (error) {
               if (mounted.current) {
                 setError(
                   changesInput
-                    ? '声の内容を送信できませんでした。使い方をもう一度話してください。'
+                    ? t(
+                        '声の内容を送信できませんでした。使い方をもう一度話してください。',
+                        'Your speech could not be sent. Please repeat your instruction.',
+                      )
                     : message(error),
                 );
-                if (changesInput) setLostInput(true);
+                if (changesInput) {
+                  setLostInput(true);
+                  if (current.current.automaticActions) {
+                    connection.close();
+                    void heartbeat(connection);
+                  }
+                }
               }
             }
           })
@@ -375,8 +492,11 @@ export default function PlayScreen({
     setError('');
     try {
       const photo = await preparePhoto(file);
-      locked.current = false;
-      await sendPhotos([...photos, photo].slice(0, current.current.maxPhotos));
+      if (current.current.automaticActions) setDraftPhoto(photo);
+      else {
+        locked.current = false;
+        await sendPhotos([...photos, photo].slice(0, current.current.maxPhotos));
+      }
     } catch (error) {
       setError(message(error));
     } finally {
@@ -448,20 +568,20 @@ export default function PlayScreen({
         <span className="play-badge">PLAYTEST</span>
       </header>
       {!ended && (
-        <div className="play-resources" aria-label="残り資源">
+        <div className="play-resources" aria-label={t('残り資源', 'Remaining resources')}>
           <div>
-            <span>残り時間</span>
+            <span>{t('残り時間', 'Time left')}</span>
             <strong>{time(state.remainingMs)}</strong>
           </div>
           <div>
-            <span>残り行動</span>
+            <span>{t('残り行動', 'Actions left')}</span>
             <strong>
               {state.actionsRemaining}
-              <small> 回</small>
+              <small>{t(' 回', '')}</small>
             </strong>
           </div>
           <div>
-            <span>障害</span>
+            <span>{t('障害', 'Obstacle')}</span>
             <strong>
               {state.obstacle.index + 1}
               <small> / {state.obstacle.count}</small>
@@ -469,7 +589,7 @@ export default function PlayScreen({
           </div>
         </div>
       )}
-      {!ended && (
+      {!state.automaticActions && !ended && (
         <figure className="opening-scene">
           <img
             src="/images/trapped-silhouette.png"
@@ -485,50 +605,104 @@ export default function PlayScreen({
         <h1>
           {ended
             ? state.status === 'won'
-              ? '脱出できた！'
+              ? t('脱出できた！', 'You escaped!')
               : state.status === 'lost'
-                ? '通信の、その先へ。'
-                : '接続を終了しました'
+                ? t('通信の、その先へ。', 'Beyond the call.')
+                : t('接続を終了しました', 'Call ended')
             : state.status === 'briefing'
               ? state.title
               : state.obstacle.title}
         </h1>
-        <p>
-          {ended
-            ? (state.lastResult?.narrative ?? '終了確認後、もう一度プレイできます。')
-            : state.status === 'briefing'
-              ? state.briefing
-              : state.situation}
-        </p>
-        {state.status === 'lost' && <p>今回は脱出できませんでした。別の使い方でもう一度。</p>}
+        {(!state.automaticActions || state.status === 'briefing') && (
+          <p>
+            {ended
+              ? (state.lastResult?.narrative ??
+                t(
+                  '終了確認後、もう一度プレイできます。',
+                  'You can play again once the call has ended.',
+                ))
+              : state.status === 'briefing'
+                ? state.briefing
+                : state.situation}
+          </p>
+        )}
+        {state.status === 'lost' && (
+          <p>
+            {t(
+              '今回は脱出できませんでした。別の使い方でもう一度。',
+              'You did not escape this time. Try another idea.',
+            )}
+          </p>
+        )}
       </section>
+      {state.automaticActions && (
+        <ChatFeed
+          playId={playId}
+          locale={locale}
+          sentMessageIds={sentMessageIds}
+          connected={voice === 'connected'}
+          generation={state.generation}
+        />
+      )}
       {!ended && (
         <>
-          <section className={'voice-panel voice-' + voice} aria-label="音声接続">
+          <section
+            className={'voice-panel voice-' + voice}
+            aria-label={t('音声接続', 'Voice connection')}
+          >
             <div className="voice-symbol" aria-hidden="true">
               ↗
             </div>
             <div>
-              <strong>{voiceLabels[voice]}</strong>
+              <strong>
+                {locale === 'ja'
+                  ? voiceLabels[voice]
+                  : {
+                      connecting: 'Connecting',
+                      connected: 'Voice connected',
+                      disconnected: 'Voice disconnected',
+                      failed: 'Unable to connect voice',
+                      closed: 'Voice not connected',
+                    }[voice]}
+              </strong>
               <p>
                 {voice === 'connected'
                   ? state.status === 'briefing'
-                    ? 'まもなく相手から声が届きます。聞こえたら返事を。'
-                    : '質問も、使い方の相談も、声で。'
-                  : 'マイクを許可して、未来へつなごう。'}
+                    ? t(
+                        'まもなく相手から声が届きます。聞こえたら返事を。',
+                        'You will hear from your future self shortly. Say hello.',
+                      )
+                    : t(
+                        '質問も、使い方の相談も、声で。',
+                        'Ask questions and discuss your ideas by voice.',
+                      )
+                  : t(
+                      'マイクを許可して、未来へつなごう。',
+                      'Allow microphone access to connect to the future.',
+                    )}
               </p>
             </div>
           </section>
           {voice !== 'connected' && (
             <section className="play-panel">
               <button className="primary-button" disabled={busy} onClick={() => void connect()}>
-                {busy ? '接続準備中…' : hasControl ? '音声を接続 / 再開する' : 'この画面で再接続'}
+                {busy
+                  ? t('接続準備中…', 'Connecting…')
+                  : hasControl
+                    ? t('音声を接続 / 再開する', 'Connect / resume voice')
+                    : t('この画面で再接続', 'Reconnect here')}
                 <span>↗</span>
               </button>
               <p className="play-footnote">
                 {hasControl
-                  ? '撮影後に音声が途切れたときも、ここから再開できます。'
-                  : '別の画面で接続中の場合は、その接続を終了してこの画面へ引き継ぎます。復帰猶予は最大60秒です。'}
+                  ? t(
+                      '撮影後に音声が途切れたときも、ここから再開できます。',
+                      'Resume here if voice disconnects after taking a photo.',
+                    )
+                  : t(
+                      '別の画面で接続中の場合は、その接続を終了してこの画面へ引き継ぎます。復帰猶予は最大60秒です。',
+                      'This takes over any other connected screen. Reconnect within 60 seconds.',
+                    )}
               </p>
             </section>
           )}
@@ -540,78 +714,109 @@ export default function PlayScreen({
                   ?.resumeAudio()
                   .then(() => setBlockedAudio(false))
                   .catch(() =>
-                    setError('音声を再生できません。端末の音量とブラウザ設定を確認してください。'),
+                    setError(
+                      t(
+                        '音声を再生できません。端末の音量とブラウザ設定を確認してください。',
+                        'Unable to play audio. Check your volume and browser settings.',
+                      ),
+                    ),
                   )
               }
             >
-              タップして相手の音声を再生
+              {t('タップして相手の音声を再生', 'Tap to play incoming audio')}
             </button>
           )}
           {state.paused && (
             <p className="play-wait" role="status">
-              接続・処理を待っています。時計は停止中（待機枠 {time(state.waitingRemainingMs)}）
+              {t(
+                '接続・処理を待っています。時計は停止中（待機枠',
+                'Waiting for connection or processing. Timer paused (allowance',
+              )}{' '}
+              {time(state.waitingRemainingMs)})
             </p>
           )}
-          {state.status === 'briefing' && (
+          {state.status === 'briefing' && !state.automaticActions && (
             <section className="tutorial-panel">
-              <p className="play-eyebrow">はじめての通信</p>
-              <h2>まずは「聞こえるよ」と話してみよう。</h2>
+              <p className="play-eyebrow">{t('はじめての通信', 'Your first call')}</p>
+              <h2>
+                {t('まずは「聞こえるよ」と話してみよう。', 'Start by saying “I can hear you.”')}
+              </h2>
               <ol>
                 <li>
-                  <strong>声で返事をする</strong>
-                  <span>相手の状況を聞こう。質問しても行動は減りません。</span>
+                  <strong>{t('声で返事をする', 'Answer by voice')}</strong>
+                  <span>
+                    {t(
+                      '相手の状況を聞こう。質問しても行動は減りません。',
+                      'Listen to the situation. Questions do not use actions.',
+                    )}
+                  </span>
                 </li>
                 <li>
-                  <strong>身近なものを1枚撮影</strong>
-                  <span>下の撮影ボタンから送って、使い方を相談しよう。</span>
+                  <strong>{t('身近なものを1枚撮影', 'Take a photo of an everyday object')}</strong>
+                  <span>
+                    {t(
+                      '下の撮影ボタンから送って、使い方を相談しよう。',
+                      'Use the camera button below, then discuss how to use it.',
+                    )}
+                  </span>
                 </li>
                 <li>
-                  <strong>準備できたら本編へ</strong>
-                  <span>この説明中は制限時間が進みません。</span>
+                  <strong>{t('準備できたら本編へ', 'Begin when ready')}</strong>
+                  <span>
+                    {t(
+                      'この説明中は制限時間が進みません。',
+                      'The timer is paused during the introduction.',
+                    )}
+                  </span>
                 </li>
               </ol>
             </section>
           )}
-          {state.status === 'briefing' && (
+          {state.status === 'briefing' && !state.automaticActions && (
             <button
               className="primary-button start-button"
               onClick={() => void start()}
               disabled={busy || voice !== 'connected'}
             >
-              状況を聞いたら、プレイ開始<span>→</span>
+              {t('状況を聞いたら、プレイ開始', 'Begin the escape')}
+              <span>→</span>
             </button>
           )}
           <>
-            {state.transcript && (
+            {!state.automaticActions && state.transcript && (
               <details className="transcript">
                 <summary>あなたの声をこう聞き取りました</summary>
                 <p>{state.transcript}</p>
               </details>
             )}
-            <section className="play-panel proposal-panel" aria-live="polite">
-              <div className="play-section-label">
-                <span>いま伝わっているアイデア</span>
-                <span>{state.proposal ? '確認' : '相談中'}</span>
-              </div>
-              {state.proposal ? (
-                <>
-                  <h2>
-                    {state.proposal.items.map((item) => item.name).join(' ＋ ') ||
-                      '持ち物を使う工夫'}
-                  </h2>
-                  <p>{state.proposal.summary}</p>
-                  <p className="proposal-usage">{state.proposal.usage}</p>
-                </>
-              ) : (
-                <p>身近なものを撮影して、どう使うか話してみよう。</p>
-              )}
-              <p className="play-footnote">
-                違っていたら声で訂正。下のボタンを押すまで実行されません。
-              </p>
-            </section>
+            {!state.automaticActions && (
+              <section className="play-panel proposal-panel" aria-live="polite">
+                <div className="play-section-label">
+                  <span>いま伝わっているアイデア</span>
+                  <span>{state.proposal ? '確認' : '相談中'}</span>
+                </div>
+                {state.proposal ? (
+                  <>
+                    <h2>
+                      {state.proposal.items.map((item) => item.name).join(' ＋ ') ||
+                        '持ち物を使う工夫'}
+                    </h2>
+                    <p>{state.proposal.summary}</p>
+                    <p className="proposal-usage">{state.proposal.usage}</p>
+                  </>
+                ) : (
+                  <p>身近なものを撮影して、どう使うか話してみよう。</p>
+                )}
+                <p className="play-footnote">
+                  {state.automaticActions
+                    ? '相談では行動しません。使い方を指示すると、そのまま試します。'
+                    : '違っていたら声で訂正。下のボタンを押すまで実行されません。'}
+                </p>
+              </section>
+            )}
             <section className="photo-section">
               <div className="play-section-label">
-                <span>今回送る写真</span>
+                <span>{t('今回送る写真', 'Photos for this action')}</span>
                 <span>
                   {state.photoCount} / {state.maxPhotos}
                 </span>
@@ -619,9 +824,12 @@ export default function PlayScreen({
               <div className="photo-strip">
                 {photos.map((photo, index) => (
                   <div className="photo-thumb" key={photo.preview}>
-                    <img src={photo.preview} alt={'送信した道具の写真 ' + (index + 1)} />
+                    <img
+                      src={photo.preview}
+                      alt={t('送信した道具の写真 ', 'Sent object photo ') + (index + 1)}
+                    />
                     <button
-                      aria-label={'写真 ' + (index + 1) + ' を取り消す'}
+                      aria-label={t('写真 ', 'Remove photo ') + (index + 1) + t(' を取り消す', '')}
                       disabled={busy || state.busy || !!uncertainAction}
                       onClick={() => void sendPhotos(photos.filter((_, i) => i !== index))}
                     >
@@ -632,8 +840,14 @@ export default function PlayScreen({
                 {!photos.length && (
                   <p className="photo-empty">
                     {state.photoCount
-                      ? '送信した写真はサーバー側で保持しています。差し替える場合は新しく撮影してください。'
-                      : '道具の形や素材がわかるように撮影しよう。'}
+                      ? t(
+                          '送信した写真はサーバー側で保持しています。差し替える場合は新しく撮影してください。',
+                          'Your photos are saved. Take a new photo to replace them.',
+                        )
+                      : t(
+                          '道具の形や素材がわかるように撮影しよう。',
+                          'Show the object’s shape and material clearly.',
+                        )}
                   </p>
                 )}
               </div>
@@ -669,22 +883,22 @@ export default function PlayScreen({
                 }
                 onClick={() => files.current?.click()}
               >
-                写真ライブラリ / PCのファイルから選ぶ
+                {t('写真ライブラリ / PCのファイルから選ぶ', 'Choose from photo library / files')}
               </button>
             </section>
             {state.inventory.length > 0 && (
               <section className="inventory-section">
-                <h2>未来へ送ったもの</h2>
+                <h2>{t('未来へ送ったもの', 'Sent to the future')}</h2>
                 <ul>
                   {state.inventory.map((item) => (
                     <li key={item.id}>
                       <span>{item.name}</span>
                       <small>
                         {item.status === 'available'
-                          ? '使用できる'
+                          ? t('使用できる', 'Available')
                           : item.status === 'damaged'
-                            ? '破損あり'
-                            : '使用済み'}
+                            ? t('破損あり', 'Damaged')
+                            : t('使用済み', 'Used')}
                       </small>
                       <p>{item.description}</p>
                     </li>
@@ -692,7 +906,7 @@ export default function PlayScreen({
                 </ul>
               </section>
             )}
-            {state.lastResult && (
+            {!state.automaticActions && state.lastResult && (
               <section className="play-panel last-result">
                 <h2>{state.lastResult.success ? '道がひらけた。' : '次の工夫を考えよう。'}</h2>
                 <p>{state.lastResult.narrative}</p>
@@ -701,15 +915,35 @@ export default function PlayScreen({
           </>
         </>
       )}
+      {draftPhoto && !ended && (
+        <section className="photo-preview" aria-label={t('送信前の写真確認', 'Photo preview')}>
+          <h2>{t('この写真を送りますか？', 'Send this photo?')}</h2>
+          <img src={draftPhoto.preview} alt={t('送信前の写真', 'Photo to send')} />
+          <button
+            className="primary-button"
+            disabled={busy || state.busy}
+            onClick={() => {
+              const next = [...photos, draftPhoto].slice(0, state.maxPhotos);
+              setDraftPhoto(null);
+              void sendPhotos(next);
+            }}
+          >
+            {t('この写真を送信', 'Send photo')}
+          </button>
+          <button className="secondary-button" onClick={() => setDraftPhoto(null)}>
+            {t('撮り直す・取り消す', 'Retake / cancel')}
+          </button>
+        </section>
+      )}
       {retryPhotos && !ended && (
         <div className="play-panel">
-          <p>写真の送信を完了できませんでした。</p>
+          <p>{t('写真の送信を完了できませんでした。', 'Photo upload did not complete.')}</p>
           <button
             className="secondary-button"
             disabled={busy}
             onClick={() => void sendPhotos(retryPhotos.photos, retryPhotos.requestId)}
           >
-            写真の送信を再試行
+            {t('写真の送信を再試行', 'Retry photo upload')}
           </button>
           <button
             className="file-choice"
@@ -719,7 +953,7 @@ export default function PlayScreen({
               setError('');
             }}
           >
-            この写真の送信を取り消す
+            {t('この写真の送信を取り消す', 'Cancel this upload')}
           </button>
         </div>
       )}
@@ -744,9 +978,9 @@ export default function PlayScreen({
             }
             onClick={() => camera.current?.click()}
           >
-            <span aria-hidden="true">＋</span> 撮影
+            <span aria-hidden="true">＋</span> {t('撮影', 'Camera')}
           </button>
-          {state.status !== 'briefing' && (
+          {state.status !== 'briefing' && !state.automaticActions && (
             <button
               className="primary-button"
               disabled={uncertainAction ? busy : !canExecute}
@@ -763,15 +997,17 @@ export default function PlayScreen({
         </div>
       )}
       <footer className="play-footer">
-        <p>写真と声で遊ぶ試遊版 · 画像・動画演出は準備中</p>
+        <p>
+          {t('写真と声でつながる、未来への通信', 'A call to the future, through photos and voice')}
+        </p>
         {!ended && (
           <button onClick={() => void end()} disabled={busy}>
-            プレイを終了
+            {t('プレイを終了', 'End game')}
           </button>
         )}
         {invalid ? (
           <button className="primary-button" onClick={onExit}>
-            合言葉で参加し直す
+            {t('合言葉で参加し直す', 'Join again with passphrase')}
           </button>
         ) : (
           ended && (
@@ -780,15 +1016,18 @@ export default function PlayScreen({
               disabled={lifecycle !== 'terminal'}
               onClick={onReplay}
             >
-              もう一度プレイ
+              {t('もう一度プレイ', 'Play again')}
             </button>
           )
         )}
         {['closing', 'quarantined'].includes(lifecycle) && (
           <p role="status">
             {lifecycle === 'closing'
-              ? '音声の終了を確認しています。'
-              : '音声の終了を確認できません。運営による確認が必要です。'}
+              ? t('音声の終了を確認しています。', 'Waiting for the call to end.')
+              : t(
+                  '音声の終了を確認できません。運営による確認が必要です。',
+                  'Unable to confirm the call ended. Please contact the host.',
+                )}
           </p>
         )}
       </footer>

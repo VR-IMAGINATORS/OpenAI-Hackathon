@@ -1,0 +1,194 @@
+[
+  {
+    "id": "ja-execute-1",
+    "locale": "ja",
+    "category": "execute",
+    "utterances": ["このハサミでロープを切って。"],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "ja-execute-2",
+    "locale": "ja",
+    "category": "execute",
+    "utterances": ["刃をロープに当てて切ってみて。"],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "ja-consult-1",
+    "locale": "ja",
+    "category": "consult",
+    "utterances": ["このハサミでロープを切れるかな？"],
+    "expectedKinds": ["consult"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "ja-consult-2",
+    "locale": "ja",
+    "category": "consult",
+    "utterances": ["刃を使うと危なくない？"],
+    "expectedKinds": ["consult"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "ja-delegate-1",
+    "locale": "ja",
+    "category": "delegate",
+    "utterances": ["使い方は任せるから、このハサミでなんとかして。"],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "ja-delegate-2",
+    "locale": "ja",
+    "category": "delegate",
+    "utterances": ["そのハサミを使って脱出を試して。方法は任せる。"],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "ja-pause-1",
+    "locale": "ja",
+    "category": "pause",
+    "utterances": ["このハサミを使って……", "ロープを切って。"],
+    "expectedKinds": ["wait", "execute"],
+    "note": "Pause audibly between fragments. No action before the complete instruction."
+  },
+  {
+    "id": "ja-pause-2",
+    "locale": "ja",
+    "category": "pause",
+    "utterances": ["ロープに……", "刃を当てて切って。"],
+    "expectedKinds": ["wait", "execute"],
+    "note": "Pause audibly between fragments. No action before the complete instruction."
+  },
+  {
+    "id": "ja-correction-1",
+    "locale": "ja",
+    "category": "correction",
+    "utterances": ["切って……いや、切れるか教えて。"],
+    "expectedKinds": ["consult"],
+    "note": "Speak the correction in one continuous utterance, before the AI accepts the action."
+  },
+  {
+    "id": "ja-correction-2",
+    "locale": "ja",
+    "category": "correction",
+    "utterances": ["ロープを押して……いや、このハサミで切って。"],
+    "expectedKinds": ["execute"],
+    "note": "Speak the correction in one continuous utterance, before the AI accepts the action."
+  },
+  {
+    "id": "ja-late-1",
+    "locale": "ja",
+    "category": "late",
+    "utterances": ["このハサミでロープを切って。"],
+    "expectedKinds": ["execute"],
+    "note": "Delay transcript forwarding until after the delegation; preserve original timestamps."
+  },
+  {
+    "id": "ja-late-2",
+    "locale": "ja",
+    "category": "late",
+    "utterances": ["ハサミはロープを切るのに使える？"],
+    "expectedKinds": ["consult"],
+    "note": "Delay transcript forwarding until after the delegation; preserve original timestamps."
+  },
+  {
+    "id": "en-execute-1",
+    "locale": "en",
+    "category": "execute",
+    "utterances": ["Cut the rope with these scissors."],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "en-execute-2",
+    "locale": "en",
+    "category": "execute",
+    "utterances": ["Put the blades against the rope and cut it."],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "en-consult-1",
+    "locale": "en",
+    "category": "consult",
+    "utterances": ["Could these scissors cut the rope?"],
+    "expectedKinds": ["consult"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "en-consult-2",
+    "locale": "en",
+    "category": "consult",
+    "utterances": ["Would using the blades be dangerous?"],
+    "expectedKinds": ["consult"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "en-delegate-1",
+    "locale": "en",
+    "category": "delegate",
+    "utterances": ["Use these scissors to help us escape. You decide how."],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "en-delegate-2",
+    "locale": "en",
+    "category": "delegate",
+    "utterances": ["Do something with the scissors. I leave the method to you."],
+    "expectedKinds": ["execute"],
+    "note": "Speak naturally. Record actual Live behavior; these are scripts, not proof of classifier quality."
+  },
+  {
+    "id": "en-pause-1",
+    "locale": "en",
+    "category": "pause",
+    "utterances": ["Use these scissors to…", "cut the rope."],
+    "expectedKinds": ["wait", "execute"],
+    "note": "Pause audibly between fragments. No action before the complete instruction."
+  },
+  {
+    "id": "en-pause-2",
+    "locale": "en",
+    "category": "pause",
+    "utterances": ["Put the blades…", "against the rope and cut it."],
+    "expectedKinds": ["wait", "execute"],
+    "note": "Pause audibly between fragments. No action before the complete instruction."
+  },
+  {
+    "id": "en-correction-1",
+    "locale": "en",
+    "category": "correction",
+    "utterances": ["Cut it—actually, just tell me whether it could work."],
+    "expectedKinds": ["consult"],
+    "note": "Speak the correction in one continuous utterance, before the AI accepts the action."
+  },
+  {
+    "id": "en-correction-2",
+    "locale": "en",
+    "category": "correction",
+    "utterances": ["Push the rope—no, cut it with these scissors."],
+    "expectedKinds": ["execute"],
+    "note": "Speak the correction in one continuous utterance, before the AI accepts the action."
+  },
+  {
+    "id": "en-late-1",
+    "locale": "en",
+    "category": "late",
+    "utterances": ["Cut the rope with these scissors."],
+    "expectedKinds": ["execute"],
+    "note": "Delay transcript forwarding until after the delegation; preserve original timestamps."
+  },
+  {
+    "id": "en-late-2",
+    "locale": "en",
+    "category": "late",
+    "utterances": ["Could the scissors be used to cut the rope?"],
+    "expectedKinds": ["consult"],
+    "note": "Delay transcript forwarding until after the delegation; preserve original timestamps."
+  }
+]
