@@ -1,6 +1,14 @@
 # H3エンディング動画CLI
 
-この経路は本スキルに同梱した `minimax/h3-max-turbo/image-to-video` の実装を使い、**768P・15秒・1本・balanced** に固定する。別途`h3-video`スキルをインストールする必要はない。開始画像と終了画像は必須で、同じピクセル寸法・縦横比にする。R2V、複数候補、別尺、別解像度への切替は、この承認枠に含めない。`--seed` は比較目的などで利用者が値を明示した場合だけ `prepare` に加える。
+この文書は送信・回収の手順であり、演出とプロンプト作成の手順を代替しない。prepare前に[ending.mdのH3用演出設計](ending.md#h3用の演出設計と最終プロンプト)に従って調査資料を読み、採用した撮影方法を最終promptへ反映する。
+
+エンドタイトルは終了画像に描き、最終プロンプトにはその文字列と登場演出・視覚VFXを指定する。H3は本編からその完成画面へつなぐ。[文字制作手順](ending.md)に従い、指定ラベルと文字禁止の矛盾を解消してからprepareする。音声禁止は画面内の指定タイトルを禁止する意味ではない。後付け合成を標準工程にしない。文字入り版は新しい入力として承認対象を固定し、過去の文字なし版の承認を流用しない。
+
+## 標準入力：開始画像とタイトル入り終了画像
+
+新規プレイ・再開・別版の新しい生成で共通。最後のゲーム画像を根拠に、タイトルまで含む終了画像を作り、`media.py prepare --end-image`へ渡す。開始・終了は同じ寸法と縦横比にする。承認対象は開始画像・終了画像・prompt・costの4ファイルとmanifest。通常プレイは同じ終了画像を`game.py attach-ending`で登録してから動画を登録する。承認済みの旧1画像runは明示的なnullを維持して回収・登録する。
+
+同梱の`minimax/h3-max-turbo/image-to-video`を使い、768P・15秒・1本・balanced。seedはユーザー指定時のみ。開始画像・終了画像・プロンプトをfalへ送る。すでに終了画像ありで承認・送信した旧runは2画像のまま照合・回収する。既存runの承認後に画像の有無を変更しない。以下の例は標準の2画像経路。
 
 `media.py` はローカル準備、承認記録、一度だけの送信、保存済みrequest IDの回収を分離する。今回のスキル実装承認はfalへの外部送信承認ではない。`approve` は、利用者から既に得た具体的な承認をそのまま保存するだけであり、コマンド実行自体が承認を作ることはない。
 
@@ -51,13 +59,13 @@ python $Media show --run-dir $Run
 
 利用者へ、少なくとも次を一緒に提示する。
 
-- falへ送る開始画像と終了画像そのもの
+- falへ送る開始画像とタイトル入り終了画像そのもの
 - プロンプト全文
 - endpoint、768P、15秒、1本、balanced、seedの有無
 - 4ファイルのSHA-256とmanifest SHA-256
 - 公式価格URL、確認日時、動画単価、USD/JPY、USD/円の合計
 - 表示額はH3動画だけで、native/Codex等の費用を含まないこと
-- 画像2枚とプロンプトをfalへ外部送信すること
+- 開始画像・終了画像とプロンプトをfalへ外部送信すること
 
 ## 3. 利用者の具体的承認を記録する
 
@@ -76,7 +84,7 @@ python $Media approve `
 
 `FAL_KEY` が環境にあれば最優先で使う。未設定の場合だけ `--credentials-file` を読み、その中の `fal.ai` Markdownセクションから候補が厳密に1つ見つかった場合に限り使う。別セクションの値、falセクションが複数、候補0件/複数件は拒否する。キー値は子プロセス環境だけへ渡し、標準出力・標準エラーを保存しない。資格情報ファイルの実パスや値を配布例へ書かない。
 
-`submit`、`status`、`result` は常に`call-to-past`内の同梱ランタイムを使う。見積・送信・QCの3スクリプトのいずれかが欠けていれば停止し、`call-to-past`の再インストールを案内する。外部スキルや任意パスへ切り替えるCLI引数は持たない。
+`submit`、`status`、`result` は常に`call-to-past`内の同梱ランタイムを使う。見積・送信の2スクリプトのいずれかが欠けていれば停止し、`call-to-past`の再インストールを案内する。外部スキルや任意パスへ切り替えるCLI引数は持たない。
 
 ```powershell
 python $Media submit `
@@ -84,7 +92,7 @@ python $Media submit `
   --credentials-file "<LOCAL_CREDENTIALS_FILE>"
 ```
 
-送信直前にマニフェスト、承認、4スナップショット、画像寸法、固定設定、価格鮮度を再検証する。検証後、アップロードより先に `submission-attempt.json` を排他的に作る。この記録が存在するrunでは二度目のsubmitを拒否する。
+送信直前にマニフェスト、承認、承認されたスナップショット、開始画像寸法（旧2画像runは両画像）、固定設定、価格鮮度を再検証する。検証後、アップロードより先に `submission-attempt.json` を排他的に作る。この記録が存在するrunでは二度目のsubmitを拒否する。
 
 同梱 `scripts/generate_h3.py` を1回だけ起動し、同じbatch・request slot 1を使う。アップロード失敗、タイムアウト、子プロセス異常、request ID欠落を含め、試行記録後の失敗は `submission-uncertain.json` として扱う。受付されなかったと推測しても自動再POSTしない。依存スクリプトが既知キーをエラー文へ含めた場合は、run配下のJSON/TXT/LOGから値を伏せてから報告する。
 
@@ -104,26 +112,10 @@ python $Media result `
 
 取得ごとに `$Run\h3\retrievals\<取得ID>\ending.mp4` という新しい場所を使う。途中失敗の `.part` は証拠として残し、同じ保存済みrequest IDを次の新規取得ディレクトリで再照会する。statusはproviderの保存JSONから `QUEUED` / `IN_PROGRESS` / `COMPLETED` / `FAILED` を推定し、判断材料がない場合は `UNKNOWN` と表示する。status/resultの通信失敗でもsubmitは再実行しない。
 
-result成功時は同じ取得ディレクトリへ `receipt.json` を排他的に保存し、標準出力の `receipt_file` にそのパスを返す。receiptはversion 1、endpoint、保存済みrequest ID、承認manifest SHA-256、開始・終了画像SHA-256、実際に取得した `ending.mp4` のSHA-256とbytes、完了日時を固定する。作成前後にmanifest、承認、4スナップショット、保存済みrequest IDを再照合するが、既に承認・送信済みの結果回収なので価格の24時間鮮度は要求しない。ゲームへ動画を添付するときは、このreceiptとH3 runを一緒に渡し、receiptまたは動画が後から変わっていないことを照合する。
+result成功時は同じ取得ディレクトリへ `receipt.json` を排他的に保存し、標準出力の `receipt_file` にそのパスを返す。receiptはversion 1、endpoint、保存済みrequest ID、承認manifest SHA-256、開始画像SHA-256・終了画像SHA-256（旧1画像runはnull）、実際に取得した `ending.mp4` のSHA-256とbytes、完了日時を固定する。作成前後にmanifest、承認、承認されたスナップショット、保存済みrequest IDを再照合するが、既に承認・送信済みの結果回収なので価格の24時間鮮度は要求しない。ゲームへ動画を添付するときは、このreceiptとH3 runを一緒に渡し、receiptまたは動画が後から変わっていないことを照合する。
 
-## 6. 動画QC
+## 6. 回収と人による確認
 
-動画を取得してから、同梱QCスクリプトの検査を新しい出力先で実行する。
+回収成功とreceipt・実ファイルの照合を確認して、動画をそのまま提示する。生成後の内容確認は人が担当する。自動QC、フレーム抽出、映像視聴、音声試聴は追加実行しない。生成成功を演出・物理・音声の合格と記録しない。通常登録時のffprobeによる尺・寸法・音声stream検査はgame.pyが行う。動画連結・自動内容QCツールは同梱しない。
 
-```powershell
-python "$CallToPast\scripts\verify_and_concat.py" `
-  --clip "<RETRIEVED_ENDING_MP4>" `
-  --output "$Run\qc\ending-qc-copy.mp4" `
-  --report "$Run\qc\report.json" `
-  --qa-dir "$Run\qc\frames" `
-  --expected-duration 15 `
-  --sample-count 12
-
-ffprobe -v error `
-  -show_entries "stream=index,codec_type,codec_name,width,height,avg_frame_rate,sample_rate,channels:format=duration" `
-  -of json "<RETRIEVED_ENDING_MP4>"
-```
-
-環境音・効果音を予定しているため、ffprobe結果にaudio streamがない動画は合格にしない。`verify_and_concat.py` のA/V差判定は音声なしでも真になり得るので、音声streamの存在と実際の聞こえ方を別に確認する。
-
-さらに動画を15秒すべて再生し、開始/終了フレームへの整合、同一人物・衣装・空間、顔が目まで露出していないこと、実際の行動とエンドの一致、字幕・タイトル混入、音量・SEを目視・試聴する。12枚の均等抽出は途中破綻の標本であり、全フレーム確認済みとは扱わない。これらを実行していないローカルテストは「H3実生成・動画QA済み」と報告しない。
+音は効果音・環境音のみ。発話・歌・BGMを追加しない。画面内の指定エンドタイトルは許可する。

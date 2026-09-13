@@ -156,9 +156,9 @@ class GameCoreTests(unittest.TestCase):
     def story(self, session: Path, *, title: str = "未来からの返事") -> None:
         game.attach_story(session, {"title": title, "story": "確定した履歴だけから生成した短い物語。", "evaluation": "物性を生かした工夫が記録された。"})
 
-    def h3_receipt(self, session: Path) -> tuple[Path, Path]:
+    def h3_receipt(self, session: Path, *, with_end: bool = True) -> tuple[Path, Path]:
         state = json.loads((session / "state.json").read_text(encoding="utf-8"))
-        end_source = session / state["ending"]["ending_image"]["file"]
+        end_source = session / state["ending"]["ending_image"]["file"] if with_end else None
         run = self.root / f"h3-run-{self.counter}"
         snapshots = run / "approval-snapshot"
         retrieval = run / "h3" / "retrievals" / "retrieval-001"
@@ -167,14 +167,15 @@ class GameCoreTests(unittest.TestCase):
         start_snapshot = snapshots / "start.png"
         end_snapshot = snapshots / "end.png"
         start_snapshot.write_bytes(self.photo.read_bytes())
-        end_snapshot.write_bytes(end_source.read_bytes())
+        if with_end:
+            end_snapshot.write_bytes(end_source.read_bytes())
         upper_sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest().upper()
         manifest = {
             "schema": "call-to-past.h3-approval-manifest.v1",
             "endpoint": game.H3_ENDPOINT,
             "settings": {"mode": "i2v", "duration_seconds": 15, "resolution": "768P", "request_count": 1},
             "start_image": {"snapshot": "approval-snapshot/start.png", "sha256": upper_sha(start_snapshot)},
-            "end_image": {"snapshot": "approval-snapshot/end.png", "sha256": upper_sha(end_snapshot)},
+            "end_image": {"snapshot": "approval-snapshot/end.png", "sha256": upper_sha(end_snapshot)} if with_end else None,
         }
         manifest_path = run / "approval-manifest.json"
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -217,7 +218,7 @@ class GameCoreTests(unittest.TestCase):
             "request_id": request_id,
             "manifest_sha256": manifest_sha,
             "start_image_sha256": upper_sha(start_snapshot),
-            "end_image_sha256": upper_sha(end_snapshot),
+            "end_image_sha256": upper_sha(end_snapshot) if with_end else None,
             "video": {"file": "ending.mp4", "sha256": upper_sha(receipt_video), "bytes": receipt_video.stat().st_size},
             "completed_at": "2026-09-12T00:00:01Z",
         }
@@ -532,6 +533,28 @@ class GameCoreTests(unittest.TestCase):
             with self.assertRaises(game.GameError):
                 game.prepare_action(session, {"event_id": "extra", "intent": "続ける", "photo_paths": [str(self.photo)], "inventory_ids": [], "combine": None})
 
+    def test_ending_evidence_distinguishes_unattempted_obstacles_and_escape(self) -> None:
+        for outcomes in ([False, True, False, True], [True, True, True], [False] * 4):
+            session = self.session()
+            with self.assertRaises(game.GameError):
+                game.ending_packet(session)
+            for index, success in enumerate(outcomes):
+                self.play_action(session, f"evidence-{index}", success)
+            evidence = game.ending_packet(session)["escape_evidence"]
+            state = json.loads((session / "state.json").read_text(encoding="utf-8"))
+            self.assertEqual(evidence["escaped"], sum(outcomes) == 3)
+            self.assertEqual(evidence["action_limit_reached"], len(outcomes) == 4)
+            remaining = evidence["remaining_obstacles"]
+            self.assertEqual([item["id"] for item in remaining], state["scenario"]["order"][sum(outcomes):])
+            if outcomes == [False, True, False, True]:
+                self.assertEqual(len(remaining), 1)
+                self.assertFalse(remaining[0]["attempted"])
+                expected = next(g for g in sample_master()["gimmicks"] if g["id"] == remaining[0]["id"])
+                self.assertEqual(remaining[0]["mechanism"], expected["mechanism"])
+                self.assertEqual(remaining[0]["observation"], expected["observation"])
+            if outcomes == [False] * 4:
+                self.assertEqual([item["attempted"] for item in remaining], [True, False, False])
+
     def test_ending_packet_uses_only_final_event_image_as_start_frame(self) -> None:
         session = self.session(session_id="final-frame")
         final_image = self.root / "final-event.png"
@@ -660,6 +683,56 @@ class GameCoreTests(unittest.TestCase):
         fallback = game.get_result(waived)
         self.assertFalse(fallback["media_complete"])
         self.assertEqual(fallback["media_status"], "waived")
+
+    def test_start_only_live_ending_completes_without_end_image(self) -> None:
+        for outcome, successes, label in (("happy", [True]*3, "TRUE END"), ("normal", [True, True, False, False], "NORMAL END"), ("bad", [False]*4, "BAD END")):
+            with self.subTest(outcome=outcome):
+                live = self.session(mode="live", session_id="start-only-"+outcome)
+                for index, success in enumerate(successes):
+                    eid = f"action-{index}"
+                    prepared = self.prepare(live, event_id=eid)
+                    self.commit(live, prepared, success=success)
+                    self.attach(live, eid, kind="generated")
+                packet = game.ending_packet(live)
+                self.assertEqual(packet["production"]["ending_title"], label)
+                self.assertTrue(packet["production"]["generate_end_frame"])
+                self.assertEqual(packet["production"]["input_mode"], "start_and_end_frames")
+                self.assertEqual(packet["production"]["title_mode"], "end_frame_embedded")
+                self.assertEqual(packet["production"]["continuity_reference"], packet["start_frame"])
+                self.story(live)
+                run, receipt = self.h3_receipt(live, with_end=False)
+                original = receipt.read_bytes()
+                broken = json.loads(original)
+                broken["end_image_sha256"] = "A"*64
+                receipt.write_text(json.dumps(broken), encoding="utf-8")
+                before = (live/"state.json").read_bytes()
+                with self.assertRaises(game.GameError):
+                    game.attach_video(live, source=self.mock_video, h3_run=run, receipt=receipt)
+                self.assertEqual(before, (live/"state.json").read_bytes())
+                receipt.write_bytes(original)
+                broken = json.loads(original)
+                del broken["end_image_sha256"]
+                receipt.write_text(json.dumps(broken), encoding="utf-8")
+                with self.assertRaises(game.GameError):
+                    game.attach_video(live, source=self.mock_video, h3_run=run, receipt=receipt)
+                receipt.write_bytes(original)
+                start = run/"approval-snapshot/start.png"
+                original_start = start.read_bytes()
+                start.write_bytes(b"tampered")
+                with self.assertRaises(game.GameError):
+                    game.attach_video(live, source=self.mock_video, h3_run=run, receipt=receipt)
+                start.write_bytes(original_start)
+                self.assertEqual(before, (live/"state.json").read_bytes())
+                with mock.patch.object(game, "_probe_live_video", return_value={"duration_seconds": 15, "width": 1344, "height": 768, "audio": True}):
+                    game.attach_video(live, source=self.mock_video, h3_run=run, receipt=receipt)
+                with self.assertRaises(game.GameError):
+                    game.get_result(live)
+                with self.assertRaises(game.GameError):
+                    game.attach_ending_image(live, source=self.photo, media_kind="generated")
+                game.mark_video_shown(live)
+                result = game.get_result(live)
+                self.assertTrue(result["media_complete"])
+                self.assertIsNone(json.loads((live/"state.json").read_text())["ending"]["ending_image"])
 
     def test_rehearsal_requires_explicit_bypass_and_reports_not_live(self) -> None:
         session = self.session(session_id="rehearsal-result")
