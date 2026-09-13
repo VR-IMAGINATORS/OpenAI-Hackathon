@@ -105,6 +105,23 @@ export function deploymentDocument(config: DeployConfig, image: string) {
   };
 }
 
+/** lightsailctl v1.0.8 prints a registration sentence even with --output json. */
+export function parseAwsOutput(operation: string, stdout: string): unknown {
+  try {
+    if (operation === 'push-container-image') {
+      const matches = [
+        ...stdout.matchAll(
+          /^Refer to this image as "(:[a-z0-9-]+\.[a-z0-9-]+\.[1-9][0-9]*)" in deployments\.\r?$/gm,
+        ),
+      ];
+      if (matches.length !== 1) throw new Error('Missing registration');
+      return { containerImage: { image: matches[0][1] } };
+    }
+    return JSON.parse(stdout);
+  } catch {
+    throw new Error('AWS response invalid');
+  }
+}
 /** All CLI output is captured; error objects never contain stderr or environment. */
 export function awsCommand(args: string[]): Promise<unknown> {
   return new Promise((resolveValue, reject) => {
@@ -115,10 +132,7 @@ export function awsCommand(args: string[]): Promise<unknown> {
       (error, stdout) => {
         if (error) return reject(new Error('AWS command failed'));
         try {
-          // lightsailctl may prepend non-JSON progress text; never forward it to logs.
-          const start = stdout.indexOf('{');
-          if (start < 0) throw new Error('Missing JSON');
-          resolveValue(JSON.parse(stdout.slice(start)));
+          resolveValue(parseAwsOutput(args[1], stdout));
         } catch {
           reject(new Error('AWS response invalid'));
         }
@@ -165,12 +179,14 @@ async function jsonRequest(
 }
 
 export async function deploy(config: DeployConfig, deps: DeployDependencies): Promise<void> {
+  deps.log('service_check_started', config.version);
   const old = await service(config, deps);
   if (old.nextDeployment) throw new Error('Another deployment is pending');
   if (!old.currentDeployment && !config.initial)
     throw new Error('Initial deployment requires explicit setting');
   if (old.currentDeployment && config.initial)
     throw new Error('Initial deployment flag must be disabled');
+  deps.log('image_push_started', config.version);
   const imageResult = (await deps.aws([
     'lightsail',
     'push-container-image',
@@ -186,6 +202,7 @@ export async function deploy(config: DeployConfig, deps: DeployDependencies): Pr
   const image = imageResult.containerImage?.image;
   if (!image) throw new Error('Image registration missing');
   const document = deploymentDocument(config, image);
+  deps.log('image_registered', config.version, image);
   if (old.currentDeployment) {
     const health = await jsonRequest(deps, config.publicUrl + '/healthz');
     if (!/^[a-f0-9]{40}$/.test(health.version ?? '') || typeof health.bootId !== 'string')
@@ -214,6 +231,7 @@ export async function deploy(config: DeployConfig, deps: DeployDependencies): Pr
   try {
     const file = join(temporary, 'deployment.json');
     await writeFile(file, JSON.stringify(document), { mode: 0o600 });
+    deps.log('deployment_create_started', config.version, image);
     await deps.aws([
       'lightsail',
       'create-container-service-deployment',
@@ -253,7 +271,25 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     now: Date.now,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     log: (event, version, image) => console.log(JSON.stringify({ event, version, image })),
-  }).catch(() => {
+  }).catch((error: unknown) => {
+    const safeMessages = new Set([
+      'AWS command failed',
+      'AWS response invalid',
+      'Service configuration mismatch',
+      'Another deployment is pending',
+      'Initial deployment requires explicit setting',
+      'Initial deployment flag must be disabled',
+      'Image registration missing',
+      'Image identifier invalid',
+      'Application request failed',
+      'Application response too large',
+      'Old version unavailable',
+      'Drain instance changed',
+      'Drain unconfirmed; deployment stopped',
+      'Deployment failed; verify old version before resume',
+      'Deployment verification timed out; no automatic resume',
+    ]);
+    if (error instanceof Error && safeMessages.has(error.message)) console.error(error.message);
     console.error('Deployment stopped. Check version, drain state, and the recovery procedure.');
     process.exitCode = 1;
   });
