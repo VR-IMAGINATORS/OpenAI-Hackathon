@@ -11,6 +11,8 @@ export type PlayLifecycle =
   | 'terminal'
   | 'quarantined';
 export interface HostedBootstrap {
+  supportedLocales?: ('ja' | 'en')[];
+  scenarios?: { ja: PublicScenario; en: PublicScenario };
   app: { name: string; stage: 'hosted-multiplayer' };
   scenario: PublicScenario;
   auth: { required: true };
@@ -23,6 +25,7 @@ export interface HostedSession {
   expiresAt: string | null;
 }
 export interface HostedPlayState {
+  resultRetainUntil?: string | null;
   playId?: string;
   state: PublicGameState;
   lifecycle: PlayLifecycle;

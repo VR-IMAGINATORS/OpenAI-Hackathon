@@ -22,6 +22,8 @@ python -X utf8 $Game context --session "runs/call-to-past/<session-id>"
 
 `context` is player-safe. It contains the current obstacle only. Immediately after a commit it stays on the processed obstacle until its event image has been attached; it never exposes the next obstacle inside an event render packet.
 
+For a new session, the `context` returned by `start` is also the source for the required opening situation image. Generate, inspect, save, and show that image before requesting the player's first item photo, following [media.md](media.md). Use only the public `scene` and `current_gimmick` fields; do not pass `hints`, the master snapshot, or the selected scenario order to image generation. This opening media step does not call `prepare` or consume an action. On resume, use the session's `initial-image-generation.json` status to finish a pending image, show a ready image once, or avoid repeating one already shown; do not synthesize a pre-action opening image after gameplay has begun.
+
 Use `--mode rehearsal` only for dry runs. Rehearsal outputs always carry `not_live: true`; mock media never satisfies live acceptance.
 
 ## Prepare an action

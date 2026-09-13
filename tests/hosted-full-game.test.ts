@@ -23,6 +23,8 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
     AI_MODE: 'mock',
     RESPONSE_MODEL: 'integration-vision',
   });
+  // Keep the legacy endpoint regression suite explicit during the core migration.
+  config.scenarioCatalog = undefined;
   const hosted = createHostedApp(config, {
     transport: {
       async createLiveSession(body) {

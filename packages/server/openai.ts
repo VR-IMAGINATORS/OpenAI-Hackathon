@@ -79,7 +79,8 @@ export const responseRequest = z
   );
 export interface OpenAITransport {
   createLiveSession(body: unknown): Promise<z.infer<typeof liveAnswer>>;
-  createResponse(body: unknown): Promise<unknown>;
+  createResponse(body: unknown, signal?: AbortSignal): Promise<unknown>;
+  createImage?(body: unknown, signal?: AbortSignal): Promise<unknown>;
   hangup(id: string): Promise<void>;
 }
 export class UpstreamError extends Error {
@@ -91,14 +92,23 @@ export function createOpenAITransport(
   apiKey: string,
   request: typeof fetch = fetch,
 ): OpenAITransport {
-  async function post(path: string, body: unknown, empty = false): Promise<unknown> {
+  async function post(
+    path: string,
+    body: unknown,
+    empty = false,
+    signal?: AbortSignal,
+    maxBytes = 256 * 1024,
+  ): Promise<unknown> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timer = setTimeout(
+      () => controller.abort(),
+      path === 'images/generations' ? 60000 : 30000,
+    );
     try {
       const result = await request('https://api.openai.com/v1/' + path, {
         method: 'POST',
         redirect: 'error',
-        signal: controller.signal,
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
@@ -118,7 +128,7 @@ export function createOpenAITransport(
         const item = await reader.read();
         if (item.done) break;
         bytes += item.value.byteLength;
-        if (bytes > 256 * 1024) {
+        if (bytes > maxBytes) {
           await reader.cancel();
           throw new UpstreamError(502);
         }
@@ -131,7 +141,8 @@ export function createOpenAITransport(
   }
   return {
     createLiveSession: async (body) => liveAnswer.parse(await post('live/sessions', body)),
-    createResponse: (body) => post('responses', body),
+    createResponse: (body, signal) => post('responses', body, false, signal),
+    createImage: (body, signal) => post('images/generations', body, false, signal, 8 * 1024 * 1024),
     hangup: async (id) => {
       liveId.parse(id);
       await post('live/sessions/' + encodeURIComponent(id) + '/hangup', {}, true);

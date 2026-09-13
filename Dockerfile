@@ -16,6 +16,7 @@ COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/scenarios ./scenarios
+COPY --from=build --chown=node:node /app/config ./config
 USER node
 EXPOSE 4310
 CMD ["node", "dist/server/apps/server/index.js"]

@@ -1,3 +1,6 @@
+import sharp from 'sharp';
+import { ResultStore, ResultStoreError } from './result-store.js';
+import { SceneJobs } from './scene-jobs.js';
 import express, { type Request, type ErrorRequestHandler } from 'express';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
@@ -5,20 +8,24 @@ import { z } from 'zod';
 import { baseApp, errorResponse } from '../../packages/server/http.js';
 import { AiService, AiServiceError } from '../../packages/server/ai-service.js';
 import type { OpenAITransport } from '../../packages/server/openai.js';
-import { publicScenario } from '../../packages/shared/scenario.js';
+import { localizeScenario, publicScenario } from '../../packages/shared/scenario.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
 import { GameRuntime } from '../local-server/hosted-runtime.js';
 import { GameError } from '../local-server/game.js';
+import { LiveOutboxError } from '../local-server/live-outbox.js';
 import { liveEventSchema } from '../local-server/live.js';
 import type { HostedConfig } from './config.js';
 import { SessionStore } from './session-store.js';
 import { PlayRegistry, type PlayRuntime } from './play-registry.js';
 import { SessionError, assertController } from './control.js';
 import { PhotoQueue } from './photo-queue.js';
+import { ScenarioConfigError } from './scenario-catalog.js';
 import { operationalLog, type OperationalEvent } from './logging.js';
 
 const uuid = z.string().uuid();
-const createSchema = z.object({ requestId: uuid, clientId: uuid }).strict();
+const createSchema = z
+  .object({ requestId: uuid, clientId: uuid, locale: z.enum(['ja', 'en']) })
+  .strict();
 const liveSchema = z.object({ requestId: uuid, sdp: z.string().min(1).max(65536) }).strict();
 const photoSchema = z
   .object({ requestId: uuid, images: z.array(z.string().max(2796204)).max(2) })
@@ -78,17 +85,150 @@ export function createHostedApp(
     options.transport ?? (config.ai.mode === 'mock' ? disabledTransport : undefined),
     now,
   );
+  const clockOrigin = now(),
+    wallOrigin = wallNow();
+  const resultNow = () => wallOrigin + now() - clockOrigin;
+  const sceneJobs = new SceneJobs(ai, { now });
+  const results = new ResultStore({
+    now: resultNow,
+    ttlMs: config.resultTtlMs ?? 300_000,
+    onEvict: (id) => sceneJobs.forgetPlay(id),
+  });
+  function safeDisplay(fn: () => void) {
+    try {
+      fn();
+    } catch {
+      /* Presentation capacity never rolls back a game action. */
+    }
+  }
   const registry = new PlayRegistry<GameRuntime, PublicGameState>({
     now,
     wallNow,
     capacity: config.capacity,
     ttlMs: config.ttlMs,
     recoveryMs: config.recoveryMs,
-    factory: (id, deadline) =>
-      new GameRuntime(id, deadline, structuredClone(config.scenario), ai, config.ai, queue, now),
+    resultTtlMs: config.resultTtlMs ?? 300_000,
+    factory: (id, deadline, auth, request) => {
+      const snapshot = config.scenarioCatalog?.current(request.locale ?? 'ja');
+      const scenario = snapshot
+        ? localizeScenario(snapshot.scenarioV2, snapshot.locale)
+        : structuredClone(config.scenario);
+      if (!snapshot) return new GameRuntime(id, deadline, scenario, ai, config.ai, queue, now);
+      results.create({
+        playId: id,
+        ownerDigest: auth.digest,
+        locale: snapshot.locale,
+        groupingGapMs: snapshot.coreConfig.chatGroupingGapMs,
+      });
+      try {
+        return new GameRuntime(
+          id,
+          deadline,
+          scenario,
+          ai,
+          config.ai,
+          queue,
+          now,
+          snapshot,
+          {
+            transcript: (fragment) => safeDisplay(() => results.appendTranscript(id, fragment)),
+            photos: async (photos) => {
+              try {
+                const assetIds = [];
+                for (const photo of photos) {
+                  const bytes = await sharp(photo.jpeg)
+                    .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
+                    .jpeg({ quality: 70 })
+                    .toBuffer();
+                  assetIds.push(
+                    await results.putAsset(id, { kind: 'photo', bytes, mime: 'image/jpeg' }),
+                  );
+                }
+                if (assetIds.length)
+                  results.appendMessage(id, { side: 'user', kind: 'photo', text: '', assetIds });
+              } catch {
+                /* Recognition can continue even when a thumbnail cannot be retained. */
+              }
+            },
+            scene: (input) =>
+              safeDisplay(() => {
+                const deadlineIso = new Date(
+                  resultNow() + (config.ai.imageJobTimeoutMs ?? 150_000),
+                ).toISOString();
+                const slot = {
+                  status: 'queued' as const,
+                  assetId: null,
+                  errorCode: null,
+                  deadline: deadlineIso,
+                };
+                results.appendMessage(id, {
+                  id: input.messageId,
+                  side: 'assistant',
+                  kind: 'result',
+                  text: input.text.slice(0, 4000),
+                  relatedCommandSeq: input.commandSeq,
+                  liveGeneration: input.generation,
+                  imageSlot: slot,
+                });
+                const fail = () =>
+                  safeDisplay(() =>
+                    results.updateMessage(id, input.messageId, {
+                      imageSlot: { ...slot, status: 'failed', errorCode: 'SCENE_RECEIVE_FAILED' },
+                    }),
+                  );
+                try {
+                  sceneJobs.enqueue(
+                    {
+                      playId: id,
+                      messageId: input.messageId,
+                      snapshot,
+                      facts: input.facts,
+                      situation: input.situation,
+                    },
+                    {
+                      ready: async (bytes) => {
+                        try {
+                          const assetId = await results.putAsset(id, {
+                            kind: 'scene',
+                            bytes,
+                            mime: 'image/jpeg',
+                          });
+                          results.updateMessage(id, input.messageId, {
+                            imageSlot: { ...slot, status: 'ready', assetId },
+                          });
+                        } catch {
+                          fail();
+                        }
+                      },
+                      failed: fail,
+                      stage: (stage) =>
+                        safeDisplay(() =>
+                          results.updateMessage(id, input.messageId, {
+                            imageSlot: { ...slot, status: stage },
+                          }),
+                        ),
+                    },
+                  );
+                } catch {
+                  fail();
+                }
+              }),
+            ended: (state) =>
+              safeDisplay(() => {
+                results.end(id, state);
+                if (state.status === 'expired') sceneJobs.cancelPlay(id, true);
+              }),
+          },
+          config.enableGameTrace,
+        );
+      } catch (error) {
+        results.evict(id);
+        throw error;
+      }
+    },
     expire: (r) => r.expire(),
     close: (r) => r.close(),
-    snapshot: (r) => r.game.state(),
+    snapshot: (r) => r.state(),
     dispose: (r) => r.dispose(),
     transferControl: (r) => r.transferControl(),
   });
@@ -97,6 +237,7 @@ export function createHostedApp(
     now,
     authAttemptsPerMinute: config.authAttempts,
     hasActivePlay: (s) => registry.hasActivePlay(s),
+    hasRetainedResult: (s) => results.hasOwner(s.digest),
   });
   const app = baseApp();
   let draining: Promise<void> | undefined;
@@ -107,7 +248,12 @@ export function createHostedApp(
     const counts = ai.snapshot();
     const remaining = Math.max(
       registry.occupied,
-      counts.liveBusy + counts.pendingCreates + counts.responseBusy + counts.unknownCreates,
+      counts.liveBusy +
+        counts.pendingCreates +
+        counts.responseBusy +
+        counts.unknownCreates +
+        (counts.imageBusy ?? 0) +
+        (counts.inspectionBusy ?? 0),
     );
     return {
       readyToDeploy: registry.admission === 'draining' && remaining === 0,
@@ -119,6 +265,7 @@ export function createHostedApp(
   function drain(): Promise<void> {
     if (draining) return draining;
     registry.admission = 'draining';
+    sceneJobs.cancelAll();
     log({ event: 'drain_started', version: config.version });
     draining = Promise.all([registry.drain(), ai.shutdown()]).then(() => {
       log({ event: 'drain_finished', version: config.version, count: status().remaining });
@@ -134,6 +281,7 @@ export function createHostedApp(
       play.runtime.game.check();
       if (now() >= play.runtime.closingAt) work.push(registry.end(play));
     }
+    results.sweep();
     sessions.sweep();
     const completion = Promise.all(work);
     if (waitForClose) await completion;
@@ -165,6 +313,7 @@ export function createHostedApp(
     clearInterval(watchdog);
     queue.dispose();
     await drain();
+    results.clear();
   }
   function owner(req: Request) {
     return sessions.authorize(cookieToken(req));
@@ -185,10 +334,11 @@ export function createHostedApp(
     return registry.assertControl(auth, id, clientId, epoch);
   }
   function update(play: PlayRuntime<GameRuntime, PublicGameState>) {
-    const state = play.runtime?.game.state() ?? play.result;
+    const state = play.runtime?.state() ?? play.result;
     if (!state) throw new SessionError('PLAY_EXPIRED', 410);
     return {
       playId: play.id,
+      resultRetainUntil: results.has(play.id) ? results.retainUntil(play.id) : null,
       state,
       lifecycle: play.lifecycle,
       expiresAt: play.expiresAt,
@@ -206,7 +356,13 @@ export function createHostedApp(
     const current = controlled(req);
     if (current !== play) throw new SessionError('PLAY_EXPIRED', 410);
   }
-  app.use((_req, res, next) => {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/'))
+      res.set({
+        'Cache-Control': 'private, no-store',
+        Vary: 'Cookie',
+        'X-Content-Type-Options': 'nosniff',
+      });
     const startedAt = now();
     res.once('finish', () =>
       log({ event: 'request_finished', durationMs: Math.max(0, now() - startedAt) }),
@@ -252,6 +408,20 @@ export function createHostedApp(
     res.json({
       app: { name: 'Call to the Past', stage: 'hosted-multiplayer' },
       scenario: publicScenario(config.scenario),
+      supportedLocales: ['ja', 'en'],
+      scenarios: config.scenarioCatalog
+        ? Object.fromEntries(
+            ['ja', 'en'].map((locale) => [
+              locale,
+              publicScenario(
+                localizeScenario(
+                  config.scenarioCatalog!.current(locale as 'ja' | 'en').scenarioV2,
+                  locale as 'ja' | 'en',
+                ),
+              ),
+            ]),
+          )
+        : { ja: publicScenario(config.scenario), en: publicScenario(config.scenario) },
       auth: { required: true },
       ai: { mode: config.ai.mode },
     }),
@@ -267,15 +437,18 @@ export function createHostedApp(
       secure: config.secureCookie,
       sameSite: 'strict',
       path: '/',
-      maxAge: 1_800_000 + config.ttlMs,
+      maxAge: 1_800_000 + config.ttlMs + (config.resultTtlMs ?? 300_000),
     });
     res.json({ authenticated: true });
   });
   app.get('/api/session', (req, res) => {
-    const auth = owner(req);
+    const auth = sessions.authorizeResult(cookieToken(req));
     const play = auth.activePlayId ? registry.plays.get(auth.activePlayId) : undefined;
     const retained =
-      play && (play.lifecycle !== 'terminal' || now() < (play.terminalUntil ?? 0))
+      play &&
+      (play.lifecycle !== 'terminal' ||
+        (now() < (play.terminalUntil ?? 0) &&
+          (!play.result?.automaticActions || results.has(play.id))))
         ? play
         : undefined;
     res.json({
@@ -286,11 +459,57 @@ export function createHostedApp(
     });
   });
   app.post('/api/plays', (req, res) => {
-    const { play, reused } = registry.create(owner(req), createSchema.parse(req.body));
+    const body = config.scenarioCatalog
+      ? createSchema.parse(req.body)
+      : createSchema.omit({ locale: true }).parse(req.body);
+    const { play, reused } = registry.create(owner(req), body);
     if (!reused) log({ event: 'play_started', correlationId: play.id, count: registry.occupied });
     res.status(reused ? 200 : 201).json({ controlEpoch: play.controllerEpoch, ...update(play) });
   });
-  app.get('/api/play/state', (req, res) => res.json(update(registry.get(owner(req), playId(req)))));
+  app.get('/api/play/trace', (req, res) => {
+    if (!config.enableGameTrace) throw new SessionError('NOT_FOUND', 404);
+    const play = registry.get(owner(req), playId(req));
+    res.json(play.runtime?.trace() ?? { entries: [] });
+  });
+  app.get('/api/play/feed', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req));
+    res.json(
+      results.feed(
+        auth.digest,
+        playId(req),
+        z.coerce
+          .number()
+          .int()
+          .nonnegative()
+          .parse(req.query.after ?? req.query.afterVersion ?? 0),
+      ),
+    );
+  });
+  app.get('/api/play/assets/:assetId', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req));
+    const asset = results.asset(auth.digest, playId(req), uuid.parse(req.params.assetId));
+    res.type(asset.mime).send(asset.bytes);
+  });
+  app.get('/api/play/state', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req)),
+      id = playId(req);
+    const play = registry.plays.get(id);
+    if (play?.runtime) return res.json(update(registry.get(auth, id)));
+    if (results.has(id)) {
+      const state = results.result(auth.digest, id);
+      if (state)
+        return res.json({
+          playId: id,
+          state,
+          lifecycle: 'terminal',
+          expiresAt: play?.expiresAt ?? results.retainUntil(id),
+          recoveryExpiresAt: null,
+          resultRetainUntil: results.retainUntil(id),
+        });
+    }
+    if (play?.result?.automaticActions) throw new SessionError('RESULT_EXPIRED', 410);
+    res.json(update(registry.get(auth, id)));
+  });
   app.post('/api/play/control', async (req, res) => {
     const body = controlSchema.parse(req.body);
     const play = await registry.control(owner(req), playId(req), body.clientId, body.takeover);
@@ -338,15 +557,46 @@ export function createHostedApp(
     validAfter(req, play);
     res.json(update(play));
   });
+  const eventRates = new WeakMap<
+    import('./session-store.js').AuthSession,
+    { tokens: number; at: number }
+  >();
   app.post('/api/play/events', async (req, res) => {
+    const auth = owner(req);
+    const rate = eventRates.get(auth) ?? { tokens: 80, at: now() };
+    rate.tokens = Math.min(80, rate.tokens + Math.max(0, now() - rate.at) * 0.04);
+    rate.at = now();
+    eventRates.set(auth, rate);
+    if (rate.tokens < 1) throw new SessionError('EVENT_RATE_LIMIT', 429);
+    rate.tokens--;
     const play = controlled(req);
     const body = eventSchema.parse(req.body);
-    const commands = await runtime(play).event(body.generation, body.event);
+    const current = runtime(play);
+    const commands = await current.event(body.generation, body.event);
     validAfter(req, play);
-    res.json({ ...update(play), commands });
+    if (current.coreSnapshot) res.status(202).json({ accepted: true });
+    else res.json({ ...update(play), commands });
+  });
+  app.post('/api/play/commands/poll', (req, res) => {
+    const play = controlled(req);
+    const body = z
+      .object({
+        generation: z.number().int().positive(),
+        ackThrough: z.number().int().nonnegative(),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(runtime(play).pollCommands(body.generation, body.ackThrough));
   });
   app.post('/api/play/actions', async (req, res) => {
     const play = controlled(req);
+    if (runtime(play).coreSnapshot)
+      return errorResponse(
+        res,
+        410,
+        'LEGACY_ACTION_DISABLED',
+        '画面を更新し、音声で指示してください。',
+      );
     const body = actionSchema.parse(req.body);
     const commands = await runtime(play).action(body.actionId, body.proposalRevision);
     validAfter(req, play);
@@ -361,7 +611,7 @@ export function createHostedApp(
     const { clientId, epoch } = credentials(req);
     registry.heartbeat(auth, play.id, clientId, epoch, body.voiceState);
     // A closed peer can be a page reload. Only /end explicitly ends a game.
-    r.game.heartbeat(body.voiceState === 'closed' ? 'disconnected' : body.voiceState);
+    r.heartbeat(body.voiceState === 'closed' ? 'disconnected' : body.voiceState);
     if (['disconnected', 'failed', 'closed'].includes(body.voiceState)) {
       const confirmed = await ai.closeLive(play.id);
       if (!confirmed) await registry.end(play);
@@ -394,6 +644,7 @@ export function createHostedApp(
       throw new SessionError('VERSION_MISMATCH', 409);
     if (!status().readyToDeploy || !ai.resume()) throw new SessionError('DRAIN_INCOMPLETE', 409);
     registry.resume();
+    sceneJobs.resume();
     draining = undefined;
     drainRequestId = undefined;
     res.json(status());
@@ -407,7 +658,12 @@ export function createHostedApp(
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
     let status = 500,
       code = 'INTERNAL_ERROR';
-    if (error instanceof SessionError || error instanceof AiServiceError) {
+    if (
+      error instanceof SessionError ||
+      error instanceof AiServiceError ||
+      error instanceof LiveOutboxError ||
+      error instanceof ResultStoreError
+    ) {
       status = error.status;
       code = error.code;
     } else if (error instanceof GameError) {
@@ -420,9 +676,18 @@ export function createHostedApp(
             : status === 503
               ? 'PHOTO_BUSY'
               : 'GAME_REQUEST_FAILED';
+    } else if (
+      error instanceof Error &&
+      ['CONVERSATION_LIMIT', 'DELEGATION_LIMIT'].includes(error.message)
+    ) {
+      status = 429;
+      code = error.message;
     } else if (error instanceof z.ZodError) {
       status = 400;
       code = 'INVALID_REQUEST';
+    } else if (error instanceof ScenarioConfigError) {
+      status = error.status;
+      code = error.code;
     } else if (error?.status === 413) {
       status = 413;
       code = 'BODY_TOO_LARGE';
@@ -447,5 +712,5 @@ export function createHostedApp(
     errorResponse(res, status, code, message);
   };
   app.use(errors);
-  return { app, registry, ai, sessions, tick, drain, dispose, bootId };
+  return { app, registry, ai, sessions, results, sceneJobs, tick, drain, dispose, bootId };
 }

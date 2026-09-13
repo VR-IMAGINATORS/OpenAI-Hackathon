@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import re
 import unittest
@@ -20,7 +21,7 @@ def assert_string_list(value):
 def test_master_contract_has_expected_top_level_collections():
     masters = load_masters()
     assert set(masters) == {"version", "scenes", "gimmicks", "items"}
-    assert masters["version"] == 1
+    assert masters["version"] == 2
     assert len(masters["scenes"]) == 6
     assert len(masters["gimmicks"]) == 10
     assert len(masters["items"]) == 10
@@ -74,7 +75,7 @@ def test_gimmicks_have_three_hints_and_textual_solution_contracts():
         "id", "name", "observation", "hints", "mechanism", "acceptance",
         "rejection", "examples", "reference_solutions",
     }
-    restraint_names = {"布の目隠し", "椅子のロープ結び", "足首の封印具"}
+    restraint_names = {"布の目隠し", "椅子のロープ結び", "足首の留め具"}
     assert restraint_names <= {gimmick["name"] for gimmick in masters["gimmicks"]}
     for gimmick in masters["gimmicks"]:
         assert set(gimmick) == required
@@ -142,8 +143,8 @@ def test_items_are_examples_not_whitelists():
     masters = load_masters()
     required = {"id", "name", "properties", "uses"}
     expected_item_names = {
-        "はさみ", "カッター", "ヘアピン", "輪ゴム", "中身入りPETボトル",
-        "懐中電灯", "タオル", "金属缶", "カード", "透明なガラス瓶",
+        "はさみ", "カッター", "ヘアピン", "マジックハンド", "中身入りPETボトル",
+        "懐中電灯", "タオル", "マイナスドライバー", "硬いプラスチックカード", "ペンチ",
     }
     assert {item["name"] for item in masters["items"]} == expected_item_names
     for item in masters["items"]:
@@ -152,6 +153,47 @@ def test_items_are_examples_not_whitelists():
         assert_string_list(item["uses"])
         assert "例:" in " ".join(item["uses"])
         assert "限定せず" in " ".join(item["uses"])
+
+
+def test_every_route_frees_the_body_before_travel_and_ends_at_an_exit():
+    # Reviewed physical roles: a sign or a window is navigation, never the
+    # final release of an exit. Keep this independent of the prose wording.
+    restraints = {"gimmick-pressure-latch", "gimmick-light-gate", "gimmick-balance-cradle"}
+    navigation = {
+        "gimmick-magnetic-rail", "gimmick-moisture-sensor",
+        "gimmick-optical-alignment", "gimmick-resonance-lock",
+    }
+    exits = {"gimmick-thermal-leak", "gimmick-cable-tension", "gimmick-inkless-codeplate"}
+    masters = load_masters()
+    assert restraints | navigation | exits == {g["id"] for g in masters["gimmicks"]}
+    used = set()
+    for scene in masters["scenes"]:
+        for first, middle, last in scene["sequences"]:
+            assert first in restraints, (scene["id"], first)
+            assert middle in navigation, (scene["id"], middle)
+            assert last in exits, (scene["id"], last)
+            used.update((first, middle, last))
+    assert used == restraints | navigation | exits
+
+
+def test_reference_solutions_do_not_require_unrelated_item_properties():
+    gimmicks = {g["id"]: g for g in load_masters()["gimmicks"]}
+    for solution in gimmicks["gimmick-moisture-sensor"]["reference_solutions"]:
+        assert "sealed" not in solution["required_properties"]
+        assert "weighty" not in solution["required_properties"]
+    for solution in gimmicks["gimmick-magnetic-rail"]["reference_solutions"]:
+        assert "elastic" not in solution["required_properties"]
+
+
+def test_revised_master_is_accepted_by_the_game_runtime():
+    game_path = MASTERS_PATH.parent.parent / "scripts" / "game.py"
+    spec = importlib.util.spec_from_file_location("master_validation_game", game_path)
+    game = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(game)
+    master = load_masters()
+    validated = game._validate_master(master)
+    assert validated["version"] == master["version"]
+    assert game._scenario_candidates(validated) == game._scenario_candidates(master)
 
 
 def load_tests(loader, tests, pattern):

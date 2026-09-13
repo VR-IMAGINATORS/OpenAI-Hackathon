@@ -1,11 +1,21 @@
-import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { parseScenario } from '../packages/shared/scenario.js';
+import { parseScenario, parseScenarioV2 } from '../packages/shared/scenario.js';
+import { parseCoreConfig } from '../packages/shared/core-config.js';
+import { readConfigJson } from '../apps/server/scenario-catalog.js';
 
-const path = resolve(process.argv[2] ?? process.env.SCENARIO_PATH ?? 'scenarios/default.json');
+const explicit = process.argv[2] ?? process.env.SCENARIO_PATH;
+const paths = explicit ? [explicit] : ['scenarios/default.json', 'scenarios/mobile-playtest.json'];
 try {
-  const scenario = parseScenario(JSON.parse(await readFile(path, 'utf8')));
-  console.log(`Scenario OK: ${scenario.id} (${scenario.obstacles.length} obstacles)`);
+  for (const path of paths) {
+    const raw = readConfigJson(resolve(path));
+    const scenario =
+      (raw as { version?: unknown })?.version === 2 ? parseScenarioV2(raw) : parseScenario(raw);
+    console.log(
+      `Scenario v${scenario.version} OK: ${scenario.id} (${scenario.obstacles.length} obstacles)`,
+    );
+  }
+  parseCoreConfig(readConfigJson(resolve('config/game-core.json')));
+  console.log('Game core config OK');
 } catch (error) {
   console.error(
     'シナリオ設定を確認してください:',

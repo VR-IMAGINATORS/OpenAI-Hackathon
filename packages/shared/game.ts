@@ -48,6 +48,9 @@ export interface LiveCommand {
   content: string;
 }
 export interface PublicGameState {
+  automaticActions?: boolean;
+  locale?: 'ja' | 'en';
+  stateVersion?: number;
   id: string;
   generation: number;
   status: 'briefing' | 'playing' | 'judging' | 'won' | 'lost' | 'expired';

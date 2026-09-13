@@ -18,7 +18,9 @@
     "play:mobile": "npm run build && node --import tsx tools/mobile.ts",
     "play:mobile:start": "node --import tsx tools/mobile.ts",
     "format": "prettier --write \"{apps,packages,tools,tests}/**/*.{ts,tsx,js,cjs,mjs,css}\" \"scenarios/**/*.json\" package.json .prettierrc.json",
-    "format:check": "prettier --check \"{apps,packages,tools,tests}/**/*.{ts,tsx,js,cjs,mjs,css}\" \"scenarios/**/*.json\" package.json .prettierrc.json"
+    "format:check": "prettier --check \"{apps,packages,tools,tests}/**/*.{ts,tsx,js,cjs,mjs,css}\" \"scenarios/**/*.json\" package.json .prettierrc.json",
+    "probe:live": "node --import tsx tools/core-live-probe.ts --live",
+    "probe:preview": "node --import tsx tools/core-live-probe.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

@@ -1,3 +1,4 @@
+import OpeningSequence from './OpeningSequence.js';
 import { useEffect, useRef, useState } from 'react';
 import type {
   HostedBootstrap,
@@ -6,10 +7,17 @@ import type {
   CreatedPlay,
   PlayControl,
 } from '../../../packages/shared/api.js';
-import { clientId, playRequest, PlayApiError, retryUncertain } from './play-api.js';
+import { clientId, playRequest, PlayApiError, retryUncertain, setApiLocale } from './play-api.js';
 import { LiveConnection } from './live.js';
 import PlayScreen from './PlayScreen.js';
 export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }) {
+  const [locale, setLocale] = useState<'ja' | 'en'>('ja');
+  useEffect(() => {
+    setApiLocale(locale);
+    document.documentElement.lang = locale;
+  }, [locale]);
+  const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
+  const [showOpening, setShowOpening] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [passphrase, setPassphrase] = useState('');
   const [loading, setLoading] = useState(true);
@@ -69,7 +77,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
     try {
       await connection.prepare();
       createId.current ??= crypto.randomUUID();
-      const body = { requestId: createId.current, clientId };
+      const body = { requestId: createId.current, clientId, locale };
       const created = await retryUncertain(() => playRequest<CreatedPlay>('/api/plays', body));
       setPlay({
         id: created.playId,
@@ -97,19 +105,26 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       <PlayScreen
         key={play.id}
         playId={play.id}
+        locale={locale}
         initialEnvelope={play.envelope}
         initialControl={play.control}
         preparedConnection={play.connection}
         onExit={() => {
+          setShowOpening(false);
           setPlay(null);
           setError('');
           void restore().catch(() => setAuthenticated(false));
         }}
         onReplay={() => {
+          setShowOpening(false);
           setPlay(null);
           setError('');
         }}
       />
+    );
+  if (showOpening)
+    return (
+      <OpeningSequence locale={locale} busy={loading} error={error} onAnswer={() => void start()} />
     );
   return (
     <main className="play-shell join-shell">
@@ -121,20 +136,34 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       </div>
       <p className="play-eyebrow">A CALL FROM THE FUTURE</p>
       <h1>
-        未来からの着信。
+        {t('未来からの着信。', 'A call from the future.')}
         <br />
-        <span>応答しますか？</span>
+        <span>{t('応答しますか？', 'Will you answer?')}</span>
       </h1>
       <p className="join-copy">
-        あなたの声と、身近なものの写真が
+        {t('あなたの声と、身近なものの写真が', 'Your voice and photos of everyday objects')}
         <br />
-        脱出への手がかりになる。
+        {t('脱出への手がかりになる。', 'could be the key to escape.')}
       </p>
       {error && (
         <p className="play-error" role="alert">
           {error}
         </p>
       )}
+      <label className="language-choice">
+        Language / 言語
+        <select
+          value={locale}
+          disabled={loading}
+          onChange={(e) => {
+            setLocale(e.target.value as 'ja' | 'en');
+            createId.current = null;
+          }}
+        >
+          <option value="ja">日本語</option>
+          <option value="en">English</option>
+        </select>
+      </label>
       {!authenticated ? (
         <form
           onSubmit={(e) => {
@@ -143,7 +172,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           }}
         >
           <label className="play-field">
-            参加の合言葉
+            {t('参加の合言葉', 'Passphrase')}
             <input
               type="password"
               autoComplete="off"
@@ -153,20 +182,23 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
             />
           </label>
           <button className="primary-button" disabled={loading || !passphrase}>
-            合言葉で参加
+            {t('合言葉で参加', 'Join')}
           </button>
         </form>
       ) : (
-        <button className="primary-button" disabled={loading} onClick={() => void start()}>
-          {loading ? '接続準備中…' : '音声接続・体験開始'}
-          <span>↗</span>
+        <button className="primary-button" disabled={loading} onClick={() => setShowOpening(true)}>
+          {loading ? t('接続準備中…', 'Connecting…') : t('体験を始める', 'Begin experience')}
+          <span aria-hidden="true">↗</span>
         </button>
       )}
       <p className="play-footnote">
-        カメラとマイクを使用します。
+        {t('カメラとマイクを使用します。', 'Camera and microphone access is required.')}
         <br />
-        体験は説明を含めて最大10分です。
-        {bootstrap.ai.mode === 'mock' ? '（現在はモックモードです）' : ''}
+        {t(
+          '応答後の体験は最大10分です。',
+          'The experience lasts up to 10 minutes after answering.',
+        )}
+        {bootstrap.ai.mode === 'mock' ? t('（現在はモックモードです）', ' (Mock mode)') : ''}
       </p>
     </main>
   );

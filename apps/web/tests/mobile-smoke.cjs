@@ -12,6 +12,24 @@ const fs = require('node:fs');
       isMobile: true,
       hasTouch: true,
     });
+    async function enterCall(english = false) {
+      const begin = page.getByRole('button', {
+        name: english ? 'Begin experience' : '体験を始める',
+        exact: true,
+      });
+      const answer = page.getByRole('button', {
+        name: english ? 'Answer' : '応答する',
+        exact: true,
+      });
+      await begin.or(answer).first().waitFor();
+      if (await begin.isVisible()) {
+        await begin.click();
+        await page.getByRole('button', { name: 'Skip', exact: true }).click();
+      }
+      await page
+        .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
+        .click();
+    }
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.addInitScript(() => {
@@ -252,15 +270,15 @@ const fs = require('node:fs');
     await page.getByLabel('参加の合言葉').fill('demo');
     await page.getByRole('button', { name: '合言葉で参加' }).click();
     await page.evaluate(() => (window.__denyMic = true));
-    await page.getByRole('button', { name: '音声接続・体験開始' }).click();
+    await enterCall();
     await page.getByRole('alert').filter({ hasText: 'マイクを許可' }).waitFor();
     assert.equal(createIds.length, 0, 'microphone refusal does not reserve');
     await page.evaluate(() => (window.__denyMic = false));
-    await page.getByRole('button', { name: '音声接続・体験開始' }).click();
+    await enterCall();
     await page.getByRole('alert').filter({ hasText: '現在満員' }).waitFor();
     assert.equal(liveIds.length, 0, 'full server does not create Live');
     capacityFull = false;
-    await page.getByRole('button', { name: '音声接続・体験開始' }).click();
+    await enterCall();
     await page.getByRole('button', { name: '音声を接続 / 再開する' }).click();
     assert.equal(createIds[0], createIds[1], 'unknown create retains request ID');
     assert.equal(liveIds[0], liveIds[1]);

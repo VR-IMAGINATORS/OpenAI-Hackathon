@@ -1,4 +1,22 @@
 import type { PlayControl } from '../../../packages/shared/api.js';
+let apiLocale: 'ja' | 'en' = 'ja';
+export function setApiLocale(locale: 'ja' | 'en') {
+  apiLocale = locale;
+}
+const englishMessages: Record<string, string> = {
+  AUTH_REQUIRED: 'Enter the shared passphrase to join.',
+  AUTH_FAILED: 'Incorrect passphrase. Check the passphrase shared by the host.',
+  AUTH_RATE_LIMIT: 'Too many attempts. Wait a moment and try again.',
+  SESSION_EXPIRED: 'Your session expired. Please join again.',
+  PLAY_EXPIRED: 'This play has ended or expired. Please start again.',
+  CONTROL_BUSY: 'Another screen is connected. Reconnect here to take over.',
+  CONTROL_STALE: 'Control has moved to another screen.',
+  REQUEST_LIMIT: 'The service is busy or waiting for a previous call to end. Try again shortly.',
+  PHOTO_BUSY: 'Your photo is being processed. Please wait.',
+  DRAINING: 'The server is updating. Please join again shortly.',
+  LIVE_CREATE_UNCONFIRMED: 'The voice connection could not be confirmed. Please contact the host.',
+  PLAY_CAPACITY: 'All play slots are occupied. Please try again shortly.',
+};
 export const clientId = crypto.randomUUID();
 export function controlHeaders(control: PlayControl | { playId: string }) {
   return {
@@ -55,9 +73,12 @@ export async function playRequest<T>(
     const value = await response.json();
     if (!response.ok)
       throw new PlayApiError(
-        publicMessages[value?.error?.code] ||
-          value?.error?.message ||
-          '通信を完了できませんでした。',
+        apiLocale === 'en'
+          ? (englishMessages[value?.error?.code] ??
+            'Unable to complete the request. Please try again.')
+          : publicMessages[value?.error?.code] ||
+            value?.error?.message ||
+            '通信を完了できませんでした。',
         response.status,
         value?.error?.code,
       );
@@ -65,9 +86,13 @@ export async function playRequest<T>(
   } catch (error) {
     if (error instanceof PlayApiError) throw error;
     throw new PlayApiError(
-      controller.signal.aborted
-        ? '通信がタイムアウトしました。同じ要求で再確認してください。'
-        : '通信できません。ネットワークを確認してください。',
+      apiLocale === 'en'
+        ? controller.signal.aborted
+          ? 'The request timed out. Retry to check its result.'
+          : 'Unable to connect. Please check your network.'
+        : controller.signal.aborted
+          ? '通信がタイムアウトしました。同じ要求で再確認してください。'
+          : '通信できません。ネットワークを確認してください。',
       0,
     );
   } finally {

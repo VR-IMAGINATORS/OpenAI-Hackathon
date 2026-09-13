@@ -1,4 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import {
+  executeIntentSchema,
+  actionResultSchema,
+  type ActionTicket,
+  type ExecuteIntent,
+  type ActionResult,
+  type GameFacts,
+} from '../../packages/shared/conversation.js';
+import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
+import { coreJudgmentSchema } from './game-ai.js';
 import type { Scenario } from '../../packages/shared/scenario.js';
 import {
   proposalSchema,
@@ -23,6 +33,22 @@ export class GameError extends Error {
 export class GameSession {
   readonly id = randomUUID();
   generation = 0;
+  gameVersion = 0;
+  actionEpoch = 0;
+  controllerEpoch = 0;
+  currentContextVersion = 0;
+  facts: GameFacts;
+  private reservedEvidence = new Set<number>();
+  private coreActions = new Map<
+    string,
+    {
+      ticket: ActionTicket;
+      context: AIContext;
+      proposal: Proposal;
+      running: boolean;
+      result?: ActionResult;
+    }
+  >();
   status: PublicGameState['status'] = 'briefing';
   obstacleIndex = 0;
   actionsUsed = 0;
@@ -50,8 +76,16 @@ export class GameSession {
     private ai: GameAI,
     now?: () => number,
     private onEnd: () => void = () => {},
+    readonly coreSnapshot?: ScenarioSnapshot,
   ) {
     this.situation = scenario.obstacles[0].situation;
+    if (coreSnapshot) this.generation = 1;
+    this.facts = {
+      obstacleId: scenario.obstacles[0].id,
+      values: Object.fromEntries(
+        (coreSnapshot?.scenarioV2.core.facts ?? []).map((f) => [f.key, f.initial]),
+      ),
+    };
     this.clock = new GameClock(scenario.rules.totalTimeSeconds, now);
   }
   get terminal() {
@@ -117,7 +151,8 @@ export class GameSession {
   end(status: 'won' | 'lost' | 'expired' = 'expired') {
     if (this.terminal) return;
     this.status = status;
-    this.generation++;
+    if (!this.coreSnapshot) this.generation++;
+    this.invalidateCoreActions();
     for (const action of this.actions.values())
       if (action.status === 'pending') action.status = 'invalid';
     this.pending = null;
@@ -140,6 +175,8 @@ export class GameSession {
   /** Invalidate work from the previous tab without restarting the game. */
   changeController() {
     this.generation++;
+    this.controllerEpoch++;
+    this.invalidateCoreActions();
     for (const action of this.actions.values()) {
       if (action.status === 'pending') action.status = 'invalid';
     }
@@ -180,6 +217,7 @@ export class GameSession {
       inventory: structuredClone(this.inventory),
       photos: [...this.photos],
       transcript: this.transcript,
+      facts: structuredClone(this.facts),
     };
   }
   async recognize(blocking = false) {
@@ -226,7 +264,230 @@ export class GameSession {
       this.check();
     }
   }
+  private invalidateCoreActions() {
+    this.actionEpoch++;
+    for (const { ticket, context } of this.coreActions.values()) {
+      if (ticket.status === 'pending') ticket.status = 'invalid';
+      context.photos = [];
+    }
+  }
+
+  /** Reserves a fixed instruction synchronously, before any paid judgment begins. */
+  reserveAction(
+    value: ExecuteIntent,
+    expectedContextVersion: number,
+    expectedGameVersion: number,
+    actionEpoch: number,
+    controllerEpoch: number,
+  ): ActionTicket {
+    this.editable();
+    if (!this.coreSnapshot) throw new GameError(409, 'CORE_REQUIRED');
+    const intent = executeIntentSchema.parse(value);
+    if (
+      this.status !== 'playing' ||
+      this.voiceState !== 'connected' ||
+      this.photoBusy ||
+      this.recognizing ||
+      this.actionsUsed >= this.scenario.rules.maxActions ||
+      expectedContextVersion !== this.currentContextVersion ||
+      expectedGameVersion !== this.gameVersion ||
+      actionEpoch !== this.actionEpoch ||
+      controllerEpoch !== this.controllerEpoch
+    ) {
+      throw new GameError(409, 'ACTION_CONTEXT_STALE');
+    }
+    if (intent.evidenceSeq.some((seq) => this.reservedEvidence.has(seq)))
+      throw new GameError(409, 'EVIDENCE_ALREADY_RESERVED');
+    if (this.coreActions.size >= 100) throw new GameError(429, 'ACTION_LIMIT');
+    const items = intent.itemRefs.map((ref) => {
+      if ('photoId' in ref) {
+        const recognized = this.proposal?.items.find((item) => item.photoId === ref.photoId);
+        if (!this.photos.some((photo) => photo.id === ref.photoId) || !recognized)
+          throw new GameError(409, 'PHOTO_NOT_RECOGNIZED');
+        return structuredClone(recognized);
+      }
+      const item = this.inventory.find(
+        (item) => item.id === ref.inventoryId && item.status !== 'consumed',
+      );
+      if (!item) throw new GameError(409, 'ITEM_UNAVAILABLE');
+      return { photoId: null, inventoryId: item.id, name: item.name };
+    });
+    const context = this.context();
+    const proposal: Proposal = {
+      items,
+      usage: intent.usage,
+      summary: intent.reason,
+      revision: this.revision,
+      inputRevision: this.inputRevision,
+    };
+    // Materialization stays private until the judgment is fully validated.
+    for (const item of proposal.items) {
+      if (item.photoId) {
+        const id = randomUUID();
+        context.inventory.push({
+          id,
+          name: item.name,
+          description: item.name,
+          status: 'available',
+        });
+        item.photoId = null;
+        item.inventoryId = id;
+      }
+    }
+    if (context.inventory.length > 40) throw new GameError(409, 'INVENTORY_LIMIT');
+    const ticket: ActionTicket = {
+      id: randomUUID(),
+      playId: this.id,
+      generation: this.generation,
+      actionEpoch,
+      controllerEpoch,
+      gameVersion: this.gameVersion,
+      contextVersion: expectedContextVersion,
+      evidenceSeq: [...intent.evidenceSeq],
+      intent,
+      status: 'pending',
+    };
+    this.coreActions.set(ticket.id, { ticket, context, proposal, running: false });
+    intent.evidenceSeq.forEach((seq) => this.reservedEvidence.add(seq));
+    this.pending = ticket.id;
+    this.status = 'judging';
+    this.clock.pause('judgment');
+    return structuredClone(ticket);
+  }
+
+  /** The caller's ticket is an identifier, never the authority for state or AI input. */
+  async judgeAction(value: ActionTicket): Promise<ActionResult> {
+    const record = this.coreActions.get(value.id);
+    if (
+      !record ||
+      JSON.stringify({ ...value, status: 'pending' }) !==
+        JSON.stringify({ ...record.ticket, status: 'pending' })
+    )
+      throw new GameError(409, 'INVALID_TICKET');
+    const { ticket, context, proposal } = record;
+    if (record.result) return structuredClone(record.result);
+    this.check();
+    if (ticket.status === 'failed') throw new GameError(502, 'ACTION_FAILED');
+    if (
+      ticket.status !== 'pending' ||
+      this.terminal ||
+      ticket.generation !== this.generation ||
+      ticket.actionEpoch !== this.actionEpoch ||
+      ticket.controllerEpoch !== this.controllerEpoch ||
+      ticket.gameVersion !== this.gameVersion ||
+      this.pending !== ticket.id
+    )
+      throw new GameError(410, 'ACTION_INVALID');
+    if (record.running) throw new GameError(409, 'ACTION_PENDING');
+    record.running = true;
+    try {
+      const judgment = coreJudgmentSchema.parse(
+        await this.ai.judge(
+          {
+            ...structuredClone(context),
+            photos: context.photos.map((photo) => ({
+              id: photo.id,
+              jpeg: Buffer.from(photo.jpeg),
+            })),
+          },
+          structuredClone(proposal),
+        ),
+      );
+      this.check();
+      if (
+        ticket.status !== 'pending' ||
+        this.terminal ||
+        ticket.generation !== this.generation ||
+        ticket.actionEpoch !== this.actionEpoch ||
+        ticket.controllerEpoch !== this.controllerEpoch ||
+        ticket.gameVersion !== this.gameVersion ||
+        this.pending !== ticket.id
+      )
+        throw new GameError(410, 'ACTION_INVALID');
+      const facts = structuredClone(this.facts);
+      const allowedKeys = this.coreSnapshot!.scenarioV2.obstacles[this.obstacleIndex].factKeys;
+      const keys = new Set<string>();
+      for (const change of judgment.factChanges) {
+        const declaration = this.coreSnapshot!.scenarioV2.core.facts.find(
+          (f) => f.key === change.key,
+        );
+        if (
+          keys.has(change.key) ||
+          !allowedKeys.includes(change.key) ||
+          !declaration ||
+          facts.values[change.key] !== change.from ||
+          !declaration.values.includes(change.to) ||
+          !declaration.allowedTransitions.some((t) => t.from === change.from && t.to === change.to)
+        )
+          throw new Error('INVALID_FACT_CHANGE');
+        keys.add(change.key);
+        facts.values[change.key] = change.to;
+      }
+      const inventory = structuredClone(context.inventory);
+      const ids = new Set<string>();
+      for (const change of judgment.inventoryChanges) {
+        const item = inventory.find((item) => item.id === change.id);
+        if (
+          ids.has(change.id) ||
+          !item ||
+          (item.status === 'consumed' && change.status !== 'consumed')
+        )
+          throw new Error('INVALID_INVENTORY_CHANGE');
+        ids.add(change.id);
+        Object.assign(item, change);
+      }
+      const result = actionResultSchema.parse({
+        actionId: ticket.id,
+        beforeVersion: this.gameVersion,
+        afterVersion: this.gameVersion + 1,
+        success: judgment.success,
+        factChanges: judgment.factChanges,
+        inventoryChanges: judgment.inventoryChanges,
+        narrative: judgment.narrative,
+        shortReason: judgment.shortReason,
+      });
+      this.facts = facts;
+      this.inventory = inventory;
+      this.gameVersion++;
+      this.actionsUsed++;
+      this.situation = judgment.situation;
+      this.lastResult = { success: judgment.success, narrative: judgment.narrative };
+      this.photos = [];
+      this.transcript = '';
+      this.invalidate();
+      ticket.status = 'committed';
+      record.result = result;
+      this.pending = null;
+      this.status = 'playing';
+      if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
+        this.end('won');
+      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost');
+      else if (judgment.success) {
+        this.obstacleIndex++;
+        this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
+        this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
+      }
+      return structuredClone(result);
+    } catch (error) {
+      if (ticket.status === 'pending') {
+        ticket.status = 'failed';
+        this.error = '判定に失敗しました。行動は消費していません。';
+      }
+      if (error instanceof GameError) throw error;
+      throw new GameError(502, 'ACTION_FAILED');
+    } finally {
+      context.photos = [];
+      if (this.pending === ticket.id) {
+        this.pending = null;
+        if (!this.terminal) this.status = 'playing';
+      }
+      if (ticket.generation === this.generation && ticket.controllerEpoch === this.controllerEpoch)
+        this.clock.resume('judgment');
+    }
+  }
+
   async commit(actionId: string, proposalRevision: number) {
+    if (this.coreSnapshot) throw new GameError(410, 'LEGACY_ACTION_DISABLED');
     this.check();
     const previous = this.actions.get(actionId);
     if (previous) {
