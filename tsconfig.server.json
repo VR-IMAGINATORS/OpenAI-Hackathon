@@ -12,7 +12,7 @@
   },
   "include": [
     "apps/local-server/**/*.ts",
-    "apps/relay/**/*.ts",
+    "apps/server/**/*.ts",
     "packages/**/*.ts"
   ],
   "exclude": [
