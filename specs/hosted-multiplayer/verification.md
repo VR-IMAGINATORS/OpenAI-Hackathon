@@ -55,3 +55,9 @@ Actions run 34728653304（c18605011a9eac47627748cb9898b5a6bda3b847）はbuild/OI
 pushに限り一意の登録完了行から識別子を取り出すよう修正し、通常APIはJSON解析を維持。改行差・完了行重複・不正出力拒否を検証しました。実際の文章形式を配信fakeにも使用。固定段階ログと許可した固定エラーメッセージだけを追加し、生のstdout/stderrや環境変数は表示しません。配信テスト8件・全体型検査成功。AWS再配信は未実施です。
 
 出力形式の根拠: https://github.com/aws/lightsailctl/blob/v1.0.8/internal/cs/pushimage.go
+
+### 起動直後の公開エンドポイント待機
+
+PR #18のrun 34728966348はイメージ登録とdeployment作成まで成功しましたが、ACTIVE直後の公開health要求で一時エラーになりジョブは失敗しました。その後、公開/healthzは200で8b2dd53a170958cba8d15228c320a82698eea894と一致しました。初回配置済みのためGitHub developmentのINITIAL_DEPLOYMENTをfalseへ変更しました。
+
+配信後のhealth確認だけを、一時HTTPエラー・接続失敗・timeout時に既存10分期限内で再試行します。drainや配信作成は再送しません。403などは即時失敗。成功までの一時503/接続失敗と、恒久エラー/期限超過の回帰テストを追加し、配信10件・型検査に成功しました。
