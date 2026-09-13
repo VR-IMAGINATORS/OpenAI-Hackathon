@@ -61,3 +61,7 @@ pushに限り一意の登録完了行から識別子を取り出すよう修正�
 PR #18のrun 34728966348はイメージ登録とdeployment作成まで成功しましたが、ACTIVE直後の公開health要求で一時エラーになりジョブは失敗しました。その後、公開/healthzは200で8b2dd53a170958cba8d15228c320a82698eea894と一致しました。初回配置済みのためGitHub developmentのINITIAL_DEPLOYMENTをfalseへ変更しました。
 
 配信後のhealth確認だけを、一時HTTPエラー・接続失敗・timeout時に既存10分期限内で再試行します。drainや配信作成は再送しません。403などは即時失敗。成功までの一時503/接続失敗と、恒久エラー/期限超過の回帰テストを追加し、配信10件・型検査に成功しました。
+
+### Node直接実行の回帰検証
+
+PR #19のrun 34729307540は、追加したTypeScriptのparameter propertyをNode strip-onlyが処理できず、配信処理開始前に失敗しました。通常のクラスフィールド代入へ変更し、Nodeの直接importをテストに追加。配信テスト11件・型検査・native Node importが成功。公開中の8b2dd53には変更を加えていません。
