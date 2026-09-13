@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="ja">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Live 自動実行の検証</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font: 16px/1.6 system-ui;
+      background: #10151f;
+      color: #e6edf7;
+    }
+    body {
+      max-width: 1050px;
+      margin: auto;
+      padding: 28px;
+    }
+    h1 {
+      font-size: 28px;
+    }
+    p {
+      color: #b7c5d9;
+    }
+    section {
+      background: #1b2332;
+      border: 1px solid #33425c;
+      border-radius: 14px;
+      padding: 20px;
+      margin: 18px 0;
+    }
+    button,
+    select,
+    input {
+      font: inherit;
+      max-width: 100%;
+      padding: 10px;
+      margin: 5px 5px 5px 0;
+    }
+    button {
+      background: #315b92;
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    select {
+      width: 100%;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font:
+        13px/1.5 ui-monospace,
+        monospace;
+    }
+    #log {
+      max-height: 420px;
+      overflow: auto;
+    }
+    img {
+      max-width: 160px;
+      max-height: 160px;
+    }
+    label {
+      display: block;
+    }
+    .tag {
+      color: #8fdcc6;
+    }
+    #error {
+      color: #ffb2b2;
+    }
+    a {
+      color: #9dccff;
+    }
+  </style>
+  <h1>Live 自動実行の検証 <span class="tag">P0</span></h1>
+  <p>
+    ロープで腕を縛られた相手に、写真の道具の使い方を声で伝えます。これは本編実装前の検証画面です。PCのChromeと実マイクを使ってください。
+  </p>
+  <section>
+    <label for="fixture">検証する会話</label
+    ><select id="fixture"></select>
+    <p id="instruction"></p>
+    <label
+      >身近な道具の写真（1枚）
+      <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" /></label
+    ><img id="preview" alt="選択した写真" hidden />
+    <p>
+      写真を選び、接続するとAIから用途を聞かれます。例文に沿って発話してください。言い直しや途中の間も声で試します。
+    </p>
+    <button id="start" disabled>マイクで検証開始</button
+    ><button id="stop" disabled>接続を終了</button><button id="save">結果JSONを保存</button>
+    <p id="status">準備中</p>
+    <p id="error" role="alert"></p>
+  </section>
+  <section>
+    <h2>受付・判定・結果</h2>
+    <p>
+      文字起こしは認識された原文です。実行回数と判定を見て、相談が勝手に実行されていないか確認します。保存するJSONには会話本文が含まれます。
+    </p>
+    <pre id="log">接続前</pre>
+  </section>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const token = location.hash.slice(1);
+    history.replaceState(null, '', location.pathname);
+    let fixtures = [],
+      photo = '',
+      peer,
+      channel,
+      stream,
+      pollTimer,
+      sessionId,
+      latest,
+      startedAt,
+      queue = Promise.resolve(),
+      stopping = false;
+    const commands = new Set(),
+      sent = [],
+      rawEvents = [];
+    const audio = new Audio();
+    audio.autoplay = true;
+    audio.setAttribute('playsinline', '');
+    async function api(path, body) {
+      const response = await fetch('/api/' + path, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: { 'X-Probe-Token': token, 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const value = await response.json();
+      if (!response.ok) throw Error(value.error || '通信に失敗しました');
+      return value;
+    }
+    const reportError = (e) => {
+      $('error').textContent = e.message;
+    };
+    function showFixture() {
+      const f = fixtures[$('fixture').value];
+      $('instruction').textContent = f
+        ? `${f.locale} / ${f.category}: ${f.utterances.join(' → ')} (${f.note})`
+        : '';
+    }
+    $('fixture').onchange = showFixture;
+    $('photo').onchange = async () => {
+      try {
+        const file = $('photo').files[0];
+        if (!file) return;
+        const bitmap = await createImageBitmap(file);
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        const url = canvas.toDataURL('image/jpeg', 0.8);
+        photo = url.split(',')[1];
+        $('preview').src = url;
+        $('preview').hidden = false;
+      } catch (e) {
+        reportError(e);
+      }
+    };
+    function sendOnce(key, type, content, delegationId = null) {
+      if (commands.has(key) || channel?.readyState !== 'open') return;
+      let clipped = '';
+      for (const char of content) {
+        if (new TextEncoder().encode(clipped + char).length > 480) break;
+        clipped += char;
+      }
+      const command = {
+        event_id: crypto.randomUUID(),
+        type,
+        content: clipped,
+        delegation_id: delegationId,
+      };
+      channel.send(JSON.stringify(command));
+      commands.add(key);
+      sent.push({ at: Date.now(), command });
+    }
+    async function poll() {
+      if (stopping) return;
+      try {
+        const state = await api('state');
+        if (state.id !== sessionId) {
+          await stop();
+          return;
+        }
+        latest = state;
+        $('log').textContent = JSON.stringify(state, null, 2);
+        for (const d of state.snapshot.delegations) {
+          if (d.decision && ['consulted', 'pending'].includes(d.status)) {
+            sendOnce(
+              'd-' + d.id + '-' + d.attempts,
+              'session.thinking.append',
+              `Client classification: ${d.decision.kind}. ${d.decision.reason}`.slice(0, 180),
+              d.id,
+            );
+          }
+        }
+        for (const a of state.snapshot.actions) {
+          if (a.status === 'pending')
+            sendOnce(
+              'a-' + a.id,
+              'session.commentary.append',
+              fixtures[$('fixture').value].locale === 'ja'
+                ? 'わかった、それでやってみる！'
+                : "Got it. I'll try that!",
+              a.delegationId,
+            );
+          if (a.status === 'committed')
+            sendOnce(
+              'r-' + a.id,
+              'session.commentary.append',
+              (a.reason || String(a.success)).slice(0, 180),
+              a.delegationId,
+            );
+          if (a.status === 'failed')
+            sendOnce(
+              'f-' + a.id,
+              'session.thinking.append',
+              'Technical failure. No action spent. Ask user to repeat if they wish to try again.',
+              a.delegationId,
+            );
+        }
+        if (state.closing) await stop();
+      } catch (e) {
+        reportError(e);
+      } finally {
+        if (!stopping) pollTimer = setTimeout(poll, 400);
+      }
+    }
+    async function stop() {
+      stopping = true;
+      clearTimeout(pollTimer);
+      if (channel?.readyState === 'open')
+        channel.send(JSON.stringify({ type: 'session.close', event_id: crypto.randomUUID() }));
+      channel?.close();
+      peer?.close();
+      stream?.getTracks().forEach((t) => t.stop());
+      audio.pause();
+      audio.srcObject = null;
+      await queue.catch(() => {});
+      try {
+        await api('stop', {});
+      } catch (e) {
+        reportError(e);
+      }
+      $('start').disabled = false;
+      $('stop').disabled = true;
+      $('fixture').disabled = false;
+      $('photo').disabled = false;
+      $('status').textContent = '終了。結果を保存し、次の会話を選べます。';
+    }
+    $('stop').onclick = stop;
+    $('start').onclick = async () => {
+      if (!photo) {
+        reportError(Error('写真を1枚選んでください'));
+        return;
+      }
+      stopping = false;
+      commands.clear();
+      sent.length = 0;
+      rawEvents.length = 0;
+      latest = null;
+      $('error').textContent = '';
+      $('start').disabled = true;
+      $('fixture').disabled = true;
+      $('photo').disabled = true;
+      startedAt = new Date().toISOString();
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
+        peer = new RTCPeerConnection();
+        stream.getTracks().forEach((t) => peer.addTrack(t, stream));
+        peer.ontrack = (e) => {
+          audio.srcObject = e.streams[0] || new MediaStream([e.track]);
+          audio
+            .play()
+            .catch(() =>
+              reportError(
+                Error('音声再生が制限されています。ブラウザの音声許可を確認してください。'),
+              ),
+            );
+        };
+        channel = peer.createDataChannel('oai-events');
+        channel.onmessage = (e) => {
+          if (stopping || typeof e.data !== 'string' || e.data.length > 32768) return;
+          let event;
+          try {
+            event = JSON.parse(e.data);
+          } catch {
+            return;
+          }
+          if (event.type === 'session.started') {
+            sendOnce(
+              'opening',
+              'session.commentary.append',
+              fixtures[$('fixture').value].locale === 'ja'
+                ? '写真が届いたよ。これをどう使う？'
+                : 'Your photo arrived. How should I use it?',
+            );
+            $('status').textContent = '接続中。声で話してください（最大120秒）。';
+          }
+          if (
+            [
+              'session.input_transcript.delta',
+              'session.output_transcript.delta',
+              'session.delegation.created',
+            ].includes(event.type)
+          ) {
+            const normalized =
+              event.type === 'session.delegation.created'
+                ? {
+                    event_id: event.event_id,
+                    type: event.type,
+                    offset_ms: event.offset_ms,
+                    delegation: {
+                      id: event.delegation.id,
+                      type: event.delegation.type,
+                      target: event.delegation.target,
+                    },
+                  }
+                : {
+                    event_id: event.event_id,
+                    type: event.type,
+                    delta: event.delta,
+                    start_ms: event.start_ms,
+                    end_ms: event.end_ms,
+                  };
+            if (rawEvents.length < 10000)
+              rawEvents.push({ receivedAt: Date.now(), event: normalized });
+            queue = queue
+              .then(() => api('events', { id: sessionId, event: normalized }))
+              .catch(reportError);
+          }
+        };
+        await peer.setLocalDescription(await peer.createOffer());
+        await new Promise((resolve, reject) => {
+          if (peer.iceGatheringState === 'complete') return resolve();
+          const timer = setTimeout(() => reject(Error('ICE gathering timeout')), 10000);
+          peer.onicegatheringstatechange = () => {
+            if (peer.iceGatheringState === 'complete') {
+              clearTimeout(timer);
+              resolve();
+            }
+          };
+        });
+        const answer = await api('start', {
+          locale: fixtures[$('fixture').value].locale,
+          photo,
+          sdp: peer.localDescription.sdp,
+        });
+        sessionId = answer.id;
+        await peer.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
+        $('stop').disabled = false;
+        poll();
+      } catch (e) {
+        reportError(e);
+        await stop();
+      }
+    };
+    $('save').onclick = () => {
+      const report = {
+        fixture: fixtures[$('fixture').value],
+        startedAt,
+        verification: 'manual assessment required',
+        latest,
+        rawEvents,
+        sent,
+      };
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }),
+      );
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'core-live-probe-' + (report.fixture?.id || 'session') + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    try {
+      const setup = await api('fixtures');
+      fixtures = setup.fixtures;
+      fixtures.forEach((f, i) => {
+        const o = document.createElement('option');
+        o.value = i;
+        o.textContent = `${f.id} · ${f.locale} · ${f.category}`;
+        $('fixture').append(o);
+      });
+      showFixture();
+      $('start').disabled = !setup.live;
+      $('status').textContent = setup.live
+        ? '実API有効。開始ボタンで通信・課金が始まります。'
+        : '画面確認モード。実API・マイク接続は無効です。';
+    } catch (e) {
+      reportError(e);
+    }
+  </script>
+</html>

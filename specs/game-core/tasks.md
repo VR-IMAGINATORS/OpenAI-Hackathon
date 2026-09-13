@@ -1,6 +1,6 @@
 # Game core 実装タスク
 
-Status: ready (2026-09-13)
+Status: implementing P0 (2026-09-13)
 
 [承認済み計画](plan.md)に基づくGitHub Issue一覧。チェックは実装と各Issueの検証ゲートが完了してから更新する。
 
@@ -33,4 +33,4 @@ Status: ready (2026-09-13)
 
 ## 記録
 
-承認の経緯は[設計判断](../../.specworkflow/discussions/2026-09-13-game-core-plan.md)を参照。現時点では実装・実Live検証とも未完了。
+承認の経緯は[設計判断](../../.specworkflow/discussions/2026-09-13-game-core-plan.md)を参照。P0の検証ハーネス・実Live用画面を実装済み。実Liveゲートは未完了。工程記録は[tasks/P0.md](tasks/P0.md)、確認手順は[verification.md](verification.md)。
