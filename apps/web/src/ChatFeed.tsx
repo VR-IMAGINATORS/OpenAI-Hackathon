@@ -100,12 +100,14 @@ export default function ChatFeed({
   sentMessageIds,
   connected,
   generation,
+  embedded = false,
 }: {
   playId: string;
   locale: Locale;
   sentMessageIds: ReadonlySet<string>;
   connected: boolean;
   generation: number;
+  embedded?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState('');
@@ -212,12 +214,14 @@ export default function ChatFeed({
       className="chat-panel"
       aria-label={locale === 'ja' ? '未来との会話' : 'Conversation with the future'}
     >
-      <div className="chat-heading">
-        <span>{locale === 'ja' ? '未来のあなたのAI' : 'Your future AI'}</span>
-        <small>
-          {locale === 'ja' ? '写真と声でつながる' : 'Connected through photos and voice'}
-        </small>
-      </div>
+      {!embedded && (
+        <div className="chat-heading">
+          <span>{locale === 'ja' ? '未来のあなたのAI' : 'Your future AI'}</span>
+          <small>
+            {locale === 'ja' ? '写真と声でつながる' : 'Connected through photos and voice'}
+          </small>
+        </div>
+      )}
       <div
         className="chat-messages"
         ref={scroll}
