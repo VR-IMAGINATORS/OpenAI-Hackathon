@@ -1375,3 +1375,154 @@ h1 span {
   padding: 10px 18px;
   font: inherit;
 }
+
+/* Planner opening movie and incoming call: no game connection before Answer. */
+.opening-sequence {
+  min-height: 100dvh;
+  background: #080e12;
+  color: #edf5f4;
+}
+.opening-movie {
+  position: fixed;
+  inset: 0;
+  background: #000;
+}
+.opening-movie video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.opening-skip {
+  position: absolute;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  padding: 12px 22px;
+  border: 1px solid #ffffff65;
+  border-radius: 999px;
+  background: #0b151bcc;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+  z-index: 2;
+}
+.opening-play-prompt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  background: #0006;
+}
+.incoming-messenger {
+  max-width: 640px;
+  min-height: 100dvh;
+  margin: auto;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+.incoming-messenger .chat-panel {
+  flex: 1;
+  min-height: 60vh;
+}
+.incoming-empty {
+  padding: 100px 32px;
+  text-align: center;
+  color: #789699;
+}
+.incoming-empty > span {
+  font-size: 56px;
+}
+.incoming-composer {
+  padding: 20px;
+  border: 1px solid #284c4c;
+  border-radius: 24px;
+  color: #719a96;
+}
+.incoming-composer span {
+  margin-left: 20px;
+}
+.incoming-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: #050e14ac;
+  backdrop-filter: blur(7px);
+}
+.incoming-card {
+  width: min(100%, 370px);
+  padding: 44px 26px 30px;
+  border: 1px solid #47757980;
+  border-radius: 32px;
+  text-align: center;
+  background: linear-gradient(160deg, #152c34f5, #0b171ff5);
+  box-shadow: 0 25px 90px #0007;
+}
+.incoming-avatar {
+  display: grid;
+  place-items: center;
+  width: 86px;
+  height: 86px;
+  margin: 0 auto 28px;
+  border: 1px solid #65dbe2;
+  border-radius: 50%;
+  color: #86eef3;
+  font-size: 38px;
+  box-shadow: 0 0 0 14px #58d9df0b;
+  animation: incoming-pulse 2s ease-in-out infinite;
+}
+.incoming-label {
+  color: #8de2e7;
+  letter-spacing: 0.16em;
+  font-size: 16px;
+}
+.incoming-card h1 {
+  font-size: clamp(22px, 6vw, 28px);
+  margin: 16px 0;
+}
+.incoming-card > p:not(.incoming-label):not(.play-error),
+.incoming-card small {
+  color: #9fb7b9;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.incoming-answer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  margin: 32px 0 16px;
+  border: 0;
+  border-radius: 999px;
+  padding: 17px;
+  font: inherit;
+  font-weight: 700;
+  color: #052721;
+  background: #89ddbd;
+  cursor: pointer;
+}
+.incoming-answer:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.incoming-answer span {
+  font-size: 25px;
+}
+@keyframes incoming-pulse {
+  50% {
+    box-shadow:
+      0 0 0 22px #58d9df15,
+      0 0 35px #58d9df22;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .incoming-avatar {
+    animation: none;
+  }
+}

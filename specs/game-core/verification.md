@@ -106,3 +106,9 @@ PC上のブラウザ受信時刻とサーバー記録時刻から算出した単
 - Chrome: core-smoke（日英、390px/1280px、復帰、画像と会話）とlegacy mobile-smoke成功。実HTTP+Chromeでも開始画像・写真アップロード・認識原文・自動行動1回・合格画像表示を確認。API/マイクはfake。
 - 画像未検査時非公開、reject2回でfailed、終了後配送、新旧play分離、drain abortと後着非公開、認証TTL後の読取と保持期限境界を確認。
 - 画像モデル利用可否/意味的検査精度、実Live本編のテンポ、実スマホ、AWS5人・実配置は未実施。次の人間試遊はdocs/game-core.mdの順でまとめて行う。
+
+## 導入動画・着信画面（2026-09-13）
+
+ユーザー提供の仮動画と着信SEを追加。認証後「体験を始める」→動画終了/右下Skip→Calling/応答する→マイク許可とLive接続→既存の呼びかけ。動画・着信中はプレイ枠やAI要求を作らない。リプレイ時は言語選択から新しい導入、進行中の再読込は既存プレイへ復帰する。
+
+npm run buildと対象Prettier check成功。Chromeのopening-smoke/core-smoke/mobile-smoke成功。動画の実メタデータ読込、終了/Skip、autoplay拒否時再生案内、着信音停止、応答前のmic/create/Liveゼロを確認。マイクと音声再生はfakeで、実スマホでの音量・音声付きautoplayは未確認。コピーしたMP4/MP3のSHA-256は添付原本と一致。

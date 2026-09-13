@@ -1,3 +1,4 @@
+import OpeningSequence from './OpeningSequence.js';
 import { useEffect, useRef, useState } from 'react';
 import type {
   HostedBootstrap,
@@ -16,6 +17,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
     document.documentElement.lang = locale;
   }, [locale]);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
+  const [showOpening, setShowOpening] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [passphrase, setPassphrase] = useState('');
   const [loading, setLoading] = useState(true);
@@ -108,15 +110,21 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
         initialControl={play.control}
         preparedConnection={play.connection}
         onExit={() => {
+          setShowOpening(false);
           setPlay(null);
           setError('');
           void restore().catch(() => setAuthenticated(false));
         }}
         onReplay={() => {
+          setShowOpening(false);
           setPlay(null);
           setError('');
         }}
       />
+    );
+  if (showOpening)
+    return (
+      <OpeningSequence locale={locale} busy={loading} error={error} onAnswer={() => void start()} />
     );
   return (
     <main className="play-shell join-shell">
@@ -178,17 +186,17 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           </button>
         </form>
       ) : (
-        <button className="primary-button" disabled={loading} onClick={() => void start()}>
-          {loading ? t('接続準備中…', 'Connecting…') : t('音声接続・体験開始', 'Connect and begin')}
-          <span>↗</span>
+        <button className="primary-button" disabled={loading} onClick={() => setShowOpening(true)}>
+          {loading ? t('接続準備中…', 'Connecting…') : t('体験を始める', 'Begin experience')}
+          <span aria-hidden="true">↗</span>
         </button>
       )}
       <p className="play-footnote">
         {t('カメラとマイクを使用します。', 'Camera and microphone access is required.')}
         <br />
         {t(
-          '体験は説明を含めて最大10分です。',
-          'The experience lasts up to 10 minutes, including the introduction.',
+          '応答後の体験は最大10分です。',
+          'The experience lasts up to 10 minutes after answering.',
         )}
         {bootstrap.ai.mode === 'mock' ? t('（現在はモックモードです）', ' (Mock mode)') : ''}
       </p>

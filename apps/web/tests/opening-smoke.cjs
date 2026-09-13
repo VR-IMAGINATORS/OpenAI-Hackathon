@@ -35,6 +35,7 @@ const fs = require('node:fs');
     await page.addInitScript(() => {
       window.__sent = [];
       navigator.mediaDevices.getUserMedia = async () => {
+        window.__micCalls = (window.__micCalls || 0) + 1;
         if (window.__denyMic) throw new DOMException('denied', 'NotAllowedError');
         return {
           getTracks: () => [
@@ -46,7 +47,17 @@ const fs = require('node:fs');
           ],
         };
       };
-      HTMLMediaElement.prototype.play = async () => {};
+      window.__mediaPlays = [];
+      window.__mediaPauses = [];
+      HTMLMediaElement.prototype.play = async function () {
+        window.__mediaPlays.push(this.src);
+        if (window.__blockMedia) throw new DOMException('blocked', 'NotAllowedError');
+      };
+      const pause = HTMLMediaElement.prototype.pause;
+      HTMLMediaElement.prototype.pause = function () {
+        window.__mediaPauses.push(this.src);
+        return pause.call(this);
+      };
       window.RTCPeerConnection = class extends EventTarget {
         iceGatheringState = 'complete';
         connectionState = 'new';
@@ -339,195 +350,56 @@ const fs = require('node:fs');
       if (url.pathname === '/api/play/end') state.status = 'expired';
       return respond(route, { ...envelope(), commands: [] });
     });
-    await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
-    await page.getByRole('combobox').selectOption('en');
-    await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
-    await page.getByRole('combobox').selectOption('ja');
+    await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
     await page.getByLabel('参加の合言葉').fill('demo');
     await page.getByRole('button', { name: '合言葉で参加' }).click();
-    await enterCall();
+    await page.getByRole('button', { name: '体験を始める', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('video')?.readyState >= 1);
+    const metadata = await page
+      .locator('video')
+      .evaluate((v) => ({ duration: v.duration, width: v.videoWidth, height: v.videoHeight }));
+    assert.ok(metadata.duration > 0 && metadata.width > 0, 'supplied mp4 decodes');
+    assert.equal(await page.evaluate(() => window.__micCalls || 0), 0);
+    assert.equal(createIds.length, 0);
+    assert.equal(liveIds.length, 0);
+    await page.locator('video').evaluate((v) => v.dispatchEvent(new Event('ended')));
+    await page.getByRole('dialog', { name: '未来からの着信' }).waitFor();
+    await page.getByText('Calling', { exact: true }).waitFor();
+    await page.waitForFunction(() =>
+      window.__mediaPlays.some((s) => s.endsWith('incoming-call.mp3')),
+    );
+    assert.equal(createIds.length, 0);
+    assert.equal(liveIds.length, 0);
+    assert.equal(await page.evaluate(() => window.__micCalls || 0), 0);
+    await page.screenshot({ path: 'artifacts/incoming-call-mobile.png', fullPage: true });
+    await page.getByRole('button', { name: '応答する', exact: true }).click();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
-    await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'core-result'));
-    await page.getByRole('button', { name: /状況を聞いたら、プレイ開始/ }).click();
-    await page.evaluate(() =>
-      window.__emit({
-        type: 'session.input_transcript.delta',
-        event_id: 'speech-1',
-        delta: 'これで扉を開けて',
-        start_ms: 1000,
-        end_ms: 2000,
-      }),
-    );
-    await page.waitForTimeout(1700);
-    assert.equal(state.transcript, 'これで扉を開けて');
-    assert.equal(await page.locator('.commit-action').count(), 0);
-    assert.equal(await page.getByRole('button', { name: /この内容で実行/ }).count(), 0);
-    const sent = await page.evaluate(() =>
-      window.__sent.filter((e) => e.event_id === 'core-result'),
-    );
-    assert.equal(sent.length, 1, 'replayed poll command sent only once');
-    assert.deepEqual(
-      Object.keys(sent[0]).sort(),
-      ['type', 'event_id', 'delegation_id', 'content'].sort(),
-      'strip internal outbox metadata',
-    );
-    await page.locator('.chat-user').getByText('これで扉を開けて', { exact: true }).waitFor();
-    await page.getByText('未来から画像を受信中…', { exact: true }).waitFor();
-    assert.equal(await page.locator('.proposal-panel').count(), 0);
-    feedMessages[0].imageSlot.status = 'failed';
-    feedMessages[0].imageSlot.errorCode = 'SCENE_RECEIVE_FAILED';
-    feedMessages[0].updatedVersion = ++feedVersion;
-    await page.getByText('未来から画像の受信に失敗しました', { exact: true }).waitFor();
-    removed = ['user-1'];
-    feedMessages = feedMessages.filter((m) => m.id !== 'user-1');
-    feedVersion++;
-    await page.waitForTimeout(650);
-    assert.equal(await page.locator('.chat-user').count(), 0);
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
-      'base64',
-    );
-    await page
-      .locator('input[type=file]')
-      .last()
-      .setInputFiles({ name: 'tool.png', mimeType: 'image/png', buffer: png });
-    await page.getByRole('heading', { name: 'この写真を送りますか？' }).waitFor();
-    assert.equal(photoIds.length, 0, 'photo is not sent before preview confirmation');
-    await page.getByRole('button', { name: 'この写真を送信', exact: true }).click();
-    await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).waitFor();
-    await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).click();
-    await page.waitForTimeout(500);
-    assert.equal(photoIds.length, 2);
-    assetBytes = Buffer.from(
-      await page.evaluate(() => {
-        const c = document.createElement('canvas');
-        c.width = 16;
-        c.height = 16;
-        return c.toDataURL('image/jpeg').split(',')[1];
-      }),
-      'base64',
-    );
-    feedMessages[0].imageSlot = {
-      ...feedMessages[0].imageSlot,
-      status: 'ready',
-      assetId: 'scene-1',
-      errorCode: null,
-    };
-    feedMessages[0].updatedVersion = ++feedVersion;
-    await page.locator('.chat-image').waitFor();
-    assert.equal(assetReads, 1, 'private asset fetched with owner header');
-    assert.ok((await page.locator('.chat-image').getAttribute('src')).startsWith('blob:'));
-    feedMessages.push({
-      id: 'result-without-voice',
-      createdOrder: 3,
-      updatedVersion: ++feedVersion,
-      side: 'assistant',
-      kind: 'result',
-      text: '音声が届かなくても残る結果',
-      assetIds: [],
-      imageSlot: null,
-      relatedCommandSeq: 99,
-      liveGeneration: 1,
-    });
-    await page.getByText('音声が届かなくても残る結果', { exact: true }).waitFor();
-    await page
-      .getByText('音声を送信できなかったため、文章でお届けします。', { exact: true })
-      .waitFor();
-    // Late image growth keeps the newest message visible, while user scrolling pauses following.
-    for (let i = 0; i < 7; i++)
-      feedMessages.push({
-        id: 'scroll-' + i,
-        createdOrder: 10 + i,
-        updatedVersion: ++feedVersion,
-        side: 'assistant',
-        kind: 'system',
-        text: ('追加の会話 ' + i + ' ').repeat(20),
-        assetIds: i === 6 ? ['scene-1'] : [],
-        imageSlot: null,
-        relatedCommandSeq: null,
-        liveGeneration: 1,
-      });
-    await page.locator('[data-message-id="scroll-6"] img').waitFor();
-    await page.waitForTimeout(450);
-    const bottomGap = () =>
-      page.locator('.chat-messages').evaluate((e) => e.scrollHeight - e.scrollTop - e.clientHeight);
-    assert.ok((await bottomGap()) < 3, 'late image and new messages follow to bottom');
-    await page.locator('.chat-messages').hover();
-    await page.mouse.wheel(0, -500);
-    await page.waitForTimeout(250);
-    assert.ok((await bottomGap()) > 200, 'user can scroll back into history');
-    const readingTop = await page.locator('.chat-messages').evaluate((e) => e.scrollTop);
-    feedMessages.push({
-      id: 'scroll-late',
-      createdOrder: 18,
-      updatedVersion: ++feedVersion,
-      side: 'assistant',
-      kind: 'system',
-      text: '後から届いた画像',
-      assetIds: ['scene-1'],
-      imageSlot: null,
-      relatedCommandSeq: null,
-      liveGeneration: 1,
-    });
-    await page.locator('[data-message-id="scroll-late"] img').waitFor();
-    await page.waitForTimeout(450);
+    assert.equal(createIds.length, 1);
+    assert.equal(liveIds.length, 1);
     assert.ok(
-      Math.abs((await page.locator('.chat-messages').evaluate((e) => e.scrollTop)) - readingTop) <
-        5,
-      'late image does not jump away from history being read',
+      await page.evaluate(() => window.__mediaPauses.some((s) => s.endsWith('incoming-call.mp3'))),
     );
-    await page.mouse.wheel(0, 10000);
-    await page.waitForTimeout(250);
-    assert.ok((await bottomGap()) < 3, 'scrolling back to bottom resumes following');
-    await page.getByRole('button', { name: 'プレイを終了', exact: true }).click();
-    assert.ok(
-      (await page.locator('.chat-image').count()) >= 1,
-      'images remain readable after call end',
-    );
-    assert.deepEqual(pageErrors, []);
-    assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
-      false,
-    );
-    fs.mkdirSync('artifacts', { recursive: true });
-    await page.screenshot({ path: 'artifacts/core-p2-mobile.png', fullPage: true });
-    await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).click();
-    state = {
-      ...state,
-      status: 'briefing',
-      title: 'The locked laboratory',
-      briefing: 'Your future self needs your help.',
-      obstacle: { ...state.obstacle, title: 'A stuck door' },
-      inputRevision: 0,
-      actionsRemaining: 4,
-    };
-    await page.getByRole('combobox').selectOption('en');
-    await enterCall(true);
-    await page.getByText('Voice connected', { exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Begin the escape', exact: false }).waitFor();
-    assert.equal(await page.getByRole('combobox').count(), 0, 'locale is fixed during play');
+    assert.equal(await page.locator('.incoming-overlay').count(), 0);
+    hasPlay = false;
     await page.reload();
-    await page.getByRole('button', { name: 'Reconnect here', exact: false }).waitFor();
-    assert.equal(
-      await page.locator('html').getAttribute('lang'),
-      'en',
-      'locale restored from state',
-    );
+    await page.evaluate(() => (window.__blockMedia = true));
+    await page.getByRole('button', { name: '体験を始める', exact: true }).click();
+    await page.getByRole('button', { name: '動画を再生', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Skip', exact: true }).click();
+    await page.getByRole('button', { name: '着信音を再生', exact: true }).waitFor();
+    await page.evaluate(() => (window.__blockMedia = false));
+    await page.getByRole('button', { name: '着信音を再生', exact: true }).click();
+    assert.equal(await page.locator('video').count(), 0);
+    assert.equal(liveIds.length, 1, 'skip and media retry never connect AI');
     assert.deepEqual(pageErrors, []);
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
       false,
-      'English mobile layout',
     );
     await page.setViewportSize({ width: 1280, height: 900 });
-    assert.equal(
-      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
-      false,
-      'English PC layout',
-    );
-    await page.screenshot({ path: 'artifacts/core-p3-en-restored.png', fullPage: true });
+    await page.screenshot({ path: 'artifacts/incoming-call-desktop.png', fullPage: true });
     console.log(
-      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout. Fake API/media only.',
+      'PASS opening: actual MP4 metadata, ended/Skip, ringtone lifecycle, no mic/game/AI before Answer, autoplay fallback, mobile/desktop. Voice provider and media playback mocked.',
     );
   } finally {
     await browser.close();
