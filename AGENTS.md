@@ -25,6 +25,11 @@ SpecWorkflow (spec-workflow@spec-workflow)を使用する。
 - レビュー実行台帳.specworkflow/review/はGit管理しない。未実施のレビュー/検証を成功と記録しない。
 - 既存の未コミット変更、試作、ユーザーの企画資料を勝手に上書き/削除しない。
 
+## ブランチとPR
+
+- 通常のPR先はdevelop。mainへのpushはデプロイを起動するため、リリースを明示された場合にだけmainへ反映する。
+- 作業ブランチはcodex/配下を使用する。PR作成時はbaseをdevelopに明示する。
+
 ## 実装と確認
 
 Node.js22.12+、npm、TypeScript。rootから実行。

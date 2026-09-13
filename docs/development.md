@@ -31,3 +31,7 @@ PCも同じURLを利用できます。1環境につき5人まで同時に独立�
 本番配布は [AWS設定手順](hosting.md) を参照してください。
 
 秘密を使わずにQRとtunnelだけ確認する場合は `npm run play:mobile -- --mock` を使えます。合言葉は `local-demo-only` で、音声AIには接続しません。トンネル公開直後はDNS登録のため最大45秒ほど接続を待ちます。
+
+## PRの送り先
+
+通常の開発PRは `develop` に向けます（`gh pr create --base develop`）。`main` へのpushはAWS開発環境へのデプロイを起動するため、リリース時にだけ反映します。
