@@ -1,3 +1,4 @@
+import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { createHash } from 'node:crypto';
 import { GameSession, GameError } from './game.js';
 import { createGameAI } from './game-ai.js';
@@ -32,6 +33,7 @@ export class GameRuntime {
     private models: { liveModel: string; responseModel: string },
     private queue: PhotoQueue,
     private now = () => performance.now(),
+    readonly coreSnapshot?: ScenarioSnapshot,
   ) {
     ai.register(id, deadline);
     this.game = new GameSession(

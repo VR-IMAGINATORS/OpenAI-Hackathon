@@ -8,7 +8,12 @@ import {
   readEnvironment,
 } from '../../packages/server/config.js';
 import { loadAiConfig, type AiConfig } from '../../packages/server/ai-config.js';
-import { parseScenario, type Scenario } from '../../packages/shared/scenario.js';
+import {
+  localizeScenario,
+  parseScenarioV2,
+  type Scenario,
+} from '../../packages/shared/scenario.js';
+import { ScenarioCatalog, readConfigJson } from './scenario-catalog.js';
 
 export interface HostedConfig {
   host: string;
@@ -21,6 +26,7 @@ export interface HostedConfig {
   opsToken: string;
   version: string;
   scenario: Scenario;
+  scenarioCatalog?: ScenarioCatalog;
   webRoot: string;
   capacity: number;
   ttlMs: number;
@@ -62,14 +68,14 @@ export function loadHostedConfig(
     hosts.push(new URL(publicUrl).host);
     origins.push(publicUrl);
   }
-  const scenario = parseScenario(
-    JSON.parse(
-      readFileSync(
-        resolve(cwd, values.SCENARIO_PATH ?? 'scenarios/mobile-playtest.json'),
-        'utf8',
-      ).replace(/^\uFEFF/, ''),
-    ),
-  );
+  const scenarioPath = resolve(cwd, values.SCENARIO_PATH ?? 'scenarios/mobile-playtest.json');
+  // Keep detailed planner field errors at startup; HTTP admission uses CONFIG_INVALID.
+  const scenario = localizeScenario(parseScenarioV2(readConfigJson(scenarioPath)), 'ja');
+  const scenarioCatalog = new ScenarioCatalog({
+    scenarioPath,
+    coreConfigPath: resolve(cwd, 'config/game-core.json'),
+  });
+  scenarioCatalog.current('ja');
   const ai = loadAiConfig(values);
   const capacity = positiveInteger(values, 'MAX_PLAYERS', 5, 100);
   if (ai.liveConcurrentGlobal < capacity)
@@ -88,6 +94,7 @@ export function loadHostedConfig(
     opsToken,
     version: values.APP_VERSION ?? 'local',
     scenario,
+    scenarioCatalog,
     webRoot: resolve(cwd, 'dist/web'),
     capacity,
     ttlMs: positiveInteger(values, 'PLAY_TTL_SECONDS', 600, 600) * 1000,

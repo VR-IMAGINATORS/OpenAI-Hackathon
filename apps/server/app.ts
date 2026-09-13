@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { baseApp, errorResponse } from '../../packages/server/http.js';
 import { AiService, AiServiceError } from '../../packages/server/ai-service.js';
 import type { OpenAITransport } from '../../packages/server/openai.js';
-import { publicScenario } from '../../packages/shared/scenario.js';
+import { localizeScenario, publicScenario } from '../../packages/shared/scenario.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
 import { GameRuntime } from '../local-server/hosted-runtime.js';
 import { GameError } from '../local-server/game.js';
@@ -15,6 +15,7 @@ import { SessionStore } from './session-store.js';
 import { PlayRegistry, type PlayRuntime } from './play-registry.js';
 import { SessionError, assertController } from './control.js';
 import { PhotoQueue } from './photo-queue.js';
+import { ScenarioConfigError } from './scenario-catalog.js';
 import { operationalLog, type OperationalEvent } from './logging.js';
 
 const uuid = z.string().uuid();
@@ -84,8 +85,13 @@ export function createHostedApp(
     capacity: config.capacity,
     ttlMs: config.ttlMs,
     recoveryMs: config.recoveryMs,
-    factory: (id, deadline) =>
-      new GameRuntime(id, deadline, structuredClone(config.scenario), ai, config.ai, queue, now),
+    factory: (id, deadline) => {
+      const snapshot = config.scenarioCatalog?.current('ja');
+      const scenario = snapshot
+        ? localizeScenario(snapshot.scenarioV2, snapshot.locale)
+        : structuredClone(config.scenario);
+      return new GameRuntime(id, deadline, scenario, ai, config.ai, queue, now, snapshot);
+    },
     expire: (r) => r.expire(),
     close: (r) => r.close(),
     snapshot: (r) => r.game.state(),
@@ -423,6 +429,9 @@ export function createHostedApp(
     } else if (error instanceof z.ZodError) {
       status = 400;
       code = 'INVALID_REQUEST';
+    } else if (error instanceof ScenarioConfigError) {
+      status = error.status;
+      code = error.code;
     } else if (error?.status === 413) {
       status = 413;
       code = 'BODY_TOO_LARGE';

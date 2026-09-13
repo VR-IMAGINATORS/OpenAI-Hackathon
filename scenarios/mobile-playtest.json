@@ -1,9 +1,18 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "mobile-playtest",
-  "title": "未来からの着信",
-  "premise": "未来のあなたが薄暗い倉庫に監禁され、現代から送られる身近な物と指示で脱出を試みる。",
-  "playerBriefing": "未来のあなたから、助けを求める電話。身近な物を撮り、使い方を伝えて、脱出の道をひらこう。",
+  "title": {
+    "ja": "未来からの着信",
+    "en": "A Call from the Future"
+  },
+  "premise": {
+    "ja": "未来のあなたが薄暗い倉庫に監禁され、現代から送られる身近な物と指示で脱出を試みる。",
+    "en": "Your future self is trapped in a dim warehouse. Send everyday objects and explain how to use them to help them escape."
+  },
+  "playerBriefing": {
+    "ja": "未来のあなたから、助けを求める電話。身近な物を撮り、使い方を伝えて、脱出の道をひらこう。",
+    "en": "Your future self is calling for help. Photograph everyday objects and describe your idea to open a path to escape."
+  },
   "rules": {
     "maxActions": 4,
     "maxPhotosPerAction": 2,
@@ -21,24 +30,117 @@
   "obstacles": [
     {
       "id": "restraint",
-      "title": "手首の拘束",
+      "title": {
+        "ja": "手首の拘束",
+        "en": "Bound Wrists"
+      },
       "situation": "椅子に座った状態で手首が縄で縛られている。",
       "goal": "手首を自由にする",
-      "constraints": ["痛みだけで成功扱いにしない"]
+      "constraints": ["痛みだけで成功扱いにしない"],
+      "situationDisplay": {
+        "ja": "椅子に座った状態で手首が縄で縛られている。",
+        "en": "Your future self is seated on a chair with their wrists tied with rope."
+      },
+      "factKeys": ["wrists", "door", "escape"],
+      "requiredVisualFacts": [
+        {
+          "key": "wrists",
+          "value": "bound"
+        }
+      ],
+      "forbiddenVisualChanges": [
+        {
+          "key": "wrists",
+          "from": "bound",
+          "to": "free"
+        },
+        {
+          "key": "door",
+          "from": "latched",
+          "to": "open"
+        },
+        {
+          "key": "escape",
+          "from": "inside",
+          "to": "outside"
+        }
+      ]
     },
     {
       "id": "door",
-      "title": "開かない扉",
+      "title": {
+        "ja": "開かない扉",
+        "en": "The Jammed Door"
+      },
       "situation": "倉庫の扉は内側の錆びた留め金で固定されている。",
       "goal": "扉を通れる状態にする",
-      "constraints": ["前の道具がなくても身近な物の工夫で解けるよう調整する"]
+      "constraints": ["前の道具がなくても身近な物の工夫で解けるよう調整する"],
+      "situationDisplay": {
+        "ja": "倉庫の扉は内側の錆びた留め金で固定されている。",
+        "en": "The warehouse door is secured by a rusty latch on the inside."
+      },
+      "factKeys": ["wrists", "door", "escape"],
+      "requiredVisualFacts": [
+        {
+          "key": "door",
+          "value": "latched"
+        }
+      ],
+      "forbiddenVisualChanges": [
+        {
+          "key": "wrists",
+          "from": "bound",
+          "to": "free"
+        },
+        {
+          "key": "door",
+          "from": "latched",
+          "to": "open"
+        },
+        {
+          "key": "escape",
+          "from": "inside",
+          "to": "outside"
+        }
+      ]
     },
     {
       "id": "escape",
-      "title": "外への通路",
+      "title": {
+        "ja": "外への通路",
+        "en": "The Way Outside"
+      },
       "situation": "外へ続く通路には監禁犯の気配がある。",
       "goal": "監禁犯に捕まらず外へ出る",
-      "constraints": ["説得や陽動も状況に筋が通れば認める"]
+      "constraints": ["説得や陽動も状況に筋が通れば認める"],
+      "situationDisplay": {
+        "ja": "外へ続く通路には監禁犯の気配がある。",
+        "en": "Someone who imprisoned your future self is nearby in the passage leading outside."
+      },
+      "factKeys": ["wrists", "door", "escape"],
+      "requiredVisualFacts": [
+        {
+          "key": "escape",
+          "value": "inside"
+        }
+      ],
+      "forbiddenVisualChanges": [
+        {
+          "key": "wrists",
+          "from": "bound",
+          "to": "free"
+        },
+        {
+          "key": "door",
+          "from": "latched",
+          "to": "open"
+        },
+        {
+          "key": "escape",
+          "from": "inside",
+          "to": "outside"
+        }
+      ]
     }
   ],
   "events": [
@@ -59,5 +161,77 @@
   "ending": {
     "targetDurationSeconds": 15,
     "generateOnFailure": true
+  },
+  "core": {
+    "facts": [
+      {
+        "key": "wrists",
+        "initial": "bound",
+        "values": ["bound", "loosened", "free"],
+        "allowedTransitions": [
+          {
+            "from": "bound",
+            "to": "loosened"
+          },
+          {
+            "from": "bound",
+            "to": "free"
+          },
+          {
+            "from": "loosened",
+            "to": "free"
+          }
+        ],
+        "visualDescription": "手首を縛る縄の状態。freeの時だけ手首が完全に自由。"
+      },
+      {
+        "key": "door",
+        "initial": "latched",
+        "values": ["latched", "loosened", "open"],
+        "allowedTransitions": [
+          {
+            "from": "latched",
+            "to": "loosened"
+          },
+          {
+            "from": "latched",
+            "to": "open"
+          },
+          {
+            "from": "loosened",
+            "to": "open"
+          }
+        ],
+        "visualDescription": "倉庫の扉の留め金と開閉状態。openの時だけ通り抜け可能。"
+      },
+      {
+        "key": "escape",
+        "initial": "inside",
+        "values": ["inside", "distracted", "outside"],
+        "allowedTransitions": [
+          {
+            "from": "inside",
+            "to": "distracted"
+          },
+          {
+            "from": "inside",
+            "to": "outside"
+          },
+          {
+            "from": "distracted",
+            "to": "outside"
+          }
+        ],
+        "visualDescription": "未来の自分と外への通路の状態。outsideの時だけ脱出済み。"
+      }
+    ],
+    "characterAppearance": "成人の人物のシルエット。無地の暗い服。顔の細部を強調せず、同じ人物像を保つ。",
+    "visualStyle": "薄暗い倉庫のミステリー映画風。状況を読み取れる構図。画面内の説明文字は使わない。",
+    "judgmentPolicy": "日常的な物理的性質に基づいて工夫を評価する。魔法や特殊能力を与えない。想定外でも筋の通った使い方を認める。完了していない変化は部分進展として扱う。",
+    "hintLevels": [
+      "求められたら現在の状況と困っている点だけを伝える。",
+      "さらに求められたら必要な物理的作用を伝える。",
+      "再度求められたら具体的な使い方の例を一つ示す。"
+    ]
   }
 }

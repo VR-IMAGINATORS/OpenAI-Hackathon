@@ -1,6 +1,6 @@
 # Game core 実装タスク
 
-Status: implementing P0 (2026-09-13)
+Status: P1 contracts implemented; P0 live gate pending (2026-09-13)
 
 [承認済み計画](plan.md)に基づくGitHub Issue一覧。チェックは実装と各Issueの検証ゲートが完了してから更新する。
 
@@ -34,3 +34,7 @@ Status: implementing P0 (2026-09-13)
 ## 記録
 
 承認の経緯は[設計判断](../../.specworkflow/discussions/2026-09-13-game-core-plan.md)を参照。P0の検証ハーネス・実Live用画面を実装済み。実Liveゲートは未完了。工程記録は[tasks/P0.md](tasks/P0.md)、確認手順は[verification.md](verification.md)。
+
+### 2026-09-13 続行時の扱い
+
+日本語の基本3ケース確認後、ユーザーが作業続行を指示。P1の設定・共有契約を先行実装し、技術的な検証は完了。P0の残り実機ゲートを省略・成功扱いせず、依存を満たした全面完了のチェックは保留する。工程は[tasks/P1.md](tasks/P1.md)。
