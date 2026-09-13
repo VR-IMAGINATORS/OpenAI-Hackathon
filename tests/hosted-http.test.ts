@@ -31,6 +31,8 @@ async function fixture(t: TestContext, failClose = false) {
     AI_MODE: 'mock',
     APP_VERSION: version,
   });
+  // Keep the legacy endpoint regression suite explicit during the core migration.
+  config.scenarioCatalog = undefined;
   const hosted = createHostedApp(config, {
     now: () => now,
     wallNow: () => 1_000_000 + now,

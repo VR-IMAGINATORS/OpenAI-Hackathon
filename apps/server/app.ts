@@ -9,6 +9,7 @@ import { localizeScenario, publicScenario } from '../../packages/shared/scenario
 import type { PublicGameState } from '../../packages/shared/game.js';
 import { GameRuntime } from '../local-server/hosted-runtime.js';
 import { GameError } from '../local-server/game.js';
+import { LiveOutboxError } from '../local-server/live-outbox.js';
 import { liveEventSchema } from '../local-server/live.js';
 import type { HostedConfig } from './config.js';
 import { SessionStore } from './session-store.js';
@@ -94,7 +95,7 @@ export function createHostedApp(
     },
     expire: (r) => r.expire(),
     close: (r) => r.close(),
-    snapshot: (r) => r.game.state(),
+    snapshot: (r) => r.state(),
     dispose: (r) => r.dispose(),
     transferControl: (r) => r.transferControl(),
   });
@@ -191,7 +192,7 @@ export function createHostedApp(
     return registry.assertControl(auth, id, clientId, epoch);
   }
   function update(play: PlayRuntime<GameRuntime, PublicGameState>) {
-    const state = play.runtime?.game.state() ?? play.result;
+    const state = play.runtime?.state() ?? play.result;
     if (!state) throw new SessionError('PLAY_EXPIRED', 410);
     return {
       playId: play.id,
@@ -212,7 +213,13 @@ export function createHostedApp(
     const current = controlled(req);
     if (current !== play) throw new SessionError('PLAY_EXPIRED', 410);
   }
-  app.use((_req, res, next) => {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/'))
+      res.set({
+        'Cache-Control': 'private, no-store',
+        Vary: 'Cookie',
+        'X-Content-Type-Options': 'nosniff',
+      });
     const startedAt = now();
     res.once('finish', () =>
       log({ event: 'request_finished', durationMs: Math.max(0, now() - startedAt) }),
@@ -347,12 +354,32 @@ export function createHostedApp(
   app.post('/api/play/events', async (req, res) => {
     const play = controlled(req);
     const body = eventSchema.parse(req.body);
-    const commands = await runtime(play).event(body.generation, body.event);
+    const current = runtime(play);
+    const commands = await current.event(body.generation, body.event);
     validAfter(req, play);
-    res.json({ ...update(play), commands });
+    if (current.coreSnapshot) res.status(202).json({ accepted: true });
+    else res.json({ ...update(play), commands });
+  });
+  app.post('/api/play/commands/poll', (req, res) => {
+    const play = controlled(req);
+    const body = z
+      .object({
+        generation: z.number().int().positive(),
+        ackThrough: z.number().int().nonnegative(),
+      })
+      .strict()
+      .parse(req.body);
+    res.json(runtime(play).pollCommands(body.generation, body.ackThrough));
   });
   app.post('/api/play/actions', async (req, res) => {
     const play = controlled(req);
+    if (runtime(play).coreSnapshot)
+      return errorResponse(
+        res,
+        410,
+        'LEGACY_ACTION_DISABLED',
+        '画面を更新し、音声で指示してください。',
+      );
     const body = actionSchema.parse(req.body);
     const commands = await runtime(play).action(body.actionId, body.proposalRevision);
     validAfter(req, play);
@@ -413,7 +440,11 @@ export function createHostedApp(
   const errors: ErrorRequestHandler = (error, _req, res, _next) => {
     let status = 500,
       code = 'INTERNAL_ERROR';
-    if (error instanceof SessionError || error instanceof AiServiceError) {
+    if (
+      error instanceof SessionError ||
+      error instanceof AiServiceError ||
+      error instanceof LiveOutboxError
+    ) {
       status = error.status;
       code = error.code;
     } else if (error instanceof GameError) {
@@ -426,6 +457,12 @@ export function createHostedApp(
             : status === 503
               ? 'PHOTO_BUSY'
               : 'GAME_REQUEST_FAILED';
+    } else if (
+      error instanceof Error &&
+      ['CONVERSATION_LIMIT', 'DELEGATION_LIMIT'].includes(error.message)
+    ) {
+      status = 429;
+      code = error.message;
     } else if (error instanceof z.ZodError) {
       status = 400;
       code = 'INVALID_REQUEST';

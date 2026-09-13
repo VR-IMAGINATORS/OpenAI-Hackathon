@@ -1,5 +1,9 @@
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { ConversationLedger } from './conversation.js';
+import { IntentCoordinator } from './intent-coordinator.js';
+import { LiveOutbox } from './live-outbox.js';
+import { classifyCoreIntent } from './core-intent-ai.js';
 import { GameSession, GameError } from './game.js';
 import { createGameAI } from './game-ai.js';
 import { decodePhotos } from './photo.js';
@@ -12,6 +16,10 @@ import type { PhotoQueue } from '../server/photo-queue.js';
 type Cached<T> = { digest: string; epoch: number; promise: Promise<T> };
 export class GameRuntime {
   readonly game: GameSession;
+  private ledger?: ConversationLedger;
+  private intents?: IntentCoordinator;
+  private outbox?: LiveOutbox;
+  private notificationFailed = false;
   private epoch = 1;
   private openingIssued = false;
   private seen = new Set<string>();
@@ -38,17 +46,143 @@ export class GameRuntime {
     ai.register(id, deadline);
     this.game = new GameSession(
       scenario,
-      createGameAI({ respond: (body) => ai.respond(id, body) }, () => models.responseModel),
+      createGameAI(
+        { respond: (body) => ai.respond(id, body) },
+        () => models.responseModel,
+        coreSnapshot,
+      ),
       now,
       () => {
         clearTimeout(this.transcriptTimer);
         this.seen.clear();
+        this.intents?.stop();
         this.closingAt = Math.min(
           deadline,
           now() + (['won', 'lost'].includes(this.game.status) ? 12_000 : 0),
         );
       },
+      coreSnapshot,
     );
+    if (coreSnapshot) {
+      this.game.controllerEpoch = this.epoch;
+      this.ledger = new ConversationLedger({ generation: this.game.generation, now });
+      this.outbox = new LiveOutbox(this.game.generation, this.epoch);
+      this.syncCore();
+      this.intents = new IntentCoordinator({
+        ledger: this.ledger,
+        now,
+        classify: async (context) => {
+          if (this.game.state().busy || this.notificationFailed)
+            return { kind: 'wait', reason: '処理中です。完了してからもう一度話してください。' };
+          return classifyCoreIntent({
+            respond: (body) => ai.respond(id, body),
+            model: models.responseModel,
+            snapshot: coreSnapshot,
+            conversation: context,
+            game: {
+              status: this.game.status,
+              situation: this.game.situation,
+              obstacle: coreSnapshot.scenarioV2.obstacles[this.game.obstacleIndex],
+              facts: this.game.facts,
+              inventory: this.game.inventory,
+              proposal: this.game.proposal,
+              photos: this.game.photos.map((p) => ({ id: p.id })),
+            },
+            photos: this.game.photos,
+          });
+        },
+        execute: async (intent, context, delegation) => {
+          this.check();
+          this.game.currentContextVersion = this.ledger!.captureUnconsumedContext().contextVersion;
+          const ticket = this.game.reserveAction(
+            intent,
+            context.contextVersion,
+            context.gameVersion,
+            context.actionEpoch,
+            context.controllerEpoch,
+          );
+          this.enqueue({
+            ...factCommand('わかった、それでやってみる！', delegation.id),
+            type: 'session.commentary.append',
+          });
+          const result = await this.game.judgeAction(ticket);
+          if (this.disposed || context.controllerEpoch !== this.epoch) return;
+          this.syncCore();
+          const messageId = randomUUID();
+          this.enqueue(
+            factCommand(
+              '確定結果: ' + result.narrative + ' 現在の状況: ' + this.game.situation,
+              delegation.id,
+            ),
+          );
+          this.enqueue(
+            { ...factCommand(result.narrative, delegation.id), type: 'session.commentary.append' },
+            messageId,
+          );
+        },
+        onDecision: (decision, delegation) => {
+          if (decision.kind !== 'execute')
+            this.enqueue(factCommand(decision.reason, delegation.id));
+        },
+        onError: () => {
+          if (this.valid()) {
+            this.game.error =
+              '処理できませんでした。行動は消費していません。指示をもう一度話してください。';
+            this.enqueue(factCommand(this.game.error));
+          }
+          this.syncCore();
+        },
+      });
+    }
+  }
+  private syncCore(changed = false) {
+    if (!this.ledger) return;
+    this.game.controllerEpoch = this.epoch;
+    this.ledger.updateState({
+      generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
+      actionEpoch: this.game.actionEpoch,
+      controllerEpoch: this.epoch,
+      judging: this.game.status === 'judging',
+    });
+    if (changed) this.ledger.contextChanged();
+    this.game.currentContextVersion = this.ledger.captureUnconsumedContext().contextVersion;
+  }
+  private enqueue(command: LiveCommand, messageId: string | null = null) {
+    try {
+      this.outbox?.append(command, messageId);
+    } catch {
+      this.notificationFailed = true;
+      this.game.error = '音声通知の上限です。画面で結果を確認してください。';
+    }
+  }
+  state() {
+    return {
+      ...this.game.state(),
+      ...(this.coreSnapshot
+        ? {
+            automaticActions: true,
+            transcript:
+              this.ledger
+                ?.captureUnconsumedContext()
+                .fragments.filter((f) => f.speaker === 'user')
+                .map((f) => f.delta)
+                .join('')
+                .slice(-8000) ?? '',
+          }
+        : {}),
+    };
+  }
+  pollCommands(generation: number, ackThrough: number) {
+    this.game.check();
+    if (
+      !this.outbox ||
+      this.disposed ||
+      this.now() >= this.deadline ||
+      (this.game.terminal && this.now() >= this.closingAt)
+    )
+      throw new GameError(410, '音声通知は終了しました。');
+    return this.outbox.poll(generation, this.epoch, ackThrough);
   }
   private valid(epoch = this.epoch) {
     return (
@@ -62,6 +196,9 @@ export class GameRuntime {
   async transferControl() {
     this.epoch++;
     this.game.changeController();
+    this.syncCore();
+    this.intents?.reset();
+    this.outbox?.reset(this.game.generation, this.epoch);
     clearTimeout(this.transcriptTimer);
     this.seen.clear();
     this.liveRequests.clear();
@@ -89,7 +226,7 @@ export class GameRuntime {
         const answer = await this.ai.createLive(this.id, {
           session: {
             model: this.models.liveModel,
-            instructions: liveInstructions(this.game.state()),
+            instructions: liveInstructions(this.game.state(), this.coreSnapshot),
             delegation: { type: 'client' },
             store: false,
           },
@@ -100,6 +237,10 @@ export class GameRuntime {
           throw new GameError(410, '接続中にプレイが失効しました。');
         }
         this.game.generation++;
+        this.syncCore();
+        this.intents?.reset();
+        this.outbox?.reset(this.game.generation, this.epoch);
+        this.notificationFailed = false;
         this.seen.clear();
         this.game.heartbeat('connecting');
         const opening = this.openingIssued ? null : openingCommand(this.game.state());
@@ -123,6 +264,7 @@ export class GameRuntime {
     }
     if (this.photoRequests.size >= 100) throw new GameError(429, '写真送信の試行上限です。');
     const ticket = this.game.beginPhotos();
+    this.syncCore(true);
     const epoch = this.epoch;
     const promise = (async () => {
       try {
@@ -134,6 +276,17 @@ export class GameRuntime {
         this.check(epoch);
         await this.game.finishPhotos(photos, ticket);
         this.check(epoch);
+        this.syncCore(true);
+        this.intents?.onContextChanged();
+        if (this.coreSnapshot && this.game.proposal && photos.length) {
+          this.enqueue(
+            factCommand('写真の認識: ' + this.game.proposal.items.map((i) => i.name).join('、')),
+          );
+          this.enqueue({
+            ...factCommand('写真が届いたよ。これをどう使う？'),
+            type: 'session.commentary.append',
+          });
+        }
       } catch (error) {
         if (epoch === this.epoch) this.game.cancelPhotos();
         if (error instanceof GameError) throw error;
@@ -147,6 +300,38 @@ export class GameRuntime {
     return promise;
   }
   async event(generation: number, raw: unknown): Promise<LiveCommand[]> {
+    if (this.coreSnapshot) {
+      this.game.check();
+      if (
+        this.disposed ||
+        this.now() >= this.deadline ||
+        (this.game.terminal && this.now() >= this.closingAt)
+      )
+        throw new GameError(410, '音声受付は終了しました。');
+      if (generation !== this.game.generation) throw new GameError(409, '古い音声接続です。');
+      const event = liveEventSchema.parse(raw);
+      this.syncCore();
+      if (event.type === 'session.delegation.created') {
+        if (!this.game.terminal)
+          this.intents!.acceptDelegation({
+            id: event.delegation.id,
+            generation,
+            offsetMs: event.offset_ms,
+          });
+      } else {
+        this.ledger!.append({
+          eventId: event.event_id,
+          generation,
+          speaker: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
+          delta: event.delta,
+          startMs: event.start_ms,
+          endMs: event.end_ms,
+        });
+        this.syncCore();
+        if (!this.game.terminal) this.intents!.onContextChanged();
+      }
+      return [];
+    }
     this.check();
     if (generation !== this.game.generation) throw new GameError(409, '古い音声接続です。');
     const event = liveEventSchema.parse(raw);
@@ -180,7 +365,12 @@ export class GameRuntime {
   start(): LiveCommand[] {
     this.check();
     const wasBriefing = this.game.status === 'briefing';
+    if (wasBriefing && this.ledger) {
+      const evidence = this.ledger.captureUnconsumedContext().eligibleEvidenceSeq;
+      if (evidence.length) this.ledger.consume(evidence);
+    }
     this.game.start();
+    this.syncCore(true);
     return wasBriefing
       ? [
           factCommand(
@@ -190,6 +380,7 @@ export class GameRuntime {
       : [];
   }
   async action(actionId: string, revision: number): Promise<LiveCommand[]> {
+    if (this.coreSnapshot) throw new GameError(410, '音声で使い方を指示してください。');
     const epoch = this.epoch;
     const result = await this.game.commit(actionId, revision);
     if (this.disposed || epoch !== this.epoch) throw new GameError(410, '操作権が失効しました。');
@@ -218,6 +409,8 @@ export class GameRuntime {
   }
   dispose() {
     this.disposed = true;
+    this.intents?.stop();
+    this.ledger?.stop();
     clearTimeout(this.transcriptTimer);
     this.game.end();
     this.seen.clear();

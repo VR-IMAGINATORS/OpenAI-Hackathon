@@ -1,6 +1,6 @@
 # Game core 実装タスク
 
-Status: P1 contracts implemented; P0 live gate pending (2026-09-13)
+Status: P2 runtime integrated and fake verification passed; real Live gate pending (2026-09-13)
 
 [承認済み計画](plan.md)に基づくGitHub Issue一覧。チェックは実装と各Issueの検証ゲートが完了してから更新する。
 
@@ -38,3 +38,7 @@ Status: P1 contracts implemented; P0 live gate pending (2026-09-13)
 ### 2026-09-13 続行時の扱い
 
 日本語の基本3ケース確認後、ユーザーが作業続行を指示。P1の設定・共有契約を先行実装し、技術的な検証は完了。P0の残り実機ゲートを省略・成功扱いせず、依存を満たした全面完了のチェックは保留する。工程は[tasks/P1.md](tasks/P1.md)。
+
+### P2 本編統合
+
+ユーザーの続行指示を受け、本編への意図分類・行動予約・結果通知を統合。全140件の自動テストとChromeのfake検証を通過。実Liveで本編のテンポと終端音声を確認するゲートは保留。工程は[tasks/P2.md](tasks/P2.md)。

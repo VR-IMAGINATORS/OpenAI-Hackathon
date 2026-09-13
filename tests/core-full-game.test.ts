@@ -10,9 +10,10 @@ import type { PublicGameState, PlayUpdate } from '../packages/shared/game.js';
 
 // Only the paid provider boundary is faked. HTTP, ownership,
 // photo decoding, prompts, schemas, clock and game transitions are real.
-test('hosted owner plays all three obstacles through unified HTTP with fake OpenAI', async (t) => {
+test('core voice instructions execute once through HTTP and deliver final-generation commands', async (t) => {
   const passphrase = 'integration-only-passphrase';
   const apiKey = 'integration-only-provider-secret';
+  let classificationCalls = 0;
   let recognitionCalls = 0,
     judgmentCalls = 0,
     hangups = 0,
@@ -23,8 +24,6 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
     AI_MODE: 'mock',
     RESPONSE_MODEL: 'integration-vision',
   });
-  // Keep the legacy endpoint regression suite explicit during the core migration.
-  config.scenarioCatalog = undefined;
   const hosted = createHostedApp(config, {
     transport: {
       async createLiveSession(body) {
@@ -51,12 +50,7 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
         assert.equal(value.model, 'integration-vision');
         assert.equal(value.store, false);
         const parts = value.input[0]!.content;
-        const context = JSON.parse(parts.find((p) => p.type === 'input_text')!.text!) as {
-          photos: { id: string }[];
-          transcript: string;
-          proposal?: unknown;
-          inventory: { id: string }[];
-        };
+        const context: any = JSON.parse(parts.find((p) => p.type === 'input_text')!.text!);
         const picture = parts.find((p) => p.type === 'input_image');
         assert.match(picture!.image_url!, /^data:image\/jpeg;base64,/);
         const metadata = await sharp(
@@ -65,7 +59,18 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
         assert.equal(metadata.format, 'jpeg');
         assert.equal(metadata.exif, undefined);
         let result: unknown;
-        if (context.proposal) {
+        if (context.conversation) {
+          classificationCalls++;
+          result = {
+            decision: {
+              kind: 'execute',
+              evidenceSeq: context.conversation.eligibleEvidenceSeq,
+              itemRefs: [{ photoId: context.game.photos[0].id }],
+              usage: '道具で突破する',
+              reason: '実行指示',
+            },
+          };
+        } else if (context.proposal) {
           judgmentCalls++;
           assert.ok(context.inventory.length >= judgmentCalls);
           result = {
@@ -73,6 +78,8 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
             narrative: '工夫した道具で障害を突破した。',
             situation: '先へ進めるようになった。',
             inventoryChanges: [],
+            factChanges: [],
+            shortReason: '物理的に成立する',
           };
         } else {
           recognitionCalls++;
@@ -171,37 +178,59 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
         type: 'session.input_transcript.delta',
         event_id: randomUUID(),
         delta: 'この道具をてことして使ってください',
-        start_ms: obstacle * 1000,
-        end_ms: obstacle * 1000 + 800,
+        start_ms: obstacle * 10000 + 100,
+        end_ms: obstacle * 10000 + 800,
       },
     });
-    assert.equal(event.response.status, 200, event.raw);
-    assert.equal(event.data.state.proposal, null);
+    assert.equal(event.response.status, 202, event.raw);
+    assert.equal(event.data.accepted, true);
     const recognized = await request('/api/play/events', {
       generation,
       event: {
         type: 'session.delegation.created',
         event_id: randomUUID(),
-        offset_ms: obstacle * 1000 + 800,
+        offset_ms: obstacle * 10000 + 800,
         delegation: { id: 'delegate_' + obstacle, type: 'delegation', target: 'client' },
       },
     });
-    assert.equal(recognized.response.status, 200, recognized.raw);
-    const proposal = (recognized.data as PlayUpdate).state.proposal!;
-    assert.ok(proposal.usage);
-    const action = { actionId: randomUUID(), proposalRevision: proposal.revision };
-    const committed = await request('/api/play/actions', action);
-    assert.equal(committed.response.status, 200, committed.raw);
-    final = (committed.data as PlayUpdate).state;
-    assert.equal(final.actionsRemaining, 3 - obstacle);
-    assert.equal(final.inventory.length, obstacle + 1);
-    const duplicate = await request('/api/play/actions', action);
-    assert.equal(duplicate.response.status, 200, duplicate.raw);
-    assert.equal(duplicate.data.state.actionsRemaining, final.actionsRemaining);
+    assert.equal(recognized.response.status, 202, recognized.raw);
+    for (let attempt = 0; attempt < 100; attempt++) {
+      final = (await request('/api/play/state', undefined, 'GET')).data.state;
+      if (final!.actionsRemaining === 3 - obstacle) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(final!.actionsRemaining, 3 - obstacle, JSON.stringify(final));
+    assert.equal(final!.inventory.length, obstacle + 1);
+    const duplicate = await request('/api/play/events', {
+      generation,
+      event: {
+        type: 'session.delegation.created',
+        event_id: randomUUID(),
+        offset_ms: obstacle * 10000 + 800,
+        delegation: { id: 'delegate_' + obstacle, type: 'delegation', target: 'client' },
+      },
+    });
+    assert.equal(duplicate.response.status, 202);
+    assert.equal(
+      (await request('/api/play/state', undefined, 'GET')).data.state.actionsRemaining,
+      final!.actionsRemaining,
+    );
   }
   assert.equal(final!.status, 'won');
   assert.equal(judgmentCalls, 3);
-  assert.equal(recognitionCalls, 6);
+  assert.equal(recognitionCalls, 3);
+  assert.equal(classificationCalls, 3);
+  assert.equal(final!.generation, generation);
+  const batch = await request('/api/play/commands/poll', { generation, ackThrough: 0 });
+  assert.equal(batch.response.status, 200, batch.raw);
+  assert.ok(batch.data.commands.some((c: any) => c.messageId));
+  const replay = await request('/api/play/commands/poll', { generation, ackThrough: 0 });
+  assert.deepEqual(replay.data, batch.data);
+  assert.equal(
+    (await request('/api/play/actions', { actionId: randomUUID(), proposalRevision: 0 })).data.error
+      .code,
+    'LEGACY_ACTION_DISABLED',
+  );
   assert.equal(liveCreates, 1);
   assert.equal((await request('/api/play/end', {})).response.status, 200);
   assert.equal(hangups, 1);

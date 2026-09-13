@@ -1,3 +1,4 @@
+import type { CoreLiveCommand } from '../../../packages/shared/conversation.js';
 import type { HostedPlayState, ControlledPlay, PlayControl } from '../../../packages/shared/api.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PublicGameState, PlayUpdate } from '../../../packages/shared/game.js';
@@ -104,6 +105,84 @@ export default function PlayScreen({
   const camera = useRef<HTMLInputElement>(null);
   const files = useRef<HTMLInputElement>(null);
   const eventQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const commandAck = useRef({ key: '', seq: 0 });
+  useEffect(() => {
+    if (!state.automaticActions || voice !== 'connected') return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const connection = live.current,
+        owner = control.current;
+      if (cancelled || !connection || !owner || connection.state !== 'connected') return;
+      const key =
+        'callpast-commands:' + playId + ':' + connection.generation + ':' + owner.controlEpoch;
+      if (commandAck.current.key !== key) {
+        let seq = 0;
+        try {
+          const saved = Number(sessionStorage.getItem(key));
+          if (Number.isSafeInteger(saved) && saved >= 0) seq = saved;
+        } catch {}
+        commandAck.current = { key, seq };
+      }
+      try {
+        const batch = await playRequest<{
+          generation: number;
+          controlEpoch: number;
+          acknowledgedThrough: number;
+          commands: CoreLiveCommand[];
+        }>(
+          '/api/play/commands/poll',
+          { generation: connection.generation, ackThrough: commandAck.current.seq },
+          'POST',
+          owner,
+        );
+        if (
+          cancelled ||
+          live.current !== connection ||
+          control.current !== owner ||
+          batch.generation !== connection.generation ||
+          batch.controlEpoch !== owner.controlEpoch
+        )
+          return;
+        if (batch.commands.some((c) => c.messageId && c.seq > commandAck.current.seq)) {
+          try {
+            apply(
+              (await playRequest<HostedPlayState>('/api/play/state', undefined, 'GET', owner))
+                .state,
+            );
+          } catch {
+            /* Audio can still carry the confirmed result. */
+          }
+        }
+        if (cancelled || live.current !== connection || control.current !== owner) return;
+        for (const command of batch.commands) {
+          if (command.seq <= commandAck.current.seq) continue;
+          if (command.seq !== commandAck.current.seq + 1)
+            throw new Error('音声通知の順序を確認できません。再接続してください。');
+          const { type, event_id, delegation_id, content } = command;
+          if (!connection.send([{ type, event_id, delegation_id, content }])) break;
+          commandAck.current.seq = command.seq;
+          try {
+            sessionStorage.setItem(key, String(command.seq));
+          } catch {}
+        }
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof PlayApiError && error.status === 410 && terminal(current.current)) {
+          connection.close();
+          return;
+        }
+        if (mounted.current) setError(message(error));
+      } finally {
+        if (!cancelled) timer = setTimeout(poll, 500);
+      }
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state.automaticActions, voice, playId]);
   const openingDelivered = useRef(false);
   const openingKey = 'callpast-opening:' + initialState.id;
   function markOpeningDelivered() {
@@ -144,6 +223,7 @@ export default function PlayScreen({
   const apply = useCallback((next: PublicGameState) => {
     if (!mounted.current || next.generation < current.current.generation) return;
     const previous = current.current;
+    if (next.automaticActions && next.actionsRemaining < previous.actionsRemaining) setPhotos([]);
     if (
       next.id === previous.id &&
       (next.inputRevision < previous.inputRevision ||
@@ -233,7 +313,7 @@ export default function PlayScreen({
         live.current?.close();
         live.current = null;
       },
-      state.status === 'expired' ? 0 : 10_000,
+      state.status === 'expired' ? 0 : 12_000,
     );
     return () => window.clearTimeout(timer);
   }, [state.status]);
@@ -264,14 +344,20 @@ export default function PlayScreen({
         eventQueue.current = eventQueue.current
           .catch(() => {})
           .then(async () => {
-            if (live.current !== connection || terminal(current.current)) return;
+            if (
+              live.current !== connection ||
+              (terminal(current.current) && !current.current.automaticActions)
+            )
+              return;
             try {
-              const update = await request<PlayUpdate>('/api/play/events', {
+              const update = await request<PlayUpdate | { accepted: true }>('/api/play/events', {
                 generation,
                 event,
               });
-              apply(update.state);
-              connection.send(update.commands);
+              if ('state' in update) {
+                apply(update.state);
+                connection.send(update.commands);
+              }
               if (changesInput && mounted.current) setLostInput(false);
             } catch (error) {
               if (mounted.current) {
@@ -280,7 +366,13 @@ export default function PlayScreen({
                     ? '声の内容を送信できませんでした。使い方をもう一度話してください。'
                     : message(error),
                 );
-                if (changesInput) setLostInput(true);
+                if (changesInput) {
+                  setLostInput(true);
+                  if (current.current.automaticActions) {
+                    connection.close();
+                    void heartbeat(connection);
+                  }
+                }
               }
             }
           })
@@ -606,7 +698,9 @@ export default function PlayScreen({
                 <p>身近なものを撮影して、どう使うか話してみよう。</p>
               )}
               <p className="play-footnote">
-                違っていたら声で訂正。下のボタンを押すまで実行されません。
+                {state.automaticActions
+                  ? '相談では行動しません。使い方を指示すると、そのまま試します。'
+                  : '違っていたら声で訂正。下のボタンを押すまで実行されません。'}
               </p>
             </section>
             <section className="photo-section">
@@ -746,7 +840,7 @@ export default function PlayScreen({
           >
             <span aria-hidden="true">＋</span> 撮影
           </button>
-          {state.status !== 'briefing' && (
+          {state.status !== 'briefing' && !state.automaticActions && (
             <button
               className="primary-button"
               disabled={uncertainAction ? busy : !canExecute}
