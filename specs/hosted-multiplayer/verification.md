@@ -47,3 +47,11 @@ PR #16のマージコミット233dd5c64d3dc98054f3fe6c72b22717526bbd1eでActions
 AWS ContainerService応答の正しい項目はcontainerServiceNameですが、配信実装とfake応答がserviceNameになっていました。公式仕様に合わせたfake応答でService configuration mismatchを再現し、応答型と照合を修正。送信するdeployment documentのserviceNameは正しいため維持しました。初回READY/null状態を含む配信テスト7件、TypeScript、対象ファイルの書式確認が成功。修正版のAWS配信は未実施です。
 
 公式仕様: https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_ContainerService.html
+
+### 2回目の修正（PR #17マージ後）
+
+Actions run 34728653304（c18605011a9eac47627748cb9898b5a6bda3b847）はbuild/OIDC成功後、配信処理で失敗。既存ログでは失敗段階を識別できませんでした。調査で、固定版lightsailctl v1.0.8はpush成功時もJSONではなく `Refer to this image as "..." in deployments.` を出力することを公式ソースで確認しました。汎用JSON解析はこの成功出力を扱えません。
+
+pushに限り一意の登録完了行から識別子を取り出すよう修正し、通常APIはJSON解析を維持。改行差・完了行重複・不正出力拒否を検証しました。実際の文章形式を配信fakeにも使用。固定段階ログと許可した固定エラーメッセージだけを追加し、生のstdout/stderrや環境変数は表示しません。配信テスト8件・全体型検査成功。AWS再配信は未実施です。
+
+出力形式の根拠: https://github.com/aws/lightsailctl/blob/v1.0.8/internal/cs/pushimage.go

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import {
   deploy,
+  parseAwsOutput,
   deploymentConfig,
   deploymentDocument,
   type DeployDependencies,
@@ -65,7 +66,11 @@ function harness(
             },
           ],
         };
-      if (args[1] === 'push-container-image') return { containerImage: { image } };
+      if (args[1] === 'push-container-image')
+        return parseAwsOutput(
+          args[1],
+          `Digest: sha256:example\nImage "call-to-the-past:${sha}" registered.\nRefer to this image as "${image}" in deployments.\n`,
+        );
       if (args[1] === 'create-container-service-deployment') {
         const file = args[args.indexOf('--cli-input-json') + 1].slice(7);
         temporaryFiles.push(file);
@@ -186,4 +191,30 @@ test('hosted workflows isolate requested SHA from credential job and pin all act
   assert.match(docker, /USER node/);
   assert.match(docker, /@sha256:[a-f0-9]{64}/);
   assert.doesNotMatch(docker, /OPENAI_API_KEY|APP_PASSPHRASE|OPS_TOKEN/);
+});
+
+// Output format from aws/lightsailctl v1.0.8 internal/cs/pushimage.go.
+test('Lightsail push parses the unique registration sentence instead of expecting JSON', () => {
+  const output = `Digest: sha256:example\nImage "local-image" registered.\nRefer to this image as "${image}" in deployments.\n`;
+  assert.deepEqual(parseAwsOutput('push-container-image', output), { containerImage: { image } });
+  assert.deepEqual(parseAwsOutput('push-container-image', output.replaceAll('\n', '\r\n')), {
+    containerImage: { image },
+  });
+  for (const invalid of [
+    '',
+    'sentinel-private-token',
+    output + output,
+    JSON.stringify({ containerImage: { image } }),
+  ]) {
+    assert.throws(
+      () => parseAwsOutput('push-container-image', invalid),
+      (error) => {
+        assert.equal((error as Error).message, 'AWS response invalid');
+        return true;
+      },
+    );
+  }
+  assert.deepEqual(parseAwsOutput('get-container-services', '{"containerServices":[]}'), {
+    containerServices: [],
+  });
 });
