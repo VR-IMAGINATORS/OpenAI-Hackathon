@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["lightsail:RegisterContainerImage", "lightsail:CreateContainerServiceDeployment"],
+      "Resource": "REPLACE_WITH_EXACT_CONTAINER_SERVICE_ARN"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["lightsail:CreateContainerServiceRegistryLogin", "lightsail:GetContainerServices", "lightsail:GetContainerImages", "lightsail:GetContainerAPIMetadata"],
+      "Resource": "*"
+    }
+  ]
+}

@@ -137,6 +137,18 @@ export class GameSession {
     this.proposal = null;
     this.error = null;
   }
+  /** Invalidate work from the previous tab without restarting the game. */
+  changeController() {
+    this.generation++;
+    for (const action of this.actions.values()) {
+      if (action.status === 'pending') action.status = 'invalid';
+    }
+    this.pending = null;
+    this.photoBusy = false;
+    if (this.status === 'judging') this.status = 'playing';
+    this.clock.resume('judgment');
+    this.invalidate();
+  }
   beginPhotos() {
     this.editable();
     if (this.photoBusy) throw new GameError(409, '写真を処理中です。');
@@ -145,9 +157,9 @@ export class GameSession {
     return { generation: this.generation, revision: this.inputRevision };
   }
   async finishPhotos(photos: GamePhoto[], ticket: { generation: number; revision: number }) {
-    this.photoBusy = false;
     if (this.terminal || ticket.generation !== this.generation)
       throw new GameError(410, 'プレイが失効しました。');
+    this.photoBusy = false;
     this.photos = photos;
     this.invalidate();
     await this.recognize(true);
@@ -316,8 +328,10 @@ export class GameSession {
       throw new GameError(502, '判定に失敗しました。行動は消費していません。');
     } finally {
       if (this.pending === actionId) this.pending = null;
-      if (!this.terminal) this.status = 'playing';
-      this.clock.resume('judgment');
+      if (generation === this.generation) {
+        if (!this.terminal) this.status = 'playing';
+        this.clock.resume('judgment');
+      }
     }
   }
 }

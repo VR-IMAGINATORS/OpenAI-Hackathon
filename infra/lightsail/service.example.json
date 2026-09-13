@@ -1,0 +1,6 @@
+{
+  "serviceName": "REPLACE_WITH_SERVICE_NAME",
+  "power": "micro",
+  "scale": 1,
+  "tags": [{ "key": "project", "value": "call-to-the-past" }]
+}

@@ -1,104 +1,48 @@
 # Call to the Past — 未来からの着信
 
-身近な物の写真と、音声で伝える意外な使い方で、未来の自分を脱出へ導くAIゲーム。
-プレイヤーの発想をAIが理解し、状況に合う攻略として物語へ反映することが体験の核です。
+身近な物の写真と、音声で伝える意外な使い方で、未来の自分を脱出へ導くAIゲームです。GPT-Liveとの会話、写真認識、認識内容の確認、ボタンによる行動確定、JSONシナリオの障害進行を実装しています。画像は導入用の固定素材です。動的画像・エンディング動画・緊迫イベントは未実装です。
 
-**現在はWeb版の開発基盤です。ゲーム本編・GPT-Live音声・実画像/動画生成は未実装です。**
-APIキーなしで、画面→ローカルサーバー→中継サーバーのモック通信を確認できます。
+## プレイ・開発
 
-## 起動
+審査員は運営が共有するHTTPS URLを開き、共通の合言葉で参加します。APIキーやローカルサーバは不要です。最大5人が独立してプレイできます。
 
-Node.js22.12以上とnpmを用意し、このリポジトリのルートで実行します。
+開発者はNode.js 22.12以上とcloudflaredを用意し、次を実行します。
 
 ```sh
 npm ci
-npm run dev:all
+# .env.local.exampleを.env.localへコピーし、サーバ用APIキーなどを設定
+npm run play:mobile
 ```
 
-[開発画面](http://127.0.0.1:5173) を開き、合言葉 **local-demo-only** で「接続を確認」。
-これは公開された開発専用の合言葉で、実APIへの通信や課金はありません。Ctrl+Cで3プロセスを停止します。
+表示されるQRからスマホで参加できます。起動するアプリサーバは1つです。[詳細なローカル手順](docs/development.md) / [AWS配布手順](docs/hosting.md)。
 
-運営の中継へ接続するときは .env.local.example を .env.local にコピーしてRELAY_URLを設定し、`npm run dev`。
-審査員はプロバイダーのAPIキーを用意しません。運営が別途共有する合言葉を使います。
-詳細は [起動・運用手順](docs/development.md)。
+## 編集場所
 
-## 構成と作業場所
-
-| 場所 | 担当 |
+| 場所 | 内容 |
 |---|---|
-| apps/web/ | React/Viteの画面 |
-| apps/local-server/ | 審査員側。設定読込、今後のゲーム進行/prompt/状態管理 |
-| apps/relay/ | 運営側。認証・利用制限・通信。現在はモック診断のみ |
-| packages/shared/ | 通信型とシナリオ検証 |
-| scenarios/ | プランナーが編集するJSON |
-| specs/web-foundation/ | Web版の合意・仕様・計画・タスク・検証 |
-| .agents/skills/call-to-past/ | 既存Codex試作。ドッグフーディング用の参考 |
+| apps/web/ | モバイル優先のReact画面・マイク・写真入力 |
+| apps/server/ | 統合HTTPサーバ、認証、同時プレイ管理、運用API |
+| apps/local-server/game.ts | プレイ単位のゲーム進行・行動確定 |
+| apps/local-server/hosted-runtime.ts | 写真・音声とゲームの接続 |
+| apps/local-server/game-ai.ts / live.ts | AI認識・判定・音声のプロンプト |
+| packages/server/ai-service.ts | AI接続・上限・終了管理 |
+| scenarios/ | プランナーが編集するJSONシナリオ |
+| specs/hosted-multiplayer/ | 今回の仕様・計画・実装タスク |
 
-[構成と境界](docs/architecture.md) / [シナリオ編集](docs/planner-guide.md) / [ゲームの合意事項](specs/web-foundation/game-direction.md)。
-
-## ゲームの初期方針
-
-- GPT-Live音声で相談し、AIの理解した使い方を短文表示。「これで実行」で確定。
-- 3障害・最大4行動・1回2枚・全体5分。JSONで調整。
-- 道具は状態を持ち越し。失敗後も別の工夫を試せる。
-- 結果を音声で先に伝え、画像を非同期表示。成否通知後にエンディング動画を生成。
-- 動画は成功/失敗の両方。現時点で必須だが、時間不足時の削除候補。
+[シナリオ編集](docs/planner-guide.md) / [構成](docs/architecture.md)。
 
 ## 検証
 
 ```sh
-npm run check
-npm test
 npm run build
+npm test
+npm run format:check
 ```
 
-[実施結果と未実施項目](specs/web-foundation/verification.md)を参照してください。モックの成功は実AI接続や面白さの検証を意味しません。
+fake providerでの成功と、実API・実機・AWSの確認は分けて扱います。ゲームの進行はメモリ上にあり、サーバ再起動時には失われます。通常デプロイは既存Liveの終了を確認してから切り替えます。ホスト強制停止時の外部Live終了は保証できません。
 
-## ハッカソン提出
+## プロジェクト
 
-| 提出物 | 現在 |
-|---|---|
-| GitHubソース | local/UI/relayコードを含める。秘密は除外 |
-| 動作するゲームデモ | 未完成。現在はモック通信のみ |
-| プロジェクトの説明 | 本READMEと合意事項 |
-| 応募部門 | 未確定 |
-| OpenAI活用説明 | GPT-Live会話を必須に計画。判定/画像/動画のモデルと実績は後続で追記 |
+ハッカソンの提出ソースにはWeb・ゲーム・通信・配布設定を含みます。秘密値は含めません。審査終了後は運営環境を削除します。
 
-ゲームロジックは審査員のローカルで実行し、運営サーバーは認証・利用制限・API中継を担当する設計です。
-外部依存の審査規定適合は未確認。審査後に中継を停止するため、運営の利用枠によるAIプレイも終了します。
-第三者のキャラクター/アセット/音楽は権利を確認したものだけ使用します。
-
-## 開発ワークフロー
-
-[SpecWorkflow](https://github.com/edom18/SpecWorkflow)を使用します。仕様→計画→タスク→実装→レビュー。
-[AGENTS.md](AGENTS.md)が共通指示の正本で、[CLAUDE.md](CLAUDE.md)も同じ方針を参照します。
-レビュー実行台帳 .specworkflow/review/ はGit対象外、仕様・設計判断は記録します。
-
-旧試作の利用方法は [旧スキル](.agents/skills/call-to-past/SKILL.md)、[旧仕様/検証](specs/call-to-past/verification.md)。
-旧試作のルールやテスト結果を、Web版の確定事項・実績として扱いません。
-
-次の開発は [後続の進め方](specs/web-foundation/next-steps.md) を参照してください。
-
-## ドッグフーディング用のCodex試作
-
-このリポジトリをCodexで開くと、`.agents/skills/call-to-past/` がプロジェクト用スキルとして検出されます。ユーザー領域へのコピーは不要です。表示されない場合は新しいセッションを開始してください。
-
-```text
-$call-to-past を使って、新しいゲームを日本語で始めてください。
-```
-
-実行スクリプトと素材は、読み込んだ `SKILL.md` のあるフォルダを基準に参照します。プレイ記録は作業フォルダ内の `runs/call-to-past/` へ保存するため、通常はリポジトリルートから実行します。[CLI手順](.agents/skills/call-to-past/references/cli.md)も参照してください。
-
-試作のテスト（リポジトリルート、ネットワーク・有料生成なし。Windowsでは `py` も使用可能）:
-
-```powershell
-python -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests -v
-```
-
-## スマホで音声と写真を使って試遊する
-
-モバイル試遊版は `npm run play:mobile` で起動します。PCのターミナルと管理画面に表示されるQRからスマホで参加できます。
-
-事前に運営側のGPT-Live利用権限を持つAPIキーとrelay設定、および起動PCのcloudflaredが必要です。審査員にAPIキーを渡す必要はありません。[セットアップと起動手順](docs/development.md#モバイル試遊版を起動する)を参照してください。
-
-ゲームは音声相談・写真認識・明示実行・JSONの障害進行を実装しています。生成画像・動画・緊迫イベントは後続です。実API・実機の確認状況は[検証記録](specs/mobile-playtest/verification.md)に分けて記載します。
+開発は [AGENTS.md](AGENTS.md) とSpecWorkflowに従います。過去の [Codex試作](.agents/skills/call-to-past/SKILL.md) は参考用です。

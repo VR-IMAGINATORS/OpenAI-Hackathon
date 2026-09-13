@@ -1,0 +1,248 @@
+openapi: 3.1.0
+info:
+  title: Hosted multiplayer API
+  version: 0.1.0-draft
+  description: >-
+    data-model.mdとplan.mdが寿命/所有権の正本。全ブラウザmutationは完全一致Origin必須。
+    play IDはURLで選択せず認証cookieの所有者と照合する。旧relay/API診断/招待APIは公開しない。
+servers:
+  - url: /
+security:
+  - session: []
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        '200': { description: versionとbootId。外部AIへの接続検査なし }
+  /api/bootstrap:
+    get:
+      security: []
+      responses:
+        '200': { description: 'app.stage=hosted-multiplayer, 公開scenario, auth.required=true, ai.mode。relay情報/秘密なし' }
+  /api/auth:
+    post:
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [passphrase]
+              properties:
+                passphrase: { type: string, minLength: 1, maxLength: 256 }
+      responses:
+        '200': { description: 'play_session Cookieを発行/更新。{authenticated:true}、プレイ枠は未確保' }
+        '401': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/session:
+    get:
+      responses:
+        '200': { description: 'authenticated:true, playId(UUID|null), lifecycle|null, expiresAt|null。本人の進行中または直近結果の概要のみ' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/plays:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId, clientId]
+              properties:
+                requestId: { type: string, format: uuid }
+                clientId: { type: string, format: uuid }
+      responses:
+        '201': { description: 'playId, controlEpoch, expiresAt, state(PublicGameState)。ここで枠を確保し10分開始' }
+        '200': { description: 同requestIdの再送。元の作成結果を返し枠を増やさない }
+        '409': { description: 'PLAY_CAPACITYまたはPLAY_ALREADY_ACTIVE。API課金なし。満員はRetry-After: 5' }
+        '503': { $ref: '#/components/responses/Error' }
+  /api/play/state:
+    parameters:
+      - $ref: '#/components/parameters/PlayId'
+    get:
+      responses:
+        '200': { description: 'PublicGameState（packages/shared/game.ts）と接続メタデータ: lifecycle, expiresAt, recoveryExpiresAt|null。state属性内に既存状態を保持' }
+        '403': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+  /api/play/control:
+    parameters:
+      - $ref: '#/components/parameters/PlayId'
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [clientId, takeover]
+              properties:
+                clientId: { type: string, format: uuid }
+                takeover: { type: boolean }
+      responses:
+        '200': { description: 'controlEpoch, state。旧音声終了処理開始、期限・枠不変。live再作成は終了確認まで禁止' }
+        '409': { description: CONTROL_BUSY（別タブ操作中） }
+        '410': { $ref: '#/components/responses/Error' }
+  /api/play/live:
+    parameters:
+      - $ref: '#/components/parameters/PlayId'
+      - $ref: '#/components/parameters/ClientId'
+      - $ref: '#/components/parameters/Epoch'
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId, sdp]
+              properties:
+                requestId: { type: string, format: uuid }
+                sdp: { type: string, minLength: 1, maxLength: 65536 }
+      responses:
+        '201': { description: 'sdp, generation, opening(LiveCommand|null)。provider session ID/秘密なし' }
+        '200': { description: 同requestId/SDPへのキャッシュ済みanswer。同epoch/generationのみ }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '502': { description: LIVE_CREATE_UNCONFIRMEDの場合予約保持、再作成禁止 }
+  /api/play/start:
+    parameters: &control
+      - $ref: '#/components/parameters/PlayId'
+      - $ref: '#/components/parameters/ClientId'
+      - $ref: '#/components/parameters/Epoch'
+    post:
+      responses:
+        '200': { description: 'stateとcommands。本編時計開始、冪等' }
+  /api/play/photos:
+    parameters: *control
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId, images]
+              properties:
+                requestId: { type: string, format: uuid }
+                images:
+                  type: array
+                  maxItems: 2
+                  items: { type: string, maxLength: 2796204, description: 'base64 JPEG/PNG/WebP。decode後1枚2MiB以下' }
+      responses:
+        '200': { description: stateと接続メタデータ。認識完了または認識エラーをstateに反映 }
+        '413': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { description: PHOTO_BUSY。写真変換待機上限 }
+  /api/play/events:
+    parameters: *control
+    post:
+      requestBody:
+        $ref: '../../mobile-playtest/contracts/openapi.yaml#/paths/~1api~1play~1events/post/requestBody'
+      responses:
+        '200': { description: stateとcommands。eventsは既存liveEventSchemaの厳密検証 }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/play/actions:
+    parameters: *control
+    post:
+      requestBody:
+        $ref: '../../mobile-playtest/contracts/openapi.yaml#/paths/~1api~1play~1actions/post/requestBody'
+      responses:
+        '200': { description: stateとcommands。同actionIdの二重消費なし }
+        '409': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+  /api/play/heartbeat:
+    parameters: *control
+    post:
+      requestBody:
+        $ref: '../../mobile-playtest/contracts/openapi.yaml#/paths/~1api~1play~1heartbeat/post/requestBody'
+      responses:
+        '200': { description: stateと接続メタデータ。正当なcontrollerだけ生存とlease更新 }
+        '409': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+  /api/play/end:
+    parameters: *control
+    post:
+      responses:
+        '200': { description: stateと接続メタデータ。ゲーム終了は冪等、音声終了確認中はclosing }
+  /api/ops/drain:
+    post:
+      security: [{ ops: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId, expectedVersion]
+              properties:
+                requestId: { type: string, format: uuid }
+                expectedVersion: { type: string, pattern: '^[a-f0-9]{40}$' }
+      responses:
+        '202': { description: 非同期drain開始。readyToDeploy,version,bootId,remainingだけ返す }
+        '409': { description: 対象version不一致 }
+    get:
+      security: [{ ops: [] }]
+      responses:
+        '200': { description: readyToDeploy,version,bootId,remaining。写真/会話/セッション一覧なし }
+  /api/ops/resume:
+    post:
+      security: [{ ops: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, expectedBootId]
+              properties:
+                expectedVersion: { type: string, pattern: '^[a-f0-9]{40}$' }
+                expectedBootId: { type: string, format: uuid }
+      responses:
+        '200': { description: drain完了/未終了音声0/同versionとbootIdのときだけ受付再開 }
+        '409': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: play_session }
+    ops: { type: http, scheme: bearer }
+  parameters:
+    PlayId:
+      name: X-Play-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    ClientId:
+      name: X-Client-Id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    Epoch:
+      name: X-Control-Epoch
+      in: header
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    Error:
+      description: 共通エラー。認証401/Origin・所有権403/競合409/失効410/制限429/上流502/受付停止503は各保護操作にも適用
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [error]
+            properties:
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code: { type: string }
+                  message: { type: string }

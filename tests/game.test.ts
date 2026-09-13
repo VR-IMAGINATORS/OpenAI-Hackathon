@@ -210,3 +210,21 @@ test('scenario obstacle count controls winning and failed actions preserve progr
   assert.equal(f.game.photos.length, 0);
   assert.equal(f.game.transcript, '');
 });
+
+test('controller transfer prevents an old judgment from changing the new turn', async () => {
+  const pending: Array<(value: Judgment) => void> = [];
+  const f = fixture(() => new Promise((resolve) => pending.push(resolve)));
+  const revision = await prepare(f.game);
+  const old = f.game.commit(randomUUID(), revision);
+  const rejected = assert.rejects(old, /失効/);
+  f.game.changeController();
+  const nextRevision = await prepare(f.game);
+  const current = f.game.commit(randomUUID(), nextRevision);
+  pending[0](result);
+  await rejected;
+  assert.equal(f.game.status, 'judging');
+  assert.equal(f.game.actionsUsed, 0);
+  pending[1](result);
+  await current;
+  assert.equal(f.game.actionsUsed, 1);
+});

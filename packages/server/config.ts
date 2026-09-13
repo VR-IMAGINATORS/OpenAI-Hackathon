@@ -8,7 +8,6 @@ export function readEnvironment(
   env: NodeJS.ProcessEnv,
   cwd: string,
 ): NodeJS.ProcessEnv {
-  if (env.FOUNDATION_DEMO === '1') return { FOUNDATION_DEMO: '1' };
   let fileValues: Record<string, string> = {};
   try {
     fileValues = parse(readFileSync(resolve(cwd, file)));
@@ -37,28 +36,6 @@ export function bindHost(value: string | undefined, name: string): string {
     throw new Error(name + ' must be an IP address or localhost');
   return host;
 }
-export function relayUrl(value: string | undefined): string {
-  let url: URL;
-  try {
-    url = new URL(value ?? 'http://127.0.0.1:4311');
-  } catch {
-    throw new Error('RELAY_URL must be an absolute HTTPS or loopback HTTP URL');
-  }
-  const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname);
-  if (
-    (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    url.pathname !== '/'
-  ) {
-    throw new Error(
-      'RELAY_URL must be an HTTPS origin (HTTP allowed only on loopback), without credentials',
-    );
-  }
-  return url.origin;
-}
 export function allowedHosts(value: string | undefined, defaults: string[]): Set<string> {
   if (value === undefined) return new Set(defaults);
   const entries = value.split(',').map((s) => s.trim());
@@ -67,7 +44,7 @@ export function allowedHosts(value: string | undefined, defaults: string[]): Set
     try {
       parsed = new URL('http://' + entry);
     } catch {
-      throw new Error('LOCAL_ALLOWED_HOSTS must contain exact hosts with optional ports');
+      throw new Error('APP_ALLOWED_HOSTS must contain exact hosts with optional ports');
     }
     if (
       !entry ||
@@ -77,7 +54,7 @@ export function allowedHosts(value: string | undefined, defaults: string[]): Set
       parsed.pathname !== '/' ||
       parsed.host !== entry.toLowerCase()
     ) {
-      throw new Error('LOCAL_ALLOWED_HOSTS must contain exact hosts with optional ports');
+      throw new Error('APP_ALLOWED_HOSTS must contain exact hosts with optional ports');
     }
   }
   return new Set(entries.map((s) => s.toLowerCase()));
@@ -90,7 +67,7 @@ export function allowedOrigins(value: string | undefined, defaults: string[]): S
     try {
       parsed = new URL(entry);
     } catch {
-      throw new Error('LOCAL_ALLOWED_ORIGINS must contain exact HTTP or HTTPS origins');
+      throw new Error('APP_ALLOWED_ORIGINS must contain exact HTTP or HTTPS origins');
     }
     if (
       !['http:', 'https:'].includes(parsed.protocol) ||
@@ -98,7 +75,7 @@ export function allowedOrigins(value: string | undefined, defaults: string[]): S
       parsed.username ||
       parsed.password
     ) {
-      throw new Error('LOCAL_ALLOWED_ORIGINS must contain exact HTTP or HTTPS origins');
+      throw new Error('APP_ALLOWED_ORIGINS must contain exact HTTP or HTTPS origins');
     }
   }
   return new Set(entries);

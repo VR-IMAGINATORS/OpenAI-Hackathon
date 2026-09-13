@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const viteCli = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
-const withRelay = process.argv.includes('--with-relay');
+const mock = process.argv.includes('--mock');
 const children: ChildProcess[] = [];
 let stopping = false;
 
@@ -33,7 +33,7 @@ function run(name: string, args: string[], extra: NodeJS.ProcessEnv = {}) {
   const child = spawn(process.execPath, args, {
     stdio: 'inherit',
     shell: false,
-    env: { ...process.env, FOUNDATION_DEMO: withRelay ? '1' : '0', ...extra },
+    env: { ...process.env, ...extra },
   });
   children.push(child);
   child.once('error', () => {
@@ -48,13 +48,14 @@ function run(name: string, args: string[], extra: NodeJS.ProcessEnv = {}) {
   });
 }
 
-if (withRelay) {
-  console.log('LOCAL MOCK ONLY — 合言葉: local-demo-only / 外部AIへの通信なし');
-  run('relay', ['--import', 'tsx', 'apps/relay/index.ts']);
-}
-run('local', ['--import', 'tsx', 'apps/local-server/index.ts'], {
-  LOCAL_PORT: '4310',
-  LOCAL_HOST: '127.0.0.1',
+if (mock) console.log('画面確認用MOCK — 合言葉: local-demo-only / 音声AIには接続しません');
+run('app', ['--import', 'tsx', 'apps/server/index.ts'], {
+  HOST: '127.0.0.1',
+  PORT: '4310',
+  APP_ALLOWED_HOSTS: '127.0.0.1:4310,localhost:4310,127.0.0.1:5173,localhost:5173',
+  APP_ALLOWED_ORIGINS:
+    'http://127.0.0.1:4310,http://localhost:4310,http://127.0.0.1:5173,http://localhost:5173',
+  ...(mock ? { HOSTED_NO_ENV_FILE: '1', AI_MODE: 'mock', APP_PASSPHRASE: 'local-demo-only' } : {}),
 });
 run('web', [viteCli]);
 console.log('開発画面: http://127.0.0.1:5173 （Ctrl+Cでまとめて停止）');

@@ -1,8 +1,9 @@
+import type { HostedPlayState, ControlledPlay, PlayControl } from '../../../packages/shared/api.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PublicGameState, PlayUpdate } from '../../../packages/shared/game.js';
 import { LiveConnection, type VoiceState } from './live.js';
 import { preparePhoto, type PreparedPhoto } from './photo.js';
-import { PlayApiError, playRequest } from './play-api.js';
+import { PlayApiError, playRequest, clientId, controlHeaders } from './play-api.js';
 
 const voiceLabels: Record<VoiceState, string> = {
   connecting: '回線を接続中',
@@ -20,12 +21,64 @@ function time(ms: number) {
 }
 
 export default function PlayScreen({
-  initialState,
-  needsPassphrase,
+  playId,
+  initialEnvelope,
+  initialControl,
+  preparedConnection,
+  onExit,
+  onReplay,
 }: {
-  initialState: PublicGameState;
-  needsPassphrase: boolean;
+  playId: string;
+  initialEnvelope: HostedPlayState;
+  initialControl?: PlayControl;
+  preparedConnection?: LiveConnection;
+  onExit: () => void;
+  onReplay: () => void;
 }) {
+  const initialState = initialEnvelope.state;
+  const control = useRef<PlayControl | null>(initialControl ?? null);
+  const [lifecycle, setLifecycle] = useState(initialEnvelope.lifecycle);
+  const [invalid, setInvalid] = useState(false);
+  const [hasControl, setHasControl] = useState(!!initialControl);
+  function fail(error: unknown) {
+    setError(message(error));
+    if (
+      error instanceof PlayApiError &&
+      (error.status === 401 ||
+        error.status === 403 ||
+        error.status === 410 ||
+        ['CONTROL_BUSY', 'CONTROL_STALE', 'CONTROL_LOST', 'STALE_CONTROL'].includes(error.code))
+    ) {
+      const previous = live.current;
+      live.current = null;
+      previous?.close();
+      control.current = null;
+      setHasControl(false);
+      setVoice('disconnected');
+      if (error.status === 401 || error.status === 410) setInvalid(true);
+    }
+  }
+  async function request<T>(path: string, body?: unknown, method = 'POST'): Promise<T> {
+    if (body !== undefined && !control.current)
+      throw new PlayApiError(
+        'この画面で再接続して操作権を引き継いでください。',
+        409,
+        'CONTROL_BUSY',
+      );
+    const snapshot = control.current;
+    try {
+      const result = await playRequest<T>(path, body, method, snapshot ?? { playId });
+      if (body !== undefined && snapshot !== control.current)
+        throw new PlayApiError('別の画面に操作が移りました。', 409, 'CONTROL_STALE');
+      if (result && typeof result === 'object' && 'lifecycle' in result)
+        setLifecycle((result as unknown as HostedPlayState).lifecycle);
+      return result;
+    } catch (error) {
+      // An old request must not revoke a newly acquired controller.
+      if (snapshot === control.current) fail(error);
+      throw error;
+    }
+  }
   const [state, setState] = useState(initialState);
   const current = useRef(state);
   current.current = state;
@@ -34,7 +87,10 @@ export default function PlayScreen({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
-  const [retryPhotos, setRetryPhotos] = useState<PreparedPhoto[] | null>(null);
+  const [retryPhotos, setRetryPhotos] = useState<{
+    photos: PreparedPhoto[];
+    requestId: string;
+  } | null>(null);
   const [blockedAudio, setBlockedAudio] = useState(false);
   const [pendingInput, setPendingInput] = useState(0);
   const [lostInput, setLostInput] = useState(false);
@@ -104,13 +160,15 @@ export default function PlayScreen({
     setState(next);
   }, []);
   async function heartbeat(connection = live.current) {
-    if (!connection || terminal(current.current)) return;
+    if (!connection || !control.current || terminal(current.current)) return;
     try {
       apply(
-        await playRequest<PublicGameState>('/api/play/heartbeat', {
-          generation: connection.generation,
-          voiceState: connection.state,
-        }),
+        (
+          await request<HostedPlayState>('/api/play/heartbeat', {
+            generation: connection.generation,
+            voiceState: connection.state,
+          })
+        ).state,
       );
     } catch (error) {
       if (mounted.current) setError(message(error));
@@ -120,10 +178,10 @@ export default function PlayScreen({
     mounted.current = true;
     let polling = false;
     const refresh = async () => {
-      if (polling || terminal(current.current)) return;
+      if (polling || invalid) return;
       polling = true;
       try {
-        apply(await playRequest<PublicGameState>('/api/play/state'));
+        apply((await request<HostedPlayState>('/api/play/state')).state);
       } catch (error) {
         if (mounted.current) setError(message(error));
       } finally {
@@ -143,11 +201,12 @@ export default function PlayScreen({
       live.current = null;
       previous?.close();
       setVoice('disconnected');
+      if (!control.current) return;
       void fetch('/api/play/heartbeat', {
         method: 'POST',
         credentials: 'same-origin',
         keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...controlHeaders(control.current) },
         body: JSON.stringify({
           generation: current.current.generation,
           voiceState: 'disconnected',
@@ -169,7 +228,6 @@ export default function PlayScreen({
     if (!terminal(state)) return;
     setPhotos([]);
     setRetryPhotos(null);
-    setPassphrase('');
     const timer = window.setTimeout(
       () => {
         live.current?.close();
@@ -179,15 +237,16 @@ export default function PlayScreen({
     );
     return () => window.clearTimeout(timer);
   }, [state.status]);
-  async function connect() {
+  async function connect(prepared?: LiveConnection) {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
     setError('');
     const previous = live.current;
+    prepared ??= previous?.pendingRequest ? previous : undefined;
     live.current = null;
-    previous?.close();
-    const connection = new LiveConnection({
+    if (previous !== prepared) previous?.close();
+    const options: ConstructorParameters<typeof LiveConnection>[0] = {
       onState: (value) => {
         if (!mounted.current || live.current !== connection) return;
         setVoice(value);
@@ -207,7 +266,7 @@ export default function PlayScreen({
           .then(async () => {
             if (live.current !== connection || terminal(current.current)) return;
             try {
-              const update = await playRequest<PlayUpdate>('/api/play/events', {
+              const update = await request<PlayUpdate>('/api/play/events', {
                 generation,
                 event,
               });
@@ -229,30 +288,49 @@ export default function PlayScreen({
             if (changesInput && mounted.current) setPendingInput((count) => Math.max(0, count - 1));
           });
       },
-    });
+    };
+    const connection = prepared ?? new LiveConnection(options);
+    connection.setOptions(options);
     live.current = connection;
     try {
-      await connection.connect(passphrase);
-      setPassphrase('');
+      if (!prepared) await connection.prepare();
+      if (!control.current) {
+        const acquired = await playRequest<ControlledPlay>(
+          '/api/play/control',
+          { clientId, takeover: true },
+          'POST',
+          { playId },
+        );
+        control.current = { playId, clientId, controlEpoch: acquired.controlEpoch };
+        setHasControl(true);
+        apply(acquired.state);
+      }
+      await connection.connect(control.current);
       await heartbeat(connection);
     } catch (error) {
-      setError(message(error));
+      if (!connection.pendingRequest) connection.close();
+      fail(error);
     } finally {
       locked.current = false;
       setBusy(false);
     }
   }
+  const autoConnected = useRef(false);
+  useEffect(() => {
+    if (preparedConnection && !autoConnected.current) {
+      autoConnected.current = true;
+      void connect(preparedConnection);
+    }
+  }, []);
   async function start() {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
     setError('');
     try {
-      const { commands, ...next } = await playRequest<
-        PublicGameState & { commands?: PlayUpdate['commands'] }
-      >('/api/play/start', {});
-      apply(next);
-      if (commands) live.current?.send(commands);
+      const next = await request<PlayUpdate>('/api/play/start', {});
+      apply(next.state);
+      live.current?.send(next.commands);
     } catch (error) {
       setError(message(error));
     } finally {
@@ -260,24 +338,30 @@ export default function PlayScreen({
       setBusy(false);
     }
   }
-  async function sendPhotos(next: PreparedPhoto[]) {
+  async function sendPhotos(next: PreparedPhoto[], requestId: string = crypto.randomUUID()) {
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
     setError('');
     try {
       apply(
-        await playRequest<PublicGameState>(
-          '/api/play/photos',
-          { images: next.map((photo) => photo.base64) },
-          'PUT',
-        ),
+        (
+          await request<HostedPlayState>(
+            '/api/play/photos',
+            { requestId, images: next.map((photo) => photo.base64) },
+            'PUT',
+          )
+        ).state,
       );
       setPhotos(next);
       setRetryPhotos(null);
       setUncertainAction(null);
     } catch (error) {
-      setRetryPhotos(next);
+      setRetryPhotos({
+        photos: next,
+        requestId:
+          error instanceof PlayApiError && error.status === 0 ? requestId : crypto.randomUUID(),
+      });
       setError(message(error));
     } finally {
       locked.current = false;
@@ -310,7 +394,7 @@ export default function PlayScreen({
       proposalRevision: state.proposal!.revision,
     };
     try {
-      const update = await playRequest<PlayUpdate>('/api/play/actions', action);
+      const update = await request<PlayUpdate>('/api/play/actions', action);
       setUncertainAction(null);
       apply(update.state);
       live.current?.send(update.commands);
@@ -333,7 +417,7 @@ export default function PlayScreen({
     locked.current = true;
     setBusy(true);
     try {
-      apply(await playRequest<PublicGameState>('/api/play/end', {}));
+      apply((await request<HostedPlayState>('/api/play/end', {})).state);
       live.current?.close();
     } catch (error) {
       setError(message(error));
@@ -342,7 +426,7 @@ export default function PlayScreen({
       setBusy(false);
     }
   }
-  const ended = terminal(state);
+  const ended = terminal(state) || invalid;
   const canExecute =
     pendingInput === 0 &&
     !lostInput &&
@@ -411,8 +495,7 @@ export default function PlayScreen({
         </h1>
         <p>
           {ended
-            ? (state.lastResult?.narrative ??
-              'PCの管理画面から新しい招待を発行すると、もう一度プレイできます。')
+            ? (state.lastResult?.narrative ?? '終了確認後、もう一度プレイできます。')
             : state.status === 'briefing'
               ? state.briefing
               : state.situation}
@@ -438,25 +521,15 @@ export default function PlayScreen({
           </section>
           {voice !== 'connected' && (
             <section className="play-panel">
-              {needsPassphrase && (
-                <label className="play-field">
-                  接続用の合言葉
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={passphrase}
-                    maxLength={256}
-                    onChange={(event) => setPassphrase(event.target.value)}
-                    placeholder="運営から共有された合言葉"
-                    disabled={busy}
-                  />
-                </label>
-              )}
               <button className="primary-button" disabled={busy} onClick={() => void connect()}>
-                {busy ? '接続準備中…' : '音声を接続 / 再開する'}
+                {busy ? '接続準備中…' : hasControl ? '音声を接続 / 再開する' : 'この画面で再接続'}
                 <span>↗</span>
               </button>
-              <p className="play-footnote">撮影後に音声が途切れたときも、ここから再開できます。</p>
+              <p className="play-footnote">
+                {hasControl
+                  ? '撮影後に音声が途切れたときも、ここから再開できます。'
+                  : '別の画面で接続中の場合は、その接続を終了してこの画面へ引き継ぎます。復帰猶予は最大60秒です。'}
+              </p>
             </section>
           )}
           {blockedAudio && (
@@ -559,7 +632,7 @@ export default function PlayScreen({
                 {!photos.length && (
                   <p className="photo-empty">
                     {state.photoCount
-                      ? '送信した写真はPC側で保持しています。差し替える場合は新しく撮影してください。'
+                      ? '送信した写真はサーバー側で保持しています。差し替える場合は新しく撮影してください。'
                       : '道具の形や素材がわかるように撮影しよう。'}
                   </p>
                 )}
@@ -634,7 +707,7 @@ export default function PlayScreen({
           <button
             className="secondary-button"
             disabled={busy}
-            onClick={() => void sendPhotos(retryPhotos)}
+            onClick={() => void sendPhotos(retryPhotos.photos, retryPhotos.requestId)}
           >
             写真の送信を再試行
           </button>
@@ -696,7 +769,28 @@ export default function PlayScreen({
             プレイを終了
           </button>
         )}
-        {ended && <p>もう一度遊ぶには、PCで新しいQRコードを表示してください。</p>}
+        {invalid ? (
+          <button className="primary-button" onClick={onExit}>
+            合言葉で参加し直す
+          </button>
+        ) : (
+          ended && (
+            <button
+              className="primary-button"
+              disabled={lifecycle !== 'terminal'}
+              onClick={onReplay}
+            >
+              もう一度プレイ
+            </button>
+          )
+        )}
+        {['closing', 'quarantined'].includes(lifecycle) && (
+          <p role="status">
+            {lifecycle === 'closing'
+              ? '音声の終了を確認しています。'
+              : '音声の終了を確認できません。運営による確認が必要です。'}
+          </p>
+        )}
       </footer>
     </main>
   );

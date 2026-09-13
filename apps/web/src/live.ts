@@ -1,4 +1,5 @@
-import { playRequest } from './play-api.js';
+import type { PlayControl } from '../../../packages/shared/api.js';
+import { playRequest, retryUncertain, PlayApiError } from './play-api.js';
 export type VoiceState = 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 import type { LiveCommand } from '../../../packages/shared/game.js';
 interface LiveOptions {
@@ -23,7 +24,12 @@ export class LiveConnection {
     this.state = state;
     this.options.onState(state);
   }
-  async connect(passphrase: string): Promise<void> {
+  private started = false;
+  pendingRequest: { requestId: string; sdp: string } | null = null;
+  setOptions(options: LiveOptions) {
+    this.options = options;
+  }
+  async prepare(): Promise<void> {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       throw new Error(
         'カメラとマイクにはHTTPSが必要です。PCに表示された最新のQRコードから開いてください。',
@@ -52,7 +58,7 @@ export class LiveConnection {
         else if (peer.connectionState === 'closed') this.update('closed');
       };
       const channel = (this.channel = peer.createDataChannel('oai-events'));
-      let started = false;
+      this.started = false;
       channel.onmessage = (event) => {
         if (this.cancelled || typeof event.data !== 'string' || event.data.length > 32_768) return;
         let value: Record<string, unknown>;
@@ -63,7 +69,7 @@ export class LiveConnection {
         }
         if (!value || typeof value !== 'object') return;
         if (value.type === 'session.started') {
-          started = true;
+          this.started = true;
           this.update('connected');
         }
         if (value.type === 'session.closed') this.update('disconnected');
@@ -97,22 +103,39 @@ export class LiveConnection {
         peer.addEventListener('icegatheringstatechange', check);
       });
       if (this.cancelled) return;
-      const answer = await playRequest<{
-        sdp: string;
-        generation: number;
-        opening?: LiveCommand | null;
-      }>('/api/play/live', {
+    } catch (error) {
+      this.close();
+      if (error instanceof DOMException && error.name === 'NotAllowedError')
+        throw new Error('マイクを許可してください。ブラウザのサイト設定から変更できます。');
+      throw error;
+    }
+  }
+  async connect(control: PlayControl): Promise<void> {
+    try {
+      if (!this.peer) await this.prepare();
+      const peer = this.peer!;
+      const body = this.pendingRequest ?? {
+        requestId: crypto.randomUUID(),
         sdp: peer.localDescription!.sdp,
-        ...(passphrase ? { passphrase } : {}),
-      });
+      };
+      this.pendingRequest = body;
+      const answer = await retryUncertain(() =>
+        playRequest<{ sdp: string; generation: number; opening?: LiveCommand | null }>(
+          '/api/play/live',
+          body,
+          'POST',
+          control,
+        ),
+      );
       if (this.cancelled) return;
+      this.pendingRequest = null;
       this.generation = answer.generation;
       this.opening = answer.opening ?? null;
       await peer.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
       await new Promise<void>((resolve, reject) => {
         const until = Date.now() + 15_000;
         const timer = window.setInterval(() => {
-          if (started) {
+          if (this.started) {
             window.clearInterval(timer);
             resolve();
           } else if (this.cancelled || Date.now() > until) {
@@ -122,6 +145,11 @@ export class LiveConnection {
         }, 100);
       });
     } catch (error) {
+      if (error instanceof PlayApiError && error.status === 0) {
+        this.update('failed');
+        throw error;
+      }
+      this.pendingRequest = null;
       this.cancelled = true;
       this.release();
       this.update('failed');
