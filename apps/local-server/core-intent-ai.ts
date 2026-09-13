@@ -5,6 +5,11 @@ import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import type { GamePhoto } from './photo.js';
 
 const envelope = z.object({ decision: intentDecisionSchema }).strict();
+// Structured Outputs accepts anyOf, but Zod's discriminated union emits oneOf.
+// Keep the discriminated runtime validator and use a plain union on the wire.
+export const coreIntentResponseSchema = z.toJSONSchema(
+  z.object({ decision: z.union(intentDecisionSchema.options) }).strict(),
+);
 export async function classifyCoreIntent(options: {
   respond: (body: unknown) => Promise<unknown>;
   model: string;
@@ -68,7 +73,7 @@ export async function classifyCoreIntent(options: {
         type: 'json_schema',
         name: 'core_intent',
         strict: true,
-        schema: z.toJSONSchema(envelope),
+        schema: coreIntentResponseSchema,
       },
     },
   });

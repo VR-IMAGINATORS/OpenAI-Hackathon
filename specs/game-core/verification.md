@@ -120,3 +120,10 @@ npm run buildと対象Prettier check成功。Chromeのopening-smoke/core-smoke/m
 - conversation.ja/en.openingMessageを導入台詞としてLiveへ渡す。役割は未来の本人ではなく未来の本人を支援するAI。
 - npm run build成功、npm test 172件成功。
 - Chrome core-smoke / mobile-smoke / opening-smoke成功。自動開始後のopening送信、日英UI、動画・着信、写真送信・再接続を確認。AI・マイクは模擬。実Liveの説明内容・テンポは未確認。
+
+## 2026-09-13 指示分類の実API拒否を修正
+
+- 実APIでcore_intentのdecision.oneOfが400 invalid_json_schemaになることを再現。分類段階で停止するため行動は消費されない。
+- Zodの判別共用体はランタイム検証用に残し、送信用は通常のunionからanyOfを生成する。
+- 同じ模擬発話の実API要求が修正後200/completed。実写真・実Liveでの通しプレイは未確認。
+- oneOf禁止とstrict object/all branchesを検証する回帰テスト追加。npm test 173件成功、npm run build成功。
