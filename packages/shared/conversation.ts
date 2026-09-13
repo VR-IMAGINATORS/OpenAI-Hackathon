@@ -86,7 +86,14 @@ export const executeIntentSchema = z
   .strict();
 export const intentDecisionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('wait'), reason }).strict(),
-  z.object({ kind: z.literal('consult'), evidenceSeq, reason }).strict(),
+  z
+    .object({
+      kind: z.literal('consult'),
+      evidenceSeq,
+      reason,
+      answer: z.string().min(1).max(2000).optional(),
+    })
+    .strict(),
   executeIntentSchema,
 ]);
 export type IntentDecision = z.infer<typeof intentDecisionSchema>;
@@ -166,7 +173,11 @@ export const actionResultSchema = z
   });
 export type ActionResult = z.infer<typeof actionResultSchema>;
 
-const commandType = z.enum(['session.thinking.append', 'session.commentary.append']);
+const commandType = z.enum([
+  'session.thinking.append',
+  'session.commentary.append',
+  'session.instructions.append',
+]);
 /** Internal queue entry; connection ownership is not repeated in each HTTP command. */
 export const liveOutboxEntrySchema = z
   .object({

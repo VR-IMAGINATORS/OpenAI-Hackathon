@@ -174,3 +174,17 @@ test('common config requires both languages and complete classification examples
     assert.throws(() => parseCoreConfig(value));
   }
 });
+
+test('time warning configuration validates thresholds and translations and is optional for old files', () => {
+  const old = config();
+  delete old.timeWarning;
+  assert.doesNotThrow(() => parseCoreConfig(old));
+  for (const thresholdSeconds of [0, -1, 1.5, 3601]) {
+    const value = config();
+    value.timeWarning.thresholdSeconds = thresholdSeconds;
+    assert.throws(() => parseCoreConfig(value));
+  }
+  const value = config();
+  delete value.timeWarning.message.en;
+  assert.throws(() => parseCoreConfig(value));
+});

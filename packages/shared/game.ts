@@ -42,7 +42,7 @@ export interface Proposal extends RecognizedProposal {
 }
 export type VoiceState = 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 export interface LiveCommand {
-  type: 'session.thinking.append' | 'session.commentary.append';
+  type: 'session.thinking.append' | 'session.commentary.append' | 'session.instructions.append';
   event_id: string;
   delegation_id: string | null;
   content: string;

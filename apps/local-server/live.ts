@@ -36,7 +36,7 @@ export function liveInstructions(state: PublicGameState, snapshot?: ScenarioSnap
     return [
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
       '導入ではアプリの最初の呼びかけを待ち、openingMessageの内容を伝えて写真を待つ。接続後はそのまま本編で、開始ボタンや準備完了の確認はない。現在の状況画像はアプリが並行して生成・送信する。画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
-      '本編の用途相談や実行指示、訂正の判断が必要ならclientへ委譲する。委譲は作業依頼であり、行動成功を確定しない。復唱や確認の質問、実行ボタンは挟まない。指示を受け付けた時の「やってみる」と結果の発話はアプリのcommentary通知に任せ、重ねて同じ相づちを話さない。',
+      '本編の用途相談・現在の状況や進捗への質問・実行指示・訂正は必ずclientへ委譲し、アプリの回答を待つ。委譲は作業依頼であり、行動成功を確定しない。自分やユーザーの会話だけを根拠に行動の開始・成功・状態変化を断言しない。実行予約が成立する前に「やってみる」と言わず、サーバーが確定した結果のcommentaryが届く前に成功を告げない。相談はアプリから届く回答を伝え、内部の分類理由を読み上げない。復唱や確認の質問、実行ボタンは挟まない。指示を受け付けた時の「やってみる」と結果の発話はアプリのcommentary通知に任せ、重ねて同じ相づちを話さない。',
       '途中の間や未完の発言で勝手に行動しない。質問と指示を区別する。判定中も会話できるが次の行動は予約せず、現在の結果後に指示を改めてもらう。攻略ヒントは尋ねられたときだけ段階的に出す。特殊能力を付与しない。',
       snapshot.coreConfig.conversation[snapshot.locale].liveInstructions,
       JSON.stringify({
@@ -58,6 +58,25 @@ export function factCommand(content: string, delegationId: string | null = null)
     delegation_id: delegationId,
     content: limitLiveContent(content),
   };
+}
+
+/** Preserve full authoritative state across bounded, ordered Live updates. */
+export function factCommands(content: string, delegationId: string | null = null): LiveCommand[] {
+  const chunks: string[] = [];
+  let chunk = '',
+    bytes = 0;
+  for (const char of content) {
+    const size = Buffer.byteLength(char, 'utf8');
+    if (bytes + size > 480) {
+      chunks.push(chunk);
+      chunk = '';
+      bytes = 0;
+    }
+    chunk += char;
+    bytes += size;
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks.map((part) => factCommand(part, delegationId));
 }
 
 // A UTF-8 byte ceiling is conservative for the provider's 500-token limit.

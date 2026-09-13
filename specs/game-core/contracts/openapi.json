@@ -33,17 +33,10 @@
                   },
                   "locale": {
                     "type": "string",
-                    "enum": [
-                      "ja",
-                      "en"
-                    ]
+                    "enum": ["ja", "en"]
                   }
                 },
-                "required": [
-                  "requestId",
-                  "clientId",
-                  "locale"
-                ]
+                "required": ["requestId", "clientId", "locale"]
               }
             }
           }
@@ -221,10 +214,7 @@
                     "$ref": "#/components/schemas/Event"
                   }
                 },
-                "required": [
-                  "generation",
-                  "event"
-                ]
+                "required": ["generation", "event"]
               }
             }
           }
@@ -246,10 +236,7 @@
                       "maxLength": 200
                     }
                   },
-                  "required": [
-                    "accepted",
-                    "eventId"
-                  ]
+                  "required": ["accepted", "eventId"]
                 }
               }
             }
@@ -696,10 +683,7 @@
                     "minimum": 0
                   }
                 },
-                "required": [
-                  "generation",
-                  "ackThrough"
-                ]
+                "required": ["generation", "ackThrough"]
               }
             }
           }
@@ -1239,19 +1223,13 @@
                           "const": "hosted-multiplayer"
                         }
                       },
-                      "required": [
-                        "name",
-                        "stage"
-                      ]
+                      "required": ["name", "stage"]
                     },
                     "supportedLocales": {
                       "type": "array",
                       "items": {
                         "type": "string",
-                        "enum": [
-                          "ja",
-                          "en"
-                        ]
+                        "enum": ["ja", "en"]
                       },
                       "minItems": 2,
                       "maxItems": 2,
@@ -1282,12 +1260,7 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "id",
-                            "title",
-                            "playerBriefing",
-                            "obstacleCount"
-                          ]
+                          "required": ["id", "title", "playerBriefing", "obstacleCount"]
                         },
                         "en": {
                           "type": "object",
@@ -1310,18 +1283,10 @@
                               "minimum": 0
                             }
                           },
-                          "required": [
-                            "id",
-                            "title",
-                            "playerBriefing",
-                            "obstacleCount"
-                          ]
+                          "required": ["id", "title", "playerBriefing", "obstacleCount"]
                         }
                       },
-                      "required": [
-                        "ja",
-                        "en"
-                      ]
+                      "required": ["ja", "en"]
                     },
                     "auth": {
                       "type": "object",
@@ -1331,9 +1296,7 @@
                           "const": true
                         }
                       },
-                      "required": [
-                        "required"
-                      ]
+                      "required": ["required"]
                     },
                     "ai": {
                       "type": "object",
@@ -1341,24 +1304,13 @@
                       "properties": {
                         "mode": {
                           "type": "string",
-                          "enum": [
-                            "mock",
-                            "live"
-                          ]
+                          "enum": ["mock", "live"]
                         }
                       },
-                      "required": [
-                        "mode"
-                      ]
+                      "required": ["mode"]
                     }
                   },
-                  "required": [
-                    "app",
-                    "supportedLocales",
-                    "scenarios",
-                    "auth",
-                    "ai"
-                  ]
+                  "required": ["app", "supportedLocales", "scenarios", "auth", "ai"]
                 }
               }
             }
@@ -1494,15 +1446,10 @@
                 "maxLength": 1000
               }
             },
-            "required": [
-              "code",
-              "message"
-            ]
+            "required": ["code", "message"]
           }
         },
-        "required": [
-          "error"
-        ]
+        "required": ["error"]
       },
       "Event": {
         "oneOf": [
@@ -1516,10 +1463,7 @@
               },
               "type": {
                 "type": "string",
-                "enum": [
-                  "session.input_transcript.delta",
-                  "session.output_transcript.delta"
-                ]
+                "enum": ["session.input_transcript.delta", "session.output_transcript.delta"]
               },
               "delta": {
                 "type": "string",
@@ -1534,13 +1478,7 @@
                 "minimum": 0
               }
             },
-            "required": [
-              "event_id",
-              "type",
-              "delta",
-              "start_ms",
-              "end_ms"
-            ]
+            "required": ["event_id", "type", "delta", "start_ms", "end_ms"]
           },
           {
             "type": "object",
@@ -1572,19 +1510,10 @@
                     "const": "client"
                   }
                 },
-                "required": [
-                  "id",
-                  "type",
-                  "target"
-                ]
+                "required": ["id", "type", "target"]
               }
             },
-            "required": [
-              "event_id",
-              "type",
-              "offset_ms",
-              "delegation"
-            ]
+            "required": ["event_id", "type", "offset_ms", "delegation"]
           }
         ]
       },
@@ -1594,15 +1523,7 @@
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "queued",
-              "generating",
-              "checking",
-              "retrying",
-              "ready",
-              "failed",
-              "cancelled"
-            ]
+            "enum": ["queued", "generating", "checking", "retrying", "ready", "failed", "cancelled"]
           },
           "assetId": {
             "anyOf": [
@@ -1619,9 +1540,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "SCENE_RECEIVE_FAILED"
-                ]
+                "enum": ["SCENE_RECEIVE_FAILED"]
               },
               {
                 "type": "null"
@@ -1633,12 +1552,7 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "status",
-          "assetId",
-          "errorCode",
-          "deadline"
-        ]
+        "required": ["status", "assetId", "errorCode", "deadline"]
       },
       "Message": {
         "type": "object",
@@ -1658,19 +1572,11 @@
           },
           "side": {
             "type": "string",
-            "enum": [
-              "user",
-              "assistant"
-            ]
+            "enum": ["user", "assistant"]
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "transcript",
-              "photo",
-              "result",
-              "system"
-            ]
+            "enum": ["transcript", "photo", "result", "system"]
           },
           "text": {
             "type": "string",
@@ -1740,10 +1646,7 @@
           },
           "locale": {
             "type": "string",
-            "enum": [
-              "ja",
-              "en"
-            ]
+            "enum": ["ja", "en"]
           },
           "version": {
             "type": "integer",
@@ -1779,15 +1682,7 @@
             ]
           }
         },
-        "required": [
-          "playId",
-          "locale",
-          "version",
-          "reset",
-          "upserts",
-          "removedIds",
-          "retainUntil"
-        ]
+        "required": ["playId", "locale", "version", "reset", "upserts", "removedIds", "retainUntil"]
       },
       "Command": {
         "type": "object",
@@ -1805,7 +1700,8 @@
             "type": "string",
             "enum": [
               "session.thinking.append",
-              "session.commentary.append"
+              "session.commentary.append",
+              "session.instructions.append"
             ]
           },
           "delegation_id": {
@@ -1835,14 +1731,7 @@
             ]
           }
         },
-        "required": [
-          "seq",
-          "event_id",
-          "type",
-          "delegation_id",
-          "content",
-          "messageId"
-        ]
+        "required": ["seq", "event_id", "type", "delegation_id", "content", "messageId"]
       },
       "CommandBatch": {
         "type": "object",
@@ -1868,12 +1757,7 @@
             "maxItems": 128
           }
         },
-        "required": [
-          "generation",
-          "controlEpoch",
-          "acknowledgedThrough",
-          "commands"
-        ]
+        "required": ["generation", "controlEpoch", "acknowledgedThrough", "commands"]
       },
       "Trace": {
         "type": "object",
@@ -1917,9 +1801,7 @@
             "maxItems": 128
           }
         },
-        "required": [
-          "entries"
-        ]
+        "required": ["entries"]
       },
       "Created": {
         "allOf": [
@@ -1936,14 +1818,7 @@
               },
               "lifecycle": {
                 "type": "string",
-                "enum": [
-                  "connecting",
-                  "active",
-                  "recovering",
-                  "closing",
-                  "terminal",
-                  "quarantined"
-                ]
+                "enum": ["connecting", "active", "recovering", "closing", "terminal", "quarantined"]
               },
               "expiresAt": {
                 "type": "string",
@@ -1983,9 +1858,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "controlEpoch"
-            ],
+            "required": ["controlEpoch"],
             "properties": {
               "controlEpoch": {
                 "type": "integer",
@@ -1998,13 +1871,7 @@
       "PublicState": {
         "type": "object",
         "description": "既存PublicGameStateを継承。proposal/transcriptは旧互換のため残すが新UIの正本はfeed。",
-        "required": [
-          "id",
-          "generation",
-          "status",
-          "stateVersion",
-          "locale"
-        ],
+        "required": ["id", "generation", "status", "stateVersion", "locale"],
         "properties": {
           "id": {
             "type": "string",
@@ -2016,14 +1883,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "briefing",
-              "playing",
-              "judging",
-              "won",
-              "lost",
-              "expired"
-            ]
+            "enum": ["briefing", "playing", "judging", "won", "lost", "expired"]
           },
           "stateVersion": {
             "type": "integer",
@@ -2031,10 +1891,7 @@
           },
           "locale": {
             "type": "string",
-            "enum": [
-              "ja",
-              "en"
-            ]
+            "enum": ["ja", "en"]
           },
           "title": {
             "type": "string",
@@ -2086,19 +1943,10 @@
                 },
                 "status": {
                   "type": "string",
-                  "enum": [
-                    "available",
-                    "damaged",
-                    "consumed"
-                  ]
+                  "enum": ["available", "damaged", "consumed"]
                 }
               },
-              "required": [
-                "id",
-                "name",
-                "description",
-                "status"
-              ]
+              "required": ["id", "name", "description", "status"]
             },
             "maxItems": 40
           }
@@ -2117,14 +1965,7 @@
           },
           "lifecycle": {
             "type": "string",
-            "enum": [
-              "connecting",
-              "active",
-              "recovering",
-              "closing",
-              "terminal",
-              "quarantined"
-            ]
+            "enum": ["connecting", "active", "recovering", "closing", "terminal", "quarantined"]
           },
           "expiresAt": {
             "type": "string",
