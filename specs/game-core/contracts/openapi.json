@@ -1,0 +1,2167 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Game core API delta",
+    "version": "0.1.0-draft",
+    "description": "hosted-multiplayer/contracts/openapi.yamlへの追加/上書き契約。bootstrap/state/photo/start/end/control/live/heartbeatの基本契約は継承しplan §7の追加を適用。全APIで既存Host/Origin検証・認証・レート制限を維持。 認証付き応答（エラー含む）はprivate,no-store / Vary:Cookie / nosniff。"
+  },
+  "security": [
+    {
+      "ownerCookie": []
+    }
+  ],
+  "paths": {
+    "/api/plays": {
+      "post": {
+        "operationId": "createCorePlay",
+        "description": "localeも再送digestに含める。新規開始時設定を検証。不正設定503 CONFIG_INVALID。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "clientId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "locale": {
+                    "type": "string",
+                    "enum": [
+                      "ja",
+                      "en"
+                    ]
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "clientId",
+                  "locale"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/events": {
+      "post": {
+        "operationId": "acceptCoreEvent",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Client-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Control-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "description": "検証・保存・スケジュールまで。AI待ちなし。同一event_idの同内容再送は再処理しない。違う内容は409。 最終音声猶予中は文字起こし表示のみ、新規委譲は拒否。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "event": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                },
+                "required": [
+                  "generation",
+                  "event"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "accepted": {
+                      "const": true
+                    },
+                    "eventId": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  },
+                  "required": [
+                    "accepted",
+                    "eventId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/feed": {
+      "get": {
+        "operationId": "readCoreFeed",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "description": "owner限定。初回/期限切れcursorはreset=trueのsnapshot。保有版より大きいcursorは400。JSON256KiB以下。ポーリング1000ms、終了後もretainUntilまで。",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Feed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/assets/{assetId}": {
+      "get": {
+        "operationId": "readCoreAsset",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "owner+playId照合。最大256KiB JPEG。未検査sceneなし。private,no-store/nosniff。",
+        "responses": {
+          "200": {
+            "description": "JPEG bytes",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "private, no-store"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "const": "nosniff"
+                }
+              }
+            },
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/commands/poll": {
+      "post": {
+        "operationId": "pollCoreCommands",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Client-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Control-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "description": "既存generation/controllerのみ。ackは発行済み連続seq。再送は同じevent_id。音声再生完了のackではない。 正常勝敗/ゲーム時間切れのfinalVoiceUntil内は既存Live世代の最終command取得のみ許可し、新規ゲーム操作は許可しない。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "generation": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "ackThrough": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "generation",
+                  "ackThrough"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandBatch"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/trace": {
+      "get": {
+        "operationId": "readLocalCoreTrace",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "非productionかつENABLE_GAME_TRACE=1のみ。owner限定。終了で破棄。本番404。",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trace"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/actions": {
+      "post": {
+        "operationId": "rejectLegacyAction",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Client-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "X-Control-Epoch",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "description": "旧実行ボタンを無効化。新UIは使用しない。",
+        "responses": {
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "LEGACY_ACTION_DISABLED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/play/state": {
+      "get": {
+        "operationId": "getCoreState",
+        "parameters": [
+          {
+            "name": "X-Play-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "既存state読取。終了後はResultStoreから結果stateを返す。versionはfeedと独立。",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostedState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bootstrap": {
+      "get": {
+        "operationId": "getCoreBootstrap",
+        "security": [],
+        "description": "認証前。秘密・goal・facts・判定policyは返さない。",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "app": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "stage": {
+                          "const": "hosted-multiplayer"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "stage"
+                      ]
+                    },
+                    "supportedLocales": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "ja",
+                          "en"
+                        ]
+                      },
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "uniqueItems": true
+                    },
+                    "scenarios": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "ja": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "maxLength": 64
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 2000
+                            },
+                            "playerBriefing": {
+                              "type": "string",
+                              "maxLength": 2000
+                            },
+                            "obstacleCount": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "title",
+                            "playerBriefing",
+                            "obstacleCount"
+                          ]
+                        },
+                        "en": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "maxLength": 64
+                            },
+                            "title": {
+                              "type": "string",
+                              "maxLength": 2000
+                            },
+                            "playerBriefing": {
+                              "type": "string",
+                              "maxLength": 2000
+                            },
+                            "obstacleCount": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "title",
+                            "playerBriefing",
+                            "obstacleCount"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "ja",
+                        "en"
+                      ]
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "required": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "required"
+                      ]
+                    },
+                    "ai": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "mock",
+                            "live"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "mode"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "app",
+                    "supportedLocales",
+                    "scenarios",
+                    "auth",
+                    "ai"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "UPSTREAM_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "安定error.codeをUIで選択言語へ翻訳",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ownerCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "play_session",
+        "description": "実装の既存cookie名を正本として維持する。"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "message": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Event": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "event_id": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "session.input_transcript.delta",
+                  "session.output_transcript.delta"
+                ]
+              },
+              "delta": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "start_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end_ms": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "event_id",
+              "type",
+              "delta",
+              "start_ms",
+              "end_ms"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "event_id": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "type": {
+                "const": "session.delegation.created"
+              },
+              "offset_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "delegation": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "type": {
+                    "const": "delegation"
+                  },
+                  "target": {
+                    "const": "client"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type",
+                  "target"
+                ]
+              }
+            },
+            "required": [
+              "event_id",
+              "type",
+              "offset_ms",
+              "delegation"
+            ]
+          }
+        ]
+      },
+      "Slot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "generating",
+              "checking",
+              "retrying",
+              "ready",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "assetId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SCENE_RECEIVE_FAILED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deadline": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "status",
+          "assetId",
+          "errorCode",
+          "deadline"
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "transcript",
+              "photo",
+              "result",
+              "system"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 2
+          },
+          "imageSlot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Slot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relatedCommandSeq": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "liveGeneration": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "createdOrder",
+          "updatedVersion",
+          "side",
+          "kind",
+          "text",
+          "assetIds",
+          "imageSlot",
+          "relatedCommandSeq",
+          "liveGeneration"
+        ]
+      },
+      "Feed": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "playId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reset": {
+            "type": "boolean"
+          },
+          "upserts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "maxItems": 128
+          },
+          "removedIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 128
+          },
+          "retainUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "playId",
+          "locale",
+          "version",
+          "reset",
+          "upserts",
+          "removedIds",
+          "retainUntil"
+        ]
+      },
+      "Command": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "event_id": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "session.thinking.append",
+              "session.commentary.append"
+            ]
+          },
+          "delegation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "messageId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "seq",
+          "event_id",
+          "type",
+          "delegation_id",
+          "content",
+          "messageId"
+        ]
+      },
+      "CommandBatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "controlEpoch": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "acknowledgedThrough": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Command"
+            },
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "generation",
+          "controlEpoch",
+          "acknowledgedThrough",
+          "commands"
+        ]
+      },
+      "Trace": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "actionId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "configDigest": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "interpretation": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "shortReason": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "durationMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "actionId",
+                "configDigest",
+                "interpretation",
+                "shortReason",
+                "durationMs"
+              ]
+            },
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "entries"
+        ]
+      },
+      "Created": {
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "playId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "state": {
+                "$ref": "#/components/schemas/PublicState"
+              },
+              "lifecycle": {
+                "type": "string",
+                "enum": [
+                  "connecting",
+                  "active",
+                  "recovering",
+                  "closing",
+                  "terminal",
+                  "quarantined"
+                ]
+              },
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "recoveryExpiresAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retainUntil": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "playId",
+              "state",
+              "lifecycle",
+              "expiresAt",
+              "recoveryExpiresAt",
+              "retainUntil"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "controlEpoch"
+            ],
+            "properties": {
+              "controlEpoch": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        ]
+      },
+      "PublicState": {
+        "type": "object",
+        "description": "既存PublicGameStateを継承。proposal/transcriptは旧互換のため残すが新UIの正本はfeed。",
+        "required": [
+          "id",
+          "generation",
+          "status",
+          "stateVersion",
+          "locale"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "generation": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "briefing",
+              "playing",
+              "judging",
+              "won",
+              "lost",
+              "expired"
+            ]
+          },
+          "stateVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "ja",
+              "en"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "briefing": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "situation": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "actionsRemaining": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "remainingMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "waitingRemainingMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "busy": {
+            "type": "boolean"
+          },
+          "inventory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "available",
+                    "damaged",
+                    "consumed"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description",
+                "status"
+              ]
+            },
+            "maxItems": 40
+          }
+        }
+      },
+      "HostedState": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "playId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PublicState"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "connecting",
+              "active",
+              "recovering",
+              "closing",
+              "terminal",
+              "quarantined"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recoveryExpiresAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retainUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "playId",
+          "state",
+          "lifecycle",
+          "expiresAt",
+          "recoveryExpiresAt",
+          "retainUntil"
+        ]
+      }
+    }
+  }
+}
