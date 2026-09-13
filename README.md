@@ -63,7 +63,7 @@ flowchart LR
   E --> F[人が映像を確認]
 ```
 
-[現行手順](.agents/skills/call-to-past/references/ending.md)と[文字生成のノウハウ](docs/research/minimax-h3/typography-motion-graphics.md)を参照してください。通常プレイの終了画像なし登録は対応済み、文字入り試作動画は回収済みです。内容品質の評価とWeb版への統合は別途必要です。[旧調査](docs/ending-video-handoff.md)は履歴資料です。
+[現行手順](.agents/skills/call-to-past/references/ending.md)と[文字生成のノウハウ](docs/research/minimax-h3/typography-motion-graphics.md)を参照してください。通常プレイの終了画像なし登録は対応済み、文字入り試作動画は回収済みです。内容品質の評価とWeb版への統合は別途必要です。座標による空間構築・配置図・動画連結の検証ツールは撤去しました。[残したものと撤去したもの](docs/ending-production-cleanup.md)を整理しています。
 
 次の開発は [後続の進め方](specs/web-foundation/next-steps.md) を参照してください。
 

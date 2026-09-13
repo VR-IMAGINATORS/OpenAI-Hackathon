@@ -72,7 +72,7 @@ class MediaBridgeTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CODEX_HOME": str(nonexistent_home)}, clear=False):
             skill = self.real_resolve_h3_skill()
         self.assertEqual(skill, SCRIPT.parents[1].resolve())
-        for name in ("estimate_cost.py", "generate_h3.py", "verify_and_concat.py"):
+        for name in ("estimate_cost.py", "generate_h3.py"):
             self.assertTrue((skill / "scripts" / name).is_file(), name)
 
     def test_isolated_copy_runs_submit_status_result_from_bundled_runtime(self) -> None:
@@ -245,9 +245,6 @@ elif command == 'result':
     )
 """,
             encoding="utf-8",
-        )
-        (scripts / "verify_and_concat.py").write_text(
-            "raise SystemExit('offline placeholder; never called')\n", encoding="utf-8"
         )
         return skill
 

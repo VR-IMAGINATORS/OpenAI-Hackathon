@@ -652,7 +652,7 @@ def credentials(args: argparse.Namespace) -> tuple[str, str]:
 
 def resolve_h3_skill() -> Path:
     skill = Path(__file__).resolve().parents[1]
-    required = ("estimate_cost.py", "generate_h3.py", "verify_and_concat.py")
+    required = ("estimate_cost.py", "generate_h3.py")
     missing = [name for name in required if not (skill / "scripts" / name).is_file()]
     if missing:
         names = ", ".join(missing)
