@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "id": "auto-mission-creator",
+  "title": "自動ミッション生成プロトタイプ",
+  "goal": "新規ギミックを自動生成し、人間介在なしに実現可能性を検証する独立CLI",
+  "source": {
+    "type": "spec-workflow",
+    "spec_path": "specs/auto-mission-creator/spec.md"
+  },
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "statement": "Astraによる生成と修正、固定コントラクトの不変性",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-2",
+      "statement": "道具の状態・位置・資源・順序・終端の決定的検査",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-3",
+      "statement": "互いの評価を共有しない3評価と反証に基づく指摘検証",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-4",
+      "statement": "最大2修正・600秒全体期限・API/出力予算・失敗時の非合格",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-5",
+      "statement": "CLI・途中JSON保存・安全なダークHTML・段階別実測",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-6",
+      "statement": "正常および既知異常fixtureと既存機能の回帰検証",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-7",
+      "statement": "実APIで生成と正常/異常例を評価し時間と結果を記録",
+      "verification": "manual"
+    }
+  ],
+  "architecture_constraints": [
+    {
+      "id": "AR-1",
+      "statement": "既存ゲーム・AWS・公開APIを変更しない。生成と修正は最上位Astra。"
+    },
+    {
+      "id": "AR-2",
+      "statement": "設定/生成データを検証し、秘密値を成果物へ保存しない。"
+    }
+  ],
+  "risk": {
+    "level": "medium",
+    "domains": ["ai-quality", "api-cost", "generated-content"]
+  },
+  "out_of_scope": [
+    "本番ゲーム統合",
+    "面白さの自動採点",
+    "生成失敗時の既存シナリオへのフォールバック"
+  ],
+  "accepted_risks": ["物理判断の精度はモデル依存。時間は実プレイ保証ではなく見積り。"],
+  "created_at": "2026-09-14",
+  "updated_at": "2026-09-14"
+}

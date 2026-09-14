@@ -1,0 +1,359 @@
+{
+  "expected": {
+    "verdict": "fail",
+    "reason": "使用不能の道具を再利用"
+  },
+  "contract": {
+    "schemaVersion": 1,
+    "inputDigest": "7808e595c44c9b90e29093827a706b65d3a834d16dd43664f3c6b60c0dcd59bd",
+    "world": {
+      "premise": "過去のあなたが写真から具現化した身近な道具と音声の指示で、未来の自分の脱出を助ける。",
+      "constraints": [
+        "物の具現化以外の特殊能力はない。",
+        "道具は日用品の通常の性質のみを持つ。",
+        "拘束状態、手の届く範囲、道具の配置と回収を説明する。"
+      ]
+    },
+    "difficulty": {
+      "maxPhotoSends": 4,
+      "maxPhotosPerSend": 2,
+      "maxActions": null,
+      "totalTimeSeconds": 300,
+      "obstacleCount": 3
+    },
+    "objectCatalog": [
+      {
+        "id": "paper",
+        "name": "紙",
+        "ordinaryProperties": ["折れる", "薄い"]
+      },
+      {
+        "id": "pen",
+        "name": "ペン",
+        "ordinaryProperties": ["筆記できる", "細い棒状"]
+      },
+      {
+        "id": "scissors",
+        "name": "ハサミ",
+        "ordinaryProperties": ["刃が届く薄い物を切れる"]
+      },
+      {
+        "id": "towel",
+        "name": "タオル",
+        "ordinaryProperties": [
+          "柔らかい",
+          "吸水する",
+          "具現化するのは乾いた綿製のフェイスタオル。少量の水滴を吸収して、手と取っ手の間に挟んで握れる。"
+        ]
+      },
+      {
+        "id": "cup",
+        "name": "コップ",
+        "ordinaryProperties": ["液体を入れられる"]
+      },
+      {
+        "id": "spoon",
+        "name": "スプーン",
+        "ordinaryProperties": [
+          "小さな物をすくえる",
+          "柄は一般的な平たいステンレス製で、幅2cm、厚さ1mm、長さ10cm。軽い金具を押せる剛性がある。"
+        ]
+      },
+      {
+        "id": "rubber-band",
+        "name": "輪ゴム",
+        "ordinaryProperties": ["伸縮する"]
+      },
+      {
+        "id": "string",
+        "name": "紐",
+        "ordinaryProperties": ["結べる", "引っ張れる"]
+      }
+    ],
+    "locations": [
+      {
+        "id": "room",
+        "description": "監禁室。全ての仕掛けは互いに一歩以内で、移動せず手が届く。"
+      }
+    ],
+    "factDefinitions": [
+      {
+        "key": "rope",
+        "allowedValues": ["closed", "open"],
+        "initialValue": "closed"
+      },
+      {
+        "key": "latch",
+        "allowedValues": ["closed", "open"],
+        "initialValue": "closed"
+      },
+      {
+        "key": "exit",
+        "allowedValues": ["closed", "open"],
+        "initialValue": "closed"
+      }
+    ],
+    "initialState": {
+      "locationId": "room",
+      "description": "未来の自分は自由に手足を動かせる。出口の横には細い木綿紐、薄い板で動く掛け金、少量の水滴で滑る常温の金属取っ手の順に三つの障害がある。写真の物は胸の前の空間に具現化し、自由な手で受け取る。",
+      "props": [
+        {
+          "id": "exit-door",
+          "description": "内開き出口。細い木綿紐が取っ手と壁を結ぶ。掛け金は幅3cm・高さ2mm・奥行3cmの露出した隙間の奥にあり、薄い板を差して軽く上へ押すと外れる。金具は軽く、上へ動かすと切り欠きに留まるため道具を抜いても閉じない。取っ手は常温で、少量の水滴だけが付いて滑る。油や薬品は付いていない。紐と掛け金が外れれば軽い力でドアを内側へ引ける。",
+          "locationId": "room"
+        }
+      ]
+    },
+    "orderedObstacles": [
+      {
+        "id": "rope",
+        "locationId": "room",
+        "goalConditions": [
+          {
+            "key": "rope",
+            "value": "open"
+          }
+        ],
+        "constraints": ["先の障害を解決してから作業する"]
+      },
+      {
+        "id": "latch",
+        "locationId": "room",
+        "goalConditions": [
+          {
+            "key": "latch",
+            "value": "open"
+          }
+        ],
+        "constraints": ["先の障害を解決してから作業する"]
+      },
+      {
+        "id": "exit",
+        "locationId": "room",
+        "goalConditions": [
+          {
+            "key": "exit",
+            "value": "open"
+          }
+        ],
+        "constraints": ["先の障害を解決してから作業する"]
+      }
+    ],
+    "escapeConditions": [
+      {
+        "key": "exit",
+        "value": "open"
+      }
+    ]
+  },
+  "candidate": {
+    "revision": 0,
+    "contractDigest": "e1d7dfad9ede7e0fa1777804cde300813419b729f41f9dae87e688846ce4ca9d",
+    "title": "三つの小さな障害",
+    "opening": "未来の自分は自由に手足を動かせる。出口の横には細い木綿紐、薄い板で動く掛け金、少量の水滴で滑る常温の金属取っ手の順に三つの障害がある。写真の物は胸の前の空間に具現化し、自由な手で受け取る。",
+    "obstacles": [
+      {
+        "id": "rope",
+        "description": "細い木綿紐を切る",
+        "solutionExample": "ハサミを握り、取っ手を壁へ結んだ細い木綿紐を切る。"
+      },
+      {
+        "id": "latch",
+        "description": "露出した掛け金を押し上げる",
+        "solutionExample": "幅2cm・厚さ1mmの平たい金属製スプーンの柄を幅3cm・高さ2mmの隙間へ差し込み、奥行3cmの位置にある軽い掛け金を上の切り欠きまで押し上げる。"
+      },
+      {
+        "id": "exit",
+        "description": "水滴で滑る取っ手をタオルで握り出口を開ける",
+        "solutionExample": "乾いた綿のタオル越しに取っ手を握り、水滴を吸わせながら、そのまま内側へ引いて出口を開ける。"
+      }
+    ],
+    "ending": "出口が開いた。未来の自分は外へ出られる状態になった。",
+    "items": [
+      {
+        "id": "scissors",
+        "catalogId": "scissors",
+        "initialPlacement": "胸の前の空間に現れた物を自由な手で受け取る。"
+      },
+      {
+        "id": "spoon",
+        "catalogId": "spoon",
+        "initialPlacement": "胸の前の空間に現れた物を自由な手で受け取る。"
+      },
+      {
+        "id": "towel",
+        "catalogId": "towel",
+        "initialPlacement": "胸の前の空間に現れた物を自由な手で受け取る。"
+      }
+    ],
+    "steps": [
+      {
+        "id": "send-scissors",
+        "obstacleId": "rope",
+        "kind": "send",
+        "description": "手元でハサミを受け取る。",
+        "preconditions": [],
+        "itemIds": ["scissors"],
+        "targetLocationId": "room",
+        "factEffects": [],
+        "itemEffects": [
+          {
+            "itemId": "scissors",
+            "from": {
+              "phase": "unmaterialized",
+              "locationId": null,
+              "condition": "usable"
+            },
+            "to": {
+              "phase": "held",
+              "locationId": "room",
+              "condition": "usable"
+            }
+          }
+        ],
+        "estimatedSeconds": 10,
+        "timeRationale": "写真を送って物を受け取るための見積り。"
+      },
+      {
+        "id": "use-scissors",
+        "obstacleId": "rope",
+        "kind": "use",
+        "description": "ハサミを握り、取っ手を壁へ結んだ細い木綿紐を切る。",
+        "preconditions": [
+          {
+            "key": "rope",
+            "value": "closed"
+          }
+        ],
+        "itemIds": ["scissors"],
+        "targetLocationId": null,
+        "factEffects": [
+          {
+            "key": "rope",
+            "from": "closed",
+            "to": "open"
+          }
+        ],
+        "itemEffects": [
+          {
+            "itemId": "scissors",
+            "from": {
+              "phase": "held",
+              "locationId": "room",
+              "condition": "usable"
+            },
+            "to": {
+              "phase": "unavailable",
+              "locationId": null,
+              "condition": "broken"
+            }
+          }
+        ],
+        "estimatedSeconds": 15,
+        "timeRationale": "目の前の単純な仕掛けを道具で操作する時間。"
+      },
+      {
+        "id": "send-spoon",
+        "obstacleId": "latch",
+        "kind": "send",
+        "description": "手元でスプーンを受け取る。",
+        "preconditions": [],
+        "itemIds": ["spoon"],
+        "targetLocationId": "room",
+        "factEffects": [],
+        "itemEffects": [
+          {
+            "itemId": "spoon",
+            "from": {
+              "phase": "unmaterialized",
+              "locationId": null,
+              "condition": "usable"
+            },
+            "to": {
+              "phase": "held",
+              "locationId": "room",
+              "condition": "usable"
+            }
+          }
+        ],
+        "estimatedSeconds": 10,
+        "timeRationale": "写真を送って物を受け取るための見積り。"
+      },
+      {
+        "id": "use-spoon",
+        "obstacleId": "latch",
+        "kind": "use",
+        "description": "壊れて使用できなくなったハサミで掛け金を操作する。",
+        "preconditions": [
+          {
+            "key": "latch",
+            "value": "closed"
+          }
+        ],
+        "itemIds": ["scissors"],
+        "targetLocationId": null,
+        "factEffects": [
+          {
+            "key": "latch",
+            "from": "closed",
+            "to": "open"
+          }
+        ],
+        "itemEffects": [],
+        "estimatedSeconds": 15,
+        "timeRationale": "目の前の単純な仕掛けを道具で操作する時間。"
+      },
+      {
+        "id": "send-towel",
+        "obstacleId": "exit",
+        "kind": "send",
+        "description": "胸の前に具現化した乾いた綿のタオルを、自由な手で受け取る。",
+        "preconditions": [],
+        "itemIds": ["towel"],
+        "targetLocationId": "room",
+        "factEffects": [],
+        "itemEffects": [
+          {
+            "itemId": "towel",
+            "from": {
+              "phase": "unmaterialized",
+              "locationId": null,
+              "condition": "usable"
+            },
+            "to": {
+              "phase": "held",
+              "locationId": "room",
+              "condition": "usable"
+            }
+          }
+        ],
+        "estimatedSeconds": 10,
+        "timeRationale": "写真を送って物を受け取るための見積り。"
+      },
+      {
+        "id": "use-towel",
+        "obstacleId": "exit",
+        "kind": "use",
+        "description": "乾いた綿のタオル越しに取っ手を握り、水滴を吸わせながら、そのまま内側へ引いて出口を開ける。",
+        "preconditions": [
+          {
+            "key": "exit",
+            "value": "closed"
+          }
+        ],
+        "itemIds": ["towel"],
+        "targetLocationId": null,
+        "factEffects": [
+          {
+            "key": "exit",
+            "from": "closed",
+            "to": "open"
+          }
+        ],
+        "itemEffects": [],
+        "estimatedSeconds": 15,
+        "timeRationale": "目の前の単純な仕掛けを道具で操作する時間。"
+      }
+    ]
+  }
+}
