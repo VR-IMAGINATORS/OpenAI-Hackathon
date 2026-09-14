@@ -331,7 +331,8 @@ test('execution adds no server acknowledgement while judging and still delivers 
   gate.resolve();
   await until(() =>
     newCommands().some(
-      (c) => c.type === 'session.commentary.append' && c.content === 'ロープは切れなかった。',
+      (c) =>
+        c.type === 'session.commentary.append' && c.content.startsWith('ロープは切れなかった。'),
     ),
   );
   await h.delegate(delegationId);
@@ -342,8 +343,9 @@ test('execution adds no server acknowledgement while judging and still delivers 
     newCommands()
       .filter((c) => c.type === 'session.commentary.append')
       .map((c) => c.content),
-    ['ロープは切れなかった。', '現在の状況: ' + h.runtime.game.situation],
+    ['ロープは切れなかった。\n現在の状況: ' + h.runtime.game.situation],
   );
+  assert.equal(newCommands().filter((c) => c.type === 'session.thinking.append').length, 0);
 });
 
 test('photo use question arrives only after recognition and an upload retry does not repeat it', async (t) => {
@@ -509,7 +511,7 @@ test('consult speaks answer rather than classification reason and action speaks 
       .commands.some(
         (c) =>
           c.type === 'session.commentary.append' &&
-          c.content === '現在の状況: ' + h.runtime.game.situation,
+          c.content.includes('現在の状況: ' + h.runtime.game.situation),
       ),
   );
   assert.equal(h.scenes.length, 2);

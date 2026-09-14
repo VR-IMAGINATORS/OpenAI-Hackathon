@@ -4,7 +4,7 @@ import {
   classifyCoreIntent,
   coreIntentResponseSchema,
 } from '../apps/local-server/core-intent-ai.js';
-import { factCommands, liveInstructions } from '../apps/local-server/live.js';
+import { factCommands, speechCommands, liveInstructions } from '../apps/local-server/live.js';
 import { ConversationLedger } from '../apps/local-server/conversation.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { intentDecisionSchema } from '../packages/shared/conversation.js';
@@ -116,4 +116,24 @@ test('core Live instructions delegate game questions and gate action claims on a
   assert.match(prompt, /実行可否・成否・写真送信回数はサーバーが判断する/);
   assert.match(prompt, /委譲しただけでは行動の開始・成功・状態変化は未確定/);
   assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
+});
+
+test('speech chunks preserve text while keeping complete sentences together', () => {
+  const first = 'あ'.repeat(100) + '。';
+  const second = 'い'.repeat(90) + '。';
+  const commands = speechCommands(first + second, 'delegation-speech');
+  assert.deepEqual(
+    commands.map((c) => c.content),
+    [first, second],
+  );
+  assert.ok(
+    commands.every(
+      (c) => c.type === 'session.commentary.append' && c.delegation_id === 'delegation-speech',
+    ),
+  );
+  const long = '🪢'.repeat(300) + '。Done!';
+  const split = speechCommands(long);
+  assert.equal(split.map((c) => c.content).join(''), long);
+  assert.ok(split.every((c) => Buffer.byteLength(c.content) <= 480));
+  assert.deepEqual(speechCommands(''), []);
 });
