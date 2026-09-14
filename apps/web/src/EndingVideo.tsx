@@ -176,8 +176,8 @@ export default function EndingVideo({
         {view && pending.has(view.status) && !unavailable && (
           <p className="ending-note">
             {t(
-              '結果を閉じると、下の会話履歴を広く表示できます。動画の準備状況は閉じても確認できます。',
-              'Collapse the result to make room for the conversation below. The video status stays visible.',
+              '動画を待つ間も、結果と会話履歴を確認できます。',
+              'You can read your result and conversation while you wait.',
             )}
           </p>
         )}
