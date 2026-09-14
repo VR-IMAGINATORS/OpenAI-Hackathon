@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { EndingOutcome, EndingView } from '../../../packages/shared/ending.js';
 import type { Locale } from './ChatFeed.js';
 import { endingVideoPath, getEnding, PlayApiError } from './play-api.js';
@@ -24,6 +24,9 @@ export default function EndingVideo({
   const [unavailable, setUnavailable] = useState<Unavailable>(null);
   const [showStory, setShowStory] = useState(false);
   const [mediaFailed, setMediaFailed] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const detailsId = useId();
+  const videoRef = useRef<HTMLVideoElement>(null);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export default function EndingVideo({
     setUnavailable(null);
     setShowStory(false);
     setMediaFailed(false);
+    setExpanded(true);
     const expire = () => {
       controller.abort();
       window.clearTimeout(timer);
@@ -128,66 +132,87 @@ export default function EndingVideo({
   }
   return (
     <section className="ending-video" aria-label={t('このプレイの結末', 'Your ending')}>
-      <p className="ending-eyebrow">CALL ENDED</p>
-      <h2>
-        {finalOutcome
-          ? {
-              happy: t('ハッピーエンド', 'Happy ending'),
-              normal: t('ノーマルエンド', 'Normal ending'),
-              bad: t('バッドエンド', 'Bad ending'),
-            }[finalOutcome]
-          : t('プレイ終了', 'Game ended')}
-      </h2>
-      {count !== undefined && (
-        <p>{t(`解除したギミック：${count}個`, `Gimmicks cleared: ${count}`)}</p>
-      )}
-      {summary && <p className="ending-summary">{summary}</p>}
+      <div className="ending-heading">
+        <h2>
+          {finalOutcome
+            ? {
+                happy: t('ハッピーエンド', 'Happy ending'),
+                normal: t('ノーマルエンド', 'Normal ending'),
+                bad: t('バッドエンド', 'Bad ending'),
+              }[finalOutcome]
+            : t('プレイ終了', 'Game ended')}
+        </h2>
+        {count !== undefined && (
+          <p className="ending-count">{t(`解除：${count}個`, `Cleared: ${count}`)}</p>
+        )}
+      </div>
       <p className="ending-status" role="status">
         {view && pending.has(view.status) && !unavailable && (
           <span className="ending-spinner" aria-hidden="true" />
         )}
-        {statusText}
+        {ready && !expanded ? t('動画が完成しました', 'Your video is ready') : statusText}
       </p>
-      {view && pending.has(view.status) && !unavailable && (
-        <p className="ending-note">
-          {t(
-            '動画を待つ間も、結果と会話履歴を確認できます。',
-            'You can read your result and conversation while you wait.',
-          )}
-        </p>
-      )}
-      {ready && !mediaFailed && (
-        <video
-          key={playId}
-          src={endingVideoPath(playId)}
-          controls
-          playsInline
-          preload="metadata"
-          aria-label={t('エンディング動画', 'Ending video')}
-          onEnded={() => setShowStory(true)}
-          onError={() => setMediaFailed(true)}
-        />
-      )}
-      {ready && mediaFailed && (
-        <p role="status">
-          {t(
-            '動画を再生できません。下のボタンから結末を確認できます。',
-            'The video could not be played. Use the button below to read your ending.',
-          )}
-        </p>
-      )}
-      {view?.story && !showStory && (
-        <button type="button" className="ending-reveal" onClick={() => setShowStory(true)}>
-          {t('結果を見る', 'Read the ending')}
-        </button>
-      )}
-      {view?.story && showStory && (
-        <div className="ending-story">
-          <h3>{view.story.title}</h3>
-          <p>{view.story.text}</p>
-          <p>{view.story.evaluation}</p>
-        </div>
-      )}
+      <button
+        type="button"
+        className="ending-toggle"
+        aria-expanded={expanded}
+        aria-controls={detailsId}
+        onClick={() => {
+          if (expanded) videoRef.current?.pause();
+          setExpanded(!expanded);
+        }}
+      >
+        {expanded
+          ? t('閉じて会話を見返す', 'Collapse to revisit the conversation')
+          : ready
+            ? t('動画を見る', 'Watch video')
+            : t('結果の詳細を開く', 'Show result details')}
+        <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+      </button>
+      <div id={detailsId} className="ending-details" hidden={!expanded}>
+        {summary && <p className="ending-summary">{summary}</p>}
+        {view && pending.has(view.status) && !unavailable && (
+          <p className="ending-note">
+            {t(
+              '結果を閉じると、下の会話履歴を広く表示できます。動画の準備状況は閉じても確認できます。',
+              'Collapse the result to make room for the conversation below. The video status stays visible.',
+            )}
+          </p>
+        )}
+        {ready && !mediaFailed && (
+          <video
+            ref={videoRef}
+            key={playId}
+            src={endingVideoPath(playId)}
+            controls
+            playsInline
+            preload="metadata"
+            aria-label={t('エンディング動画', 'Ending video')}
+            onEnded={() => setShowStory(true)}
+            onError={() => setMediaFailed(true)}
+          />
+        )}
+        {ready && mediaFailed && (
+          <p role="status">
+            {t(
+              '動画を再生できません。下のボタンから結末を確認できます。',
+              'The video could not be played. Use the button below to read your ending.',
+            )}
+          </p>
+        )}
+        {view?.story && !showStory && (
+          <button type="button" className="ending-reveal" onClick={() => setShowStory(true)}>
+            {t('結果を見る', 'Read the ending')}
+          </button>
+        )}
+        {view?.story && showStory && (
+          <div className="ending-story">
+            <h3>{view.story.title}</h3>
+            <p>{view.story.text}</p>
+            <p>{view.story.evaluation}</p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

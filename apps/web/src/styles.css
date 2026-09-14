@@ -1867,7 +1867,7 @@ h1 span {
 }
 .ending-video {
   flex-shrink: 0;
-  padding: 24px 20px;
+  padding: 14px 20px;
   margin-block: 16px;
   color: #edf4f1;
   background: #14212b;
@@ -1881,15 +1881,43 @@ h1 span {
   border-inline: 0;
   border-radius: 0;
 }
-.ending-eyebrow {
-  color: #9eead6;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  margin: 0;
+.ending-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
 }
 .ending-video h2 {
-  font-size: 23px;
-  margin: 6px 0 14px;
+  font-size: 18px;
+  margin: 0;
+}
+.ending-count {
+  margin: 0;
+  font-size: 13px;
+  color: #c6ded8;
+}
+.ending-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #9eead6;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.ending-toggle:focus-visible {
+  outline: 2px solid #9eead6;
+  outline-offset: 2px;
+}
+.ending-details {
+  border-top: 1px solid #344b54;
 }
 .ending-summary,
 .ending-story p {
@@ -1897,6 +1925,8 @@ h1 span {
 }
 .ending-status {
   color: #c6ded8;
+  margin: 6px 0 0;
+  font-size: 13px;
 }
 .ending-spinner {
   display: inline-block;
