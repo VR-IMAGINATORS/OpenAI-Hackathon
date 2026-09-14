@@ -242,12 +242,16 @@ export function createHostedApp(
                         }
                       },
                       failed: fail,
-                      stage: (stage) =>
+                      stage: (stage) => {
+                        // Inspection passed, but ready() must finish storing the asset first.
+                        // Publish ready and its asset ID together in the callback above.
+                        if (stage === 'ready') return;
                         safeDisplay(() =>
                           results.updateMessage(id, input.messageId, {
                             imageSlot: { ...slot, status: stage },
                           }),
-                        ),
+                        );
+                      },
                     },
                   );
                 } catch {

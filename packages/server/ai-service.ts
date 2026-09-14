@@ -257,6 +257,11 @@ export class AiService {
       if (combined.aborted || permit.cancelled || this.now() >= permit.expiresAt)
         throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
       return value;
+    } catch (error) {
+      // Aborted fetches reject before returning a value, so the check above cannot classify them.
+      if (combined.aborted)
+        throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
+      throw error;
     } finally {
       clearTimeout(timer);
       permit.controllers.delete(controller);

@@ -42,7 +42,10 @@ export async function createEndingFrames(
     let feedback = '';
     let rejectedDraft: Buffer | undefined;
     const beforeAction = slot === 'start' && design.mode === 'actions' && firstAction;
-    const { target, rules } = endingVisualState(packet, slot === 'start' ? startFacts : packet.facts);
+    const { target, rules } = endingVisualState(
+      packet,
+      slot === 'start' ? startFacts : packet.facts,
+    );
     const targetGameVersion = slot === 'start' ? startVersion : packet.gameVersion;
     const source = slot === 'start' && design.mode === 'actions' && before ? before : final;
     const continuity = slot === 'end' ? start! : source.jpeg;
