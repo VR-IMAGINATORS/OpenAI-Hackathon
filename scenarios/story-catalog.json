@@ -216,6 +216,10 @@
         "ja": "布の目隠し",
         "en": "Cloth Blindfold"
       },
+      "objective": {
+        "ja": "目隠しを外して視界を取り戻す",
+        "en": "Remove the blindfold to restore vision"
+      },
       "observation": {
         "ja": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。",
         "en": "The blindfold's head strap and under-chin retaining strap meet at one knot, preventing it from sliding up or down. The knot below the ear is hardened with resin and cannot be untied with fingers. Turning the head sideways lets the shoulder camera see the main strap leading to the knot, held away from skin and hair, and a short loose tail. There are no other bodily restraints."
@@ -306,6 +310,10 @@
       "name": {
         "ja": "椅子のロープ結び",
         "en": "Rope Tied to the Chair"
+      },
+      "objective": {
+        "ja": "椅子につながるロープを外す",
+        "en": "Free your arms from the chair"
       },
       "observation": {
         "ja": "未来の自分の両手首が、椅子の左肘掛けへ一本のロープでつながれている。肩の端末カメラから、身体と離れた肘掛け側の結びと張った連結部分が見える。ほかに身体の拘束はない。",
@@ -398,6 +406,10 @@
         "ja": "足首の留め具",
         "en": "Ankle Fastener"
       },
+      "objective": {
+        "ja": "足首の留め具を外す",
+        "en": "Remove the ankle restraint"
+      },
       "observation": {
         "ja": "未来の自分の足首を帯状の留め具が囲む。保護カバーの細い穴から、帯を掛けているばね爪と、その爪を内側へ押せば帯が開く構造が見える。身体にはこの留め具以外の拘束がない。",
         "en": "A band-shaped fastener surrounds your future self's ankle. Through a narrow hole in its protective cover, a spring catch holding the band is visible, along with the structure showing that pressing the catch inward opens the band. There are no other bodily restraints."
@@ -489,6 +501,10 @@
         "ja": "内扉の引き輪",
         "en": "Inner Door Pull Ring"
       },
+      "objective": {
+        "ja": "内扉を開けて通路を確保する",
+        "en": "Open the inner door to clear the passage"
+      },
       "observation": {
         "ja": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。",
         "en": "Beside the inner passage door is a small barred control window. Its bars cover only the window, not the doorway used by a person. A linkage connects the ring behind the bars to the door bolt, and an arrow points toward the near side. A tool seems able to pass through the narrow gaps."
@@ -579,6 +595,10 @@
       "name": {
         "ja": "シャッターの踏み板",
         "en": "Shutter Pressure Plate"
+      },
+      "objective": {
+        "ja": "シャッターを上げて通路を確保する",
+        "en": "Raise the shutter to clear the passage"
       },
       "observation": {
         "ja": "通路を塞ぐシャッターの手前に踏み板があり、駆動モーターへ続く配線、板を押し切る終端、上がったシャッターを受ける上端の保持爪が見える。",
@@ -675,6 +695,10 @@
         "ja": "暗い非常通路",
         "en": "Dark Emergency Passage"
       },
+      "objective": {
+        "ja": "暗い非常通路の安全な進み方を確認する",
+        "en": "Find a safe route through the dark passage"
+      },
       "observation": {
         "ja": "出口へ続く非常通路は暗いが、床の段差の縁と、壁に固定された退避案内がわずかに反射する。通路の先が最後の出口につながっている。",
         "en": "The emergency passage toward the exit is dark, but the edges of floor steps and a fixed evacuation sign on the wall reflect faintly. The passage leads to the final exit."
@@ -766,6 +790,10 @@
         "ja": "曇った覗き窓",
         "en": "Fogged Viewing Window"
       },
+      "objective": {
+        "ja": "曇ったのぞき窓の向こうの経路を確認する",
+        "en": "Check the route beyond the fogged window"
+      },
       "observation": {
         "ja": "経路脇の覗き窓は手前側の結露で曇っている。曇りの向こうには、先の退避通路へ向かう固定表示の文字と矢印がぼんやり見える。",
         "en": "The viewing window beside the route is fogged by condensation on its near side. Beyond the fog, lettering and an arrow on a fixed sign toward the next escape passage are faintly visible."
@@ -856,6 +884,10 @@
       "name": {
         "ja": "出口のネジ固定金具",
         "en": "Screw-Fixed Exit Bracket"
+      },
+      "objective": {
+        "ja": "金具で固定された出口を開ける",
+        "en": "Open the exit secured by the metal bracket"
       },
       "observation": {
         "ja": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。",
@@ -952,6 +984,10 @@
         "ja": "出口のばね留め",
         "en": "Spring-Latched Exit"
       },
+      "objective": {
+        "ja": "ばね留めで閉じた出口を開ける",
+        "en": "Open the spring-latched exit"
+      },
       "observation": {
         "ja": "最後の出口では、扉と枠の隙間から、斜面のあるばね式の舌が枠の受けに掛かる様子が見える。舌を扉側へ押し戻す方向と、扉を退避路側へ押す向きが分かり、蝶番には開放ばねが付いている。",
         "en": "At the final exit, a sloped spring tongue is visibly engaged in the frame receiver through the gap between door and frame. You can see which way pushes the tongue back toward the door and which way opens the door toward the escape path. An opening spring is attached to the hinge."
@@ -1046,6 +1082,10 @@
       "name": {
         "ja": "取っ手の外れた出口",
         "en": "Exit with a Missing Handle"
+      },
+      "objective": {
+        "ja": "取っ手の外れた出口を開ける",
+        "en": "Open the exit with the missing handle"
       },
       "observation": {
         "ja": "最後の出口は取っ手が外れ、四角い開閉軸が手前に露出している。軸からラッチへ続く連結金具、軸の幅、回す方向の矢印が見え、扉は開放ばねで退避路側へ押されている。",

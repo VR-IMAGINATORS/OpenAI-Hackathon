@@ -18,6 +18,17 @@ Web版の既定は `scenarios/story-catalog.json`（version 3）。モック版�
 
 日英の文章は `{ "ja": "日本語", "en": "English" }` の形式。日本語マスターの移植元は `.agents/skills/call-to-past/assets/masters.json`。Web実行時にスキルファイルは読み込まず、Web用カタログを使用する。
 
+### 現在の目標の書き方
+
+`gimmicks[].objective.ja/en` は本編の「現在の目標 / Current objective」に表示する必須の短文。対象と達成したい状態を動詞で示す。`name` はマスター由来の障害名で、目標欄には使わない。実行用シナリオの `obstacle.title` へは `objective` が渡る。目標を追加・変更するときは、採用される全構成と両言語を確認する。
+
+| 障害名 (`name`) | 表示する目標 (`objective.ja`) | 英語 (`objective.en`) |
+| --- | --- | --- |
+| 椅子のロープ結び | 椅子につながるロープを外す | Free your arms from the chair |
+| 曇った覗き窓 | 曇ったのぞき窓の向こうの経路を確認する | Check the route beyond the fogged window |
+
+「切る」「拭く」など特定の解き方や道具を目標に固定せず、解き方はプレイヤーが考えられる表現にする。詳しい突破条件や代表解を含む内部の `goal`、`acceptance`、`mechanism` はそのまま表示しない。旧V2ファイルを明示指定する場合は、従来どおり `obstacles[].title.ja/en` に目標文を書く。
+
 物語の答えは固定の正解台本として追加しない。選ばれた舞台の謎と最初の手掛かりを提示し、その後は実際の会話・道具・突破内容に沿ってAIが展開を作る。物語段階は完全突破数に合わせて進み、部分的な前進では進めない。終了時の回収と動画・結果画面は別機能の担当範囲（[連携メモ](../specs/story-integration/ending-handoff.md)）。
 
 道具の正解リストは設けない。各ギミックの仕組みに対して提案が成立するかを判断する。ヒントは求められたときに現在の障害のものを段階的に使い、後の障害を先に明かさない。

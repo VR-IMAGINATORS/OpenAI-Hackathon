@@ -188,6 +188,42 @@ for (const judgment of [
     },
   );
 
+test('all 18 story routes expose player objectives in both languages through each committed stage', async () => {
+  const catalog = parseStoryCatalog(
+    JSON.parse(readFileSync('scenarios/story-catalog.json', 'utf8')),
+  );
+  for (let index = 0; index < storyCandidateCount(catalog); index++) {
+    const scenario = compileStoryScenario(catalog, index);
+    for (const locale of ['ja', 'en'] as const) {
+      const { game, act } = fixture(
+        snapshot(locale, scenario),
+        scenario.obstacles.map((obstacle) => ({
+          success: true,
+          factChanges: [{ key: obstacle.id, from: 'blocked', to: 'cleared' }],
+        })),
+      );
+      for (const [stage, obstacle] of scenario.obstacles.entries()) {
+        const gimmick = catalog.gimmicks.find((entry) => entry.id === obstacle.id)!;
+        const visible = game.state().obstacle;
+        assert.equal(visible.index, stage);
+        assert.equal(visible.title, gimmick.objective[locale], `${index}/${locale}/${stage}`);
+        assert.notEqual(
+          visible.title,
+          gimmick.name[locale],
+          'a noun-only obstacle name is not an objective',
+        );
+        assert.notEqual(
+          visible.title,
+          obstacle.goal,
+          'internal solutions are not a public objective',
+        );
+        await act();
+      }
+      assert.equal(game.status, 'won');
+    }
+  }
+});
+
 test('all ten imported gimmicks accept a retained partial state followed by a complete clear', async () => {
   const catalog = parseStoryCatalog(
     JSON.parse(readFileSync('scenarios/story-catalog.json', 'utf8')),

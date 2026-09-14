@@ -49,6 +49,7 @@ export const storyCatalogSchema = z
             id,
             stage: z.enum(stages),
             name: localized,
+            objective: localized,
             observation: localized,
             mechanism: localized,
             hints: z.array(localized).length(3),
@@ -198,7 +199,7 @@ export function compileStoryScenario(catalog: StoryCatalog, candidateIndex: numb
     story: { ...catalog.story, mystery: scene.mystery, openingClue: scene.openingClue },
     obstacles: selected.map((gimmick) => ({
       id: gimmick.id,
-      title: gimmick.name,
+      title: gimmick.objective,
       situation: gimmick.observation.ja,
       situationDisplay: gimmick.observation,
       goal: [...gimmick.acceptance.map((entry) => entry.ja), gimmick.states.cleared.ja].join('\n'),

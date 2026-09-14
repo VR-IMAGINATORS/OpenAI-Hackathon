@@ -26,7 +26,8 @@ PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobil
 ## 編集する場所
 
 - config/game-core.json: conversation.ja/en.openingMessageで着信応答直後の説明、liveInstructionsで役割・共通会話指示、分類例、物理判定・画像検査方針、表示グループ間隔。
-- scenarios/mobile-playtest.json: 日英シナリオ、factsと許可遷移、人物/画風、必須/禁止の画像条件。
+- scenarios/story-catalog.json: Web既定の6舞台・10障害・18構成。`gimmicks[].objective.ja/en` が「現在の目標」の表示文、`name` は障害名。詳しくは [シナリオの編集](planner-guide.md)。
+- scenarios/mobile-playtest.json: 明示指定する旧V2シナリオ。日英の目標は `obstacles[].title`、factsと許可遷移、人物/画風、必須/禁止の画像条件。
 - apps/local-server/hosted-runtime.ts: 音声受付→分類→一度だけ行動→表示への接続。
 - apps/server/result-store.ts: 履歴・サムネイル・検査済み画像・結果保持。
 - apps/server/scene-jobs.ts / packages/server/image-service.ts: 画像生成待機、生成、重大矛盾検査、再試行。

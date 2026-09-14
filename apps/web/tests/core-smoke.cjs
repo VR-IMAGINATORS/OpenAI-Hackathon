@@ -4,7 +4,14 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
-const scenario = JSON.parse(fs.readFileSync('scenarios/mobile-playtest.json', 'utf8'));
+const catalog = JSON.parse(fs.readFileSync('scenarios/story-catalog.json', 'utf8'));
+// Use the default catalog's chair rope / fogged window route, which exposed the noun-only HUD bug.
+const scenario = {
+  obstacles: catalog.scenes[1].sequences[0].map((id) => {
+    const gimmick = catalog.gimmicks.find((entry) => entry.id === id);
+    return { title: gimmick.objective, situationDisplay: gimmick.observation };
+  }),
+};
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
@@ -676,7 +683,7 @@ const scenario = JSON.parse(fs.readFileSync('scenarios/mobile-playtest.json', 'u
     await page.locator('.messenger-action-count.is-urgent').waitFor();
     assert.equal(await page.locator('.messenger-action-count strong').innerText(), '1');
     state.obstacle = { ...state.obstacle, index: 1, title: scenario.obstacles[1].title.en };
-    await objective.getByText('Open the door', { exact: true }).waitFor();
+    await objective.getByText(scenario.obstacles[1].title.en, { exact: true }).waitFor();
     assert.equal(await page.getByText(scenario.obstacles[0].title.en, { exact: true }).count(), 0);
     await page.reload();
     await page.locator('.messenger-clock.is-urgent').waitFor();

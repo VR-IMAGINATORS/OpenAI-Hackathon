@@ -93,6 +93,19 @@ test('every localized field has Japanese and English text without replacement or
   walk(catalog());
 });
 
+test('catalog requires a localized player objective instead of falling back to the obstacle name', () => {
+  for (const objective of [
+    undefined,
+    { ja: '縄を外す' },
+    { en: 'Release the rope' },
+    { ja: '', en: 'Release the rope' },
+  ]) {
+    const value = raw();
+    value.gimmicks[0].objective = objective;
+    assert.throws(() => parseStoryCatalog(value));
+  }
+});
+
 test('all candidates compile in master order with isolated progress facts, complete metadata and both locales', () => {
   const value = catalog();
   const ids = new Set<string>();
