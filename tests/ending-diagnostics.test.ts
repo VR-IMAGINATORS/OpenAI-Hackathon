@@ -183,6 +183,7 @@ for (const variant of [
       .jpeg()
       .toBuffer();
     const edits: ImageEditRequest[] = [];
+    let inspectedStart: Buffer | undefined;
     const failures: string[] = [];
     let submits = 0;
     const design: EndingDesign & Omit<EndingNarrative, 'presentedEvidence'> = {
@@ -217,7 +218,7 @@ for (const variant of [
         async createResponse(body) {
           const request = body as {
             text: { format: { name: string } };
-            input: { content: { text?: string }[] }[];
+            input: { content: { text?: string; image_url?: string }[] }[];
           };
           if (request.text.format.name === 'ending_text') {
             return response({
@@ -252,6 +253,14 @@ for (const variant of [
             return response(
               'directionFailure' in variant ? { ...film, usedActionIds: ['missing'] } : film,
             );
+          }
+          if (request.text.format.name === 'ending_frame_inspection') {
+            const input = JSON.parse(request.input[0].content[0].text!);
+            if (input.slot === 'start')
+              inspectedStart = Buffer.from(
+                request.input[0].content[1].image_url!.split(',')[1],
+                'base64',
+              );
           }
           return response({ verdict: 'pass', problems: [] });
         },
@@ -440,9 +449,18 @@ for (const variant of [
     );
     assert.deepEqual(
       edits[1].images[0],
-      results.sceneReference(playId, sceneIds[latestVersion], latestVersion)!.jpeg,
+      design.mode === 'aftermath'
+        ? inspectedStart
+        : results.sceneReference(playId, sceneIds[latestVersion], latestVersion)!.jpeg,
     );
+    assert.equal(edits[1].images.length, design.mode === 'aftermath' ? 1 : 2);
     assert.match(edits[1].prompt, /"targetGameVersion":2/);
-    assert.match(edits[1].prompt, new RegExp('"referenceGameVersion":' + latestVersion));
+    assert.match(
+      edits[1].prompt,
+      new RegExp(
+        '"referenceGameVersion":' +
+          (design.mode === 'aftermath' ? packet.gameVersion : latestVersion),
+      ),
+    );
     assert.match(edits[1].prompt, /"glass":"clear"/);
   });

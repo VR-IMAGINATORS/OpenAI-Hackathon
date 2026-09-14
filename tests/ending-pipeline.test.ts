@@ -431,6 +431,19 @@ test('normal and bad endings use the arrow while happy endings keep their genera
     );
     const frames = await createEndingFrames(f.ai, 'job', ending, design(), final, before, signal());
     const endPrompt = f.calls.filter((call) => call.kind === 'frame').at(-1)!.body.prompt;
+    const endInspection = f.calls.filter((call) => call.kind === 'inspection').at(-1)!;
+    assert.equal(payloadOf(endInspection).slot, 'end');
+    assert.equal(
+      payloadOf(endInspection).title.text,
+      outcome === 'happy' ? 'SUCCESS!!' : 'to be continued',
+    );
+    assert.equal(
+      endInspection.body.input[0].content[1].image_url,
+      'data:image/jpeg;base64,' + frames.end.toString('base64'),
+    );
+    assert.match(endInspection.body.instructions, /FIRST image is the finished frame/);
+    assert.match(endInspection.body.instructions, /apply only BEFORE that compositing step/);
+    assert.match(endInspection.body.instructions, /Still reject a missing or incorrect title/);
     if (outcome === 'happy') {
       assert.deepEqual(frames.end, frames.start);
       assert.match(endPrompt, /SUCCESS!!/);

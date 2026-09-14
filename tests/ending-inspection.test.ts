@@ -201,6 +201,89 @@ test('real story frames share revealed facts and visual definitions with inspect
 const candidateCount = storyCandidateCount(
   parseStoryCatalog(JSON.parse(readFileSync('scenarios/story-catalog.json', 'utf8'))),
 );
+
+test('aftermath applies confirmed changes to an old opening and bases the end on the accepted current start', async () => {
+  const jpeg = async (color: string) =>
+    sharp({ create: { width: 1024, height: 1024, channels: 3, background: color } })
+      .jpeg()
+      .toBuffer();
+  const opening = await jpeg('#334455'),
+    current = await jpeg('#775533');
+  for (const outcome of ['normal', 'happy'] as const) {
+    const p = packet();
+    p.outcome = outcome;
+    p.gameVersion = outcome === 'happy' ? 3 : 2;
+    const obstacles = p.snapshot!.scenarioV2.obstacles;
+    p.facts.obstacleId = obstacles[2].id;
+    for (const obstacle of obstacles.slice(0, p.gameVersion))
+      for (const key of obstacle.factKeys) p.facts.values[key] = 'cleared';
+    const calls: { kind: string; body: any }[] = [];
+    const ai = {
+      config: loadAiConfig({ AI_MODE: 'mock' }),
+      endingDelay: () => 0,
+      async endingCall(_id: string, _epoch: number, kind: string, body: any) {
+        calls.push({ kind, body });
+        if (kind === 'frame') {
+          endingImageRequest.parse(body);
+          return { data: [{ b64_json: current.toString('base64') }] };
+        }
+        endingResponseRequest.parse(body);
+        return {
+          output: [
+            { content: [{ type: 'output_text', text: '{"verdict":"pass","problems":[]}' }] },
+          ],
+        };
+      },
+    } as unknown as AiService;
+    const design: EndingDesign = {
+      usedActionIds: [],
+      usedEvidenceIds: [],
+      mode: 'aftermath',
+      candidates: [
+        { focus: 'two', reason: 'unavailable' },
+        { focus: 'one', reason: 'unavailable' },
+        { focus: 'aftermath', reason: 'confirmed state' },
+      ],
+      selectionReason: 'The opening predates the final outcome.',
+      startPrompt: 'The confirmed outcome.',
+      endPrompt: 'A backward glance; leave the lower right empty before title compositing.',
+      videoPrompt: 'The confirmed outcome and reaction.',
+    };
+    const frames = await createEndingFrames(
+      ai,
+      'job',
+      p,
+      design,
+      { messageId: 'opening', gameVersion: 0, jpeg: opening },
+      undefined,
+      new AbortController().signal,
+    );
+    const edits = calls.filter((c) => c.kind === 'frame');
+    assert.deepEqual(edits[0].body.images, [opening]);
+    assert.deepEqual(edits[1].body.images, [frames.start]);
+    assert.notDeepEqual(frames.start, opening);
+    assert.match(edits[0].body.prompt, /Recompose the whole scene/);
+    assert.doesNotMatch(edits[1].body.prompt, /This source image predates/);
+    assert.match(edits[1].body.prompt, /replace any proposed backward glance/);
+    for (const edit of edits) {
+      if (outcome === 'happy')
+        assert.match(edit.body.prompt, /person and BOTH feet are beyond that threshold/);
+      else assert.doesNotMatch(edit.body.prompt, /Make completed escape visually unambiguous/);
+    }
+    const checks = calls
+      .filter((c) => c.kind === 'inspection')
+      .map((c) => JSON.parse(c.body.input[0].content[0].text));
+    assert.deepEqual(
+      checks.map((c) => c.referenceGameVersion),
+      [0, p.gameVersion],
+    );
+    assert(checks.every((c) => c.targetGameVersion === p.gameVersion));
+    assert(
+      checks.every((c) => JSON.stringify(c.target) === JSON.stringify(endingVisualState(p).target)),
+    );
+  }
+});
+
 for (let candidate = 0; candidate < candidateCount; candidate++) {
   test(`catalog ending ${candidate}: every progress stage preserves visible physical state with incomplete image history`, async () => {
     // Real catalog data with a stubbed director: verifies request contracts and state
