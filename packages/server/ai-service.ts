@@ -214,7 +214,8 @@ export class AiService {
         )
           this.limit();
       } else if (
-        attempts[kind as 'story' | 'direction' | 'extraction'] >= (kind === 'extraction' ? 6 : 1) ||
+        attempts[kind as 'story' | 'direction' | 'extraction'] >=
+          (kind === 'extraction' ? 6 : kind === 'story' ? 2 : 1) ||
         this.responseAttempts >= this.config.globalResponseAttempts
       )
         this.limit();

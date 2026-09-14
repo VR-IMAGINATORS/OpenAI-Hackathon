@@ -107,6 +107,7 @@ test('one ending permit bounds extraction/story/start/end/inspection independent
   for (let i = 0; i < 6; i++) await f.call('extraction', responseBody(undefined, 2048));
   await assert.rejects(f.call('extraction', responseBody()), { code: 'REQUEST_LIMIT' });
   await f.call('story', responseBody(undefined, 4096));
+  await f.call('story', responseBody(undefined, 4096));
   await assert.rejects(f.call('story', responseBody()), { code: 'REQUEST_LIMIT' });
   await f.call('direction', responseBody(undefined, 4096));
   await assert.rejects(f.call('direction', responseBody()), { code: 'REQUEST_LIMIT' });
@@ -121,16 +122,16 @@ test('one ending permit bounds extraction/story/start/end/inspection independent
   });
   assert.deepEqual(f.permit.ending, {
     extraction: 6,
-    story: 1,
+    story: 2,
     direction: 1,
     start: 2,
     end: 2,
     inspection: 4,
   });
-  assert.equal(f.ai.snapshot().responseAttempts, 8);
+  assert.equal(f.ai.snapshot().responseAttempts, 9);
   assert.equal(f.ai.snapshot().imageAttempts, 4);
   assert.equal(f.ai.snapshot().inspectionAttempts, 4);
-  assert.equal(f.seen.responses.length, 12);
+  assert.equal(f.seen.responses.length, 13);
   assert.equal(f.seen.edits.length, 4);
   assert.equal(f.seen.images.length, 0);
 });
@@ -193,6 +194,7 @@ test('ending and ordinary calls share global Responses attempt and concurrency b
   await f.call('story', responseBody());
   await assert.rejects(f.call('extraction', responseBody()), { code: 'REQUEST_LIMIT' });
   assert.equal(f.ai.snapshot().responseAttempts, 2);
+  await assert.rejects(f.call('story', responseBody()), { code: 'REQUEST_LIMIT' });
 
   const gate = deferred<unknown>();
   let requests = 0;
@@ -299,9 +301,12 @@ test('ambiguous ending response failure consumes its attempt and is not automati
     },
   );
   await assert.rejects(f.call('story', responseBody()), /network reset/);
-  await assert.rejects(f.call('story', responseBody()), { code: 'REQUEST_LIMIT' });
   assert.equal(calls, 1);
   assert.equal(f.ai.snapshot().responseAttempts, 1);
+  // A second explicitly requested attempt is available for output repair; no implicit retry.
+  await assert.rejects(f.call('story', responseBody()), /network reset/);
+  await assert.rejects(f.call('story', responseBody()), { code: 'REQUEST_LIMIT' });
+  assert.equal(calls, 2);
 });
 
 test('injected image-edit transport receives a fixed authenticated multipart request with both JPEG references', async () => {

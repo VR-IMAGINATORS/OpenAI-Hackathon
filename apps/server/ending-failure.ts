@@ -3,10 +3,12 @@ import { AiServiceError } from '../../packages/server/ai-service.js';
 import { UpstreamError } from '../../packages/server/openai.js';
 import { FalSubmitError, FalTransportError } from '../../packages/server/fal.js';
 import { EndingVideoMediaError } from '../../packages/server/ending-video-media.js';
+import { EndingSourceError } from '../local-server/ending-ai.js';
 
 export type EndingStage =
   | 'reference'
   | 'story'
+  | 'story_retry'
   | 'direction'
   | 'start_frame'
   | 'start_inspection'
@@ -24,6 +26,13 @@ export interface EndingFailureContext {
   actionCount: number;
   failedActionCount: number;
   validationFields?: string;
+  invalidSourceCount?: number;
+  actionSourceMixupCount?: number;
+  eventSourceMixupCount?: number;
+}
+
+export function endingSourceCounts(error: unknown) {
+  return error instanceof EndingSourceError ? error.counts : {};
 }
 
 /** Only schema-owned field names; never include issues, inputs or upstream text. */

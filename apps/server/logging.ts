@@ -9,6 +9,9 @@ export interface OperationalEvent {
   actionCount?: number;
   failedActionCount?: number;
   validationFields?: string;
+  invalidSourceCount?: number;
+  actionSourceMixupCount?: number;
+  eventSourceMixupCount?: number;
 }
 
 /** Only explicitly selected operational fields may reach stdout. */
@@ -23,6 +26,9 @@ export function operationalLog(event: OperationalEvent, write = console.log): vo
     'clearedCount',
     'actionCount',
     'failedActionCount',
+    'invalidSourceCount',
+    'actionSourceMixupCount',
+    'eventSourceMixupCount',
   ] as const) {
     if (Number.isFinite(event[key])) safe[key] = event[key]!;
   }

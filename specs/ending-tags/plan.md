@@ -18,7 +18,9 @@ Status: approved direction (2026-09-14)
 
 全プレイの文章フェーズと動画フェーズの実行枠を別々にENDING_CONCURRENT以下とする（既定それぞれ2）。文章生成は最大60秒で終了し、成功なら保存、失敗ならstoryErrorCodeを保持して動画フェーズへ送る。文章成功を動画開始の条件にしない。動画有効のプレイでも他の動画の処理中・受理不明を待たず文章を生成する。API実行自体は既存の全体Responses同時数・予算を共有し、待機キューは合計10件まで。
 
-文章失敗時はEndingNarrativeなしでdirectionを呼び、確定状態・行動だけを渡す。証拠の再抽出・文章の再試行・ダミー文章の公開は行わない。EndingDesign/PreparedEndingから文章フィールドの依存を除く。ログにはPlay ID、固定エラーコード、解除数・試行数・失敗試行数、許可済みの検証項目名だけを残す（T08,T09）。
+文章の出力検証失敗・未完了応答は、抽出済み証拠と固定の修正指示を使って1回だけ再生成する（初回2048、修正4096出力トークン上限）。失敗した本文は次の入力にもログにも含めない。最終失敗時はEndingNarrativeなしでdirectionを呼び、確定状態・行動だけを渡す。証拠の再抽出・ダミー文章の公開は行わない。EndingDesign/PreparedEndingから文章フィールドの依存を除く（T08〜T10）。
+
+各応答schemaのIDをプレイ・フェーズの候補enumにする。文章/動画のusedEvidenceIdsは提示済み証拠、タグ根拠は全確定行動、動画usedActionIdsは直近行動、抽出sourceIdは対象チャンクに限定。ログには固定コード・検証項目名・件数だけを残す。修正開始はending_failed_story_retry、最終失敗はending_failed_story。不正出典件数と行動ID・eventId混同件数を記録し、実ID・本文は記録しない。
 
 ## カバレッジ確認
 

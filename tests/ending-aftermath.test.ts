@@ -131,6 +131,12 @@ function narrative(p: EndingPacket): EndingNarrative {
 for (const variant of [
   { name: 'no action, only opening', action: 'none', ready: 'opening' },
   {
+    name: 'one clear and mixed-up source ID recovers text before video',
+    action: 'successful',
+    ready: 'opening',
+    repairSource: true,
+  },
+  {
     name: 'no action and text API failure still produces video',
     action: 'none',
     ready: 'opening',
@@ -204,7 +210,8 @@ for (const variant of [
     const edits: ImageEditRequest[] = [];
     const inspections: any[] = [];
     const failures: { code: string; context?: EndingFailureContext }[] = [];
-    let directions = 0,
+    let textAttempts = 0,
+      directions = 0,
       submits = 0;
     const source = await sharp({
       create: { width: 1024, height: 1024, channels: 3, background: '#334455' },
@@ -252,10 +259,13 @@ for (const variant of [
           const request = body as any;
           const input = JSON.parse(request.input[0].content[0].text);
           if (request.text.format.name === 'ending_text') {
+            textAttempts++;
             assert.deepEqual(input.actions, p.actions, 'failed outcomes must reach the writer');
             assert.deepEqual(input.presentedEvidence, p.evidence.records);
             assert.doesNotMatch(JSON.stringify(input), /UNPRESENTED_SECRET/);
             const { presentedEvidence, ...published } = text;
+            if ('repairSource' in variant && textAttempts === 1)
+              return response({ ...published, usedEvidenceIds: ['attempt'] });
             assert.match(
               request.instructions,
               /Zero cleared obstacles and all-failed attempts are valid endings/,
@@ -377,6 +387,16 @@ for (const variant of [
     )
       await new Promise((resolve) => setTimeout(resolve, 5));
     const view = results.ending('owner', p.playId);
+    if ('repairSource' in variant) {
+      assert.equal(view.storyStatus, 'ready');
+      assert.equal(view.storyErrorCode, null);
+      assert.equal(view.clearedCount, 1);
+      assert.equal(textAttempts, 2);
+      assert.equal(failures.length, 1, 'only the rejected attempt is logged');
+      assert.equal(failures[0].code, 'ENDING_STORY_INVALID_SOURCES');
+      assert.equal(failures[0].context!.invalidSourceCount, 1);
+      assert.equal(failures[0].context!.actionSourceMixupCount, 1);
+    }
     assert.equal(view.storyStatus, textFailure ? 'failed' : 'ready');
     if (textFailure) {
       assert.equal(view.story, null);

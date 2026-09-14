@@ -5,6 +5,7 @@ import {
   createEndingDesign,
   createEndingText,
   endingClues,
+  EndingSourceError,
   type EndingDesign,
   type EndingNarrative,
   type EndingReference,
@@ -174,6 +175,139 @@ const narrative = (p = packet(), patch: Partial<EndingNarrative> = {}): EndingNa
   ...patch,
 });
 
+test('writer response schema separates evidence and action ID namespaces, including empty plays', async () => {
+  for (const empty of [false, true]) {
+    const p = packet();
+    if (empty) {
+      p.actions = [];
+      p.evidence.records = [];
+      p.clearedIds = [];
+      p.outcome = 'bad';
+    }
+    const f = fakeAi(() =>
+      response({ ...textOutput(), usedEvidenceIds: empty ? [] : ['early-clue'] }),
+    );
+    await createEndingText(f.ai, 'job', p, signal());
+    const schema = f.calls[0].body.text.format.schema.properties;
+    if (empty) {
+      assert.equal(schema.usedEvidenceIds.maxItems, 0);
+      assert.equal(schema.tag.type, 'null');
+    } else {
+      assert.deepEqual(schema.usedEvidenceIds.items.enum, ['early-clue', 'late-clue']);
+      const tag = schema.tag.anyOf.find((s: any) => s.type === 'object');
+      assert.deepEqual(
+        tag.properties.evidenceActionIds.items.enum,
+        p.actions.map((a) => a.actionId),
+      );
+    }
+    assert.match(f.calls[0].body.instructions, /never actionId, eventId, item IDs/);
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+for (const variant of [
+  'action-id',
+  'event-id',
+  'unknown-id',
+  'tag',
+  'long',
+  'json',
+  'incomplete',
+] as const) {
+  test('writer repairs once after ' + variant + ' without weakening validation', async () => {
+    const p = packet();
+    p.evidence.records[0].eventId = 'PRIVATE_EVENT';
+    let attempts = 0;
+    const repairs: unknown[] = [];
+    const f = fakeAi(() => {
+      if (++attempts === 2) return response(textOutput());
+      if (variant === 'json')
+        return { output: [{ content: [{ type: 'output_text', text: '{' }] }] };
+      if (variant === 'incomplete') return { status: 'incomplete', output: [] };
+      const patch =
+        variant === 'tag'
+          ? {
+              tag: {
+                id: 'learning',
+                evidenceActionIds: ['action-2'],
+                reason: 'PRIVATE_INVALID_REASON',
+              },
+            }
+          : variant === 'long'
+            ? { story: 'x'.repeat(241) }
+            : {
+                usedEvidenceIds: [
+                  variant === 'action-id'
+                    ? 'action-1'
+                    : variant === 'event-id'
+                      ? 'PRIVATE_EVENT'
+                      : 'PRIVATE_UNKNOWN_ID',
+                ],
+              };
+      return response({ ...textOutput(), ...patch });
+    });
+    const result = await createEndingText(f.ai, 'job', p, signal(), (error) => repairs.push(error));
+    assert.equal(result.story, textOutput().story);
+    assert.equal(f.calls.length, 2);
+    assert.equal(repairs.length, 1);
+    assert.equal(f.calls[1].body.max_output_tokens, 4096);
+    assert(payloadOf(f.calls[1]).correction.reason);
+    assert.doesNotMatch(JSON.stringify(payloadOf(f.calls[1]).correction), /PRIVATE/);
+    assert.deepEqual(
+      payloadOf(f.calls[1]).presentedEvidence,
+      payloadOf(f.calls[0]).presentedEvidence,
+    );
+    if (variant === 'action-id' || variant === 'event-id') {
+      assert(repairs[0] instanceof EndingSourceError);
+      assert.equal(repairs[0].counts.invalidSourceCount, 1);
+      assert.equal(repairs[0].counts.actionSourceMixupCount, variant === 'action-id' ? 1 : 0);
+      assert.equal(repairs[0].counts.eventSourceMixupCount, variant === 'event-id' ? 1 : 0);
+      assert.doesNotMatch(JSON.stringify(repairs[0]), /PRIVATE/);
+    }
+  });
+}
+
+test('writer never repairs network failures or refusals, and cancellation prevents the repair call', async () => {
+  for (const refusal of [false, true]) {
+    const f = fakeAi(() => {
+      if (!refusal) throw new Error('network');
+      return { output: [{ content: [{ type: 'refusal' }] }] };
+    });
+    await assert.rejects(createEndingText(f.ai, 'job', packet(), signal()));
+    assert.equal(f.calls.length, 1);
+  }
+  const controller = new AbortController();
+  const f = fakeAi(() => response({ ...textOutput(), usedEvidenceIds: ['missing'] }));
+  await assert.rejects(
+    createEndingText(f.ai, 'job', packet(), controller.signal, () => controller.abort()),
+  );
+  assert.equal(f.calls.length, 1);
+});
+
+test('writer does not accept an unpresented source or repeat extraction when repairing', async () => {
+  const p = packet();
+  p.evidence.records[0].text = 'clue ' + 'x'.repeat(50 * 1024);
+  let stories = 0,
+    extractions = 0;
+  const f = fakeAi((call) => {
+    if (call.kind === 'extraction') {
+      extractions++;
+      const schema = call.body.text.format.schema.properties.clues.items.properties.sourceId;
+      assert.deepEqual(schema.enum, ['early-clue', 'late-clue']);
+      return response({ clues: [{ sourceId: 'early-clue', quote: 'clue' }] });
+    }
+    stories++;
+    return response({
+      ...textOutput(),
+      usedEvidenceIds: stories === 1 ? ['late-clue'] : ['early-clue'],
+    });
+  });
+  const result = await createEndingText(f.ai, 'job', p, signal());
+  assert.equal(extractions, 1);
+  assert.equal(stories, 2);
+  assert.deepEqual(result.usedEvidenceIds, ['early-clue']);
+});
+
 test('ending writer receives early clues and every confirmed action, distinct per play without secret situations', async () => {
   const first = packet('The red mark meant a promise to return.');
   const second = packet('The blue stripe marks the players earlier warning.');
@@ -251,7 +385,7 @@ test('writer rejects unknown tags, invented or duplicate tag evidence and overlo
   ]) {
     const f = fakeAi(() => response({ ...textOutput(), ...patch }));
     await assert.rejects(createEndingText(f.ai, 'job', packet(), signal()));
-    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls.length, 2);
   }
 });
 
@@ -435,7 +569,10 @@ test('ending frames retain their generated titles without an arrow overlay', asy
     assert.equal(payloadOf(endInspection).title.text, title);
     assert(endPrompt.includes(title));
     assert.deepEqual(frames.end, frames.start, 'no artwork is composited onto the generated frame');
-    assert.doesNotMatch(endPrompt + endInspection.body.instructions, /composit(?:ed|ing)|arrow artwork/);
+    assert.doesNotMatch(
+      endPrompt + endInspection.body.instructions,
+      /composit(?:ed|ing)|arrow artwork/,
+    );
   }
 });
 

@@ -24,6 +24,7 @@ import { ResultStore } from './result-store.js';
 import {
   endingFailureCode,
   endingValidationFields,
+  endingSourceCounts,
   type EndingFailureContext,
   type EndingStage,
 } from './ending-failure.js';
@@ -127,6 +128,7 @@ export class EndingJobs {
               actionCount: packet.actions.length,
               failedActionCount: packet.actions.filter((action) => !action.success).length,
               validationFields: endingValidationFields(error),
+              ...endingSourceCounts(error),
             }
           : undefined,
       );
@@ -311,6 +313,8 @@ export class EndingJobs {
           job.id,
           packet,
           AbortSignal.any([job.controller.signal, textDeadline]),
+          (error) =>
+            this.reportFailure(job.playId, 'story_retry', endingFailureCode(error, 'story'), error),
         );
         textDeadline.throwIfAborted();
         this.publishStory(job, publicEndingStory(narrative));
