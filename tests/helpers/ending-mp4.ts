@@ -19,12 +19,21 @@ export function syntheticEndingMp4(
     seconds?: number;
     external?: boolean;
     outsideMdat?: boolean;
+    audioPriming?: {
+      ticks: number;
+      editStart?: number;
+      editDuration?: number;
+      rate?: number;
+      version?: 0 | 1;
+      omitEdit?: boolean;
+    };
   } = {},
 ) {
   const seconds = options.seconds ?? 15;
   const ftyp = box('ftyp', Buffer.from('isom'), words(0), Buffer.from('isommp42'));
   const mdat = box('mdat', Buffer.alloc(32, 1));
   const track = (kind: 'vide' | 'soun', id: number) => {
+    const priming = kind === 'soun' ? options.audioPriming : undefined;
     const tkhd = Buffer.alloc(84);
     tkhd.writeUInt32BE(3, 0);
     tkhd.writeUInt32BE(id, 12);
@@ -61,7 +70,7 @@ export function syntheticEndingMp4(
       'stbl',
       stsd,
       box('stsz', words(0, 16, 1)),
-      box('stts', words(0, 1, 1, seconds * 1000)),
+      box('stts', words(0, 1, 1, seconds * 1000 + (priming?.ticks ?? 0))),
       box('stsc', words(0, 1, 1, 1, 1)),
       box('stco', words(0, 1, offset)),
     );
@@ -70,9 +79,26 @@ export function syntheticEndingMp4(
       words(0, 1),
       box('url ', options.external ? Buffer.from([0, 0, 0, 0, 120]) : words(1)),
     );
+    const edits: Buffer[] = [];
+    if (priming && !priming.omitEdit) {
+      const version = priming.version ?? 0;
+      const entry = Buffer.alloc(version ? 20 : 12);
+      const segment = priming.editDuration ?? seconds * 1000;
+      const start = priming.editStart ?? priming.ticks;
+      if (version) {
+        entry.writeBigUInt64BE(BigInt(segment), 0);
+        entry.writeBigInt64BE(BigInt(start), 8);
+      } else {
+        entry.writeUInt32BE(segment, 0);
+        entry.writeInt32BE(start, 4);
+      }
+      entry.writeUInt32BE(priming.rate ?? 0x10000, version ? 16 : 8);
+      edits.push(box('edts', box('elst', words(version * 0x1000000, 1), entry)));
+    }
     return box(
       'trak',
       box('tkhd', tkhd),
+      ...edits,
       box('mdia', box('mdhd', mdhd), box('hdlr', hdlr), box('minf', box('dinf', dref), stbl)),
     );
   };

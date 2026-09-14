@@ -91,6 +91,33 @@ export function validateEndingMp4(bytes: Uint8Array): EndingVideoMetadata {
     requireValue(Math.abs(seconds - 15) <= 0.5);
     return { seconds, ticks, timescale };
   }
+  function audioPriming(
+    track: Box[],
+    mediaDuration: ReturnType<typeof duration>,
+    trackTicks: number,
+    movieTimescale: number,
+  ): number {
+    // Some muxers put post-edit AAC duration in mdhd but include encoder priming
+    // in stts. Accept only a single normal-speed edit that explains the entire gap.
+    const edit = one(children(one(track, 'edts')), 'elst');
+    minimum(edit, 8);
+    const version = buffer[edit.data];
+    requireValue(
+      (version === 0 || version === 1) && (buffer.readUInt32BE(edit.data) & 0xffffff) === 0,
+    );
+    requireValue(
+      buffer.readUInt32BE(edit.data + 4) === 1 && edit.end - edit.data === (version ? 28 : 20),
+    );
+    const segment = version ? uint64(edit.data + 8) : buffer.readUInt32BE(edit.data + 8);
+    const start = version ? uint64(edit.data + 16) : buffer.readInt32BE(edit.data + 12);
+    requireValue(buffer.readUInt32BE(edit.data + (version ? 24 : 16)) === 0x10000);
+    requireValue(start > 0 && start <= mediaDuration.timescale / 2);
+    requireValue(segment === trackTicks);
+    // The edit duration uses movie ticks; mdhd uses media ticks. Allow one movie
+    // tick of conversion rounding, without widening the 15-second media limit.
+    requireValue(Math.abs(segment / movieTimescale - mediaDuration.seconds) <= 1 / movieTimescale);
+    return start;
+  }
 
   const top = boxes(0, buffer.length);
   requireValue(top[0]?.type === 'ftyp' && !top.some((box) => box.type === 'moof'));
@@ -245,7 +272,12 @@ export function validateEndingMp4(bytes: Uint8Array): EndingVideoMetadata {
       timedSamples += count;
       timedTicks += count * delta;
     }
-    requireValue(timedSamples === sampleCount && timedTicks === trackDuration.ticks);
+    requireValue(timedSamples === sampleCount && Number.isSafeInteger(timedTicks));
+    if (timedTicks !== trackDuration.ticks) {
+      requireValue(kind === 'soun');
+      const priming = audioPriming(trackBoxes, trackDuration, tkDuration, movieDuration.timescale);
+      requireValue(timedTicks === trackDuration.ticks + priming);
+    }
 
     const offsetBoxes = samples.filter((box) => box.type === 'stco' || box.type === 'co64');
     requireValue(offsetBoxes.length === 1);

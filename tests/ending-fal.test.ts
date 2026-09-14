@@ -360,6 +360,24 @@ test('MP4 technical validation rejects missing audio, wrong duration/dimensions 
   );
 });
 
+test('MP4 accepts AAC encoder priming only when its edit list accounts for the timing gap', () => {
+  for (const version of [0, 1] as const) {
+    const bytes = mp4({ audioPriming: { ticks: 32, version } });
+    assert.equal(validateEndingMp4(bytes).hasAudio, true);
+    assert.equal(validateEndingMp4(bytes).durationSeconds, 15);
+  }
+  for (const audioPriming of [
+    { ticks: 32, omitEdit: true },
+    { ticks: 32, editStart: 31 },
+    { ticks: 32, editStart: -1 },
+    { ticks: 32, editDuration: 14999 },
+    { ticks: 32, rate: 0x20000 },
+    { ticks: 501 },
+    { ticks: 32, editStart: -1, version: 1 as const },
+  ])
+    assert.throws(() => validateEndingMp4(mp4({ audioPriming })), EndingVideoMediaError);
+});
+
 test('MP4 technical validation rejects truncated and unbounded boxes and manipulated timing', () => {
   const bytes = mp4();
   for (const cut of [1, 5, 9, 40])
