@@ -22,6 +22,7 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
     APP_PASSPHRASE: passphrase,
     AI_MODE: 'mock',
     RESPONSE_MODEL: 'integration-vision',
+    SCENARIO_PATH: 'scenarios/mobile-playtest.json',
   });
   // Keep the legacy endpoint regression suite explicit during the core migration.
   config.scenarioCatalog = undefined;

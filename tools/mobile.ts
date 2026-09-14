@@ -52,7 +52,6 @@ async function main() {
     ...values,
     HOST: '127.0.0.1',
     HOSTED_NO_ENV_FILE: '1',
-    SCENARIO_PATH: values.SCENARIO_PATH ?? 'scenarios/mobile-playtest.json',
   });
   readFileSync(config.webRoot + '/index.html');
 

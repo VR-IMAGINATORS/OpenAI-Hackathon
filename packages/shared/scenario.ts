@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { storyContextSchema } from './story-schema.js';
 
 const text = z.string().trim().min(1).max(2000);
 const id = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -119,6 +120,7 @@ export const scenarioV2Schema = z
     playerBriefing: localizedText,
     rules: scenarioSchema.shape.rules,
     setting: scenarioSchema.shape.setting,
+    story: storyContextSchema.optional(),
     obstacles: z
       .array(
         z
@@ -132,6 +134,9 @@ export const scenarioV2Schema = z
             factKeys: z.array(id).min(1).max(30),
             requiredVisualFacts: z.array(visualFactSchema).max(30),
             forbiddenVisualChanges: z.array(visualChangeSchema).max(100),
+            mechanism: localizedText.optional(),
+            hints: z.array(localizedText).min(1).max(10).optional(),
+            completionFact: visualFactSchema.optional(),
           })
           .strict(),
       )
@@ -198,12 +203,37 @@ export const scenarioV2Schema = z
         }
       });
     });
+    const completionOwners = new Set<string>();
     scenario.obstacles.forEach((obstacle, i) => {
       const path = ['obstacles', i];
       unique(obstacle.factKeys, [...path, 'factKeys']);
       obstacle.factKeys.forEach((key, j) => {
         if (!facts.has(key)) issue([...path, 'factKeys', j], 'Undeclared fact key');
       });
+      if (obstacle.completionFact) {
+        const completion = obstacle.completionFact;
+        const fact = facts.get(completion.key);
+        if (
+          !obstacle.factKeys.includes(completion.key) ||
+          !fact?.values.includes(completion.value)
+        ) {
+          issue([...path, 'completionFact'], 'Undeclared completion fact');
+        } else {
+          const reachable = new Set([fact.initial]);
+          for (let pass = 0; pass < fact.values.length; pass++) {
+            for (const transition of fact.allowedTransitions) {
+              if (reachable.has(transition.from)) reachable.add(transition.to);
+            }
+          }
+          if (completion.value === fact.initial || !reachable.has(completion.value))
+            issue([...path, 'completionFact'], 'Completion must be reachable after progress');
+          if (fact.allowedTransitions.some((transition) => transition.from === completion.value))
+            issue([...path, 'completionFact'], 'Completion must be a terminal fact value');
+        }
+        if (completionOwners.has(completion.key))
+          issue([...path, 'completionFact'], 'Completion fact must belong to one obstacle');
+        completionOwners.add(completion.key);
+      }
       unique(
         obstacle.requiredVisualFacts.map((f) => f.key),
         [...path, 'requiredVisualFacts'],

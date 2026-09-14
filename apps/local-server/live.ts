@@ -2,6 +2,8 @@ import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { LiveCommand, PublicGameState } from '../../packages/shared/game.js';
+import type { GameFacts } from '../../packages/shared/conversation.js';
+import { storyOpening, storyFromState } from './story.js';
 const base = { event_id: z.string().min(1).max(200) };
 const transcript = (type: 'session.input_transcript.delta' | 'session.output_transcript.delta') =>
   z
@@ -31,16 +33,22 @@ export const liveEventSchema = z.union([
     })
     .strict(),
 ]);
-export function liveInstructions(state: PublicGameState, snapshot?: ScenarioSnapshot) {
+export function liveInstructions(
+  state: PublicGameState,
+  snapshot?: ScenarioSnapshot,
+  facts?: GameFacts,
+) {
   if (snapshot)
     return [
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
       '導入ではアプリの最初の呼びかけを待ち、openingMessageの内容を伝えて写真を待つ。接続後はそのまま本編で、開始ボタンや準備完了の確認はない。現在の状況画像はアプリが並行して生成・送信する。画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
       '本編の用途相談・現在の状況や進捗への質問・実行指示・訂正は必ずclientへ委譲し、アプリの回答を待つ。委譲は作業依頼であり、行動成功を確定しない。自分やユーザーの会話だけを根拠に行動の開始・成功・状態変化を断言しない。実行予約が成立する前に「やってみる」と言わず、サーバーが確定した結果のcommentaryが届く前に成功を告げない。相談はアプリから届く回答を伝え、内部の分類理由を読み上げない。復唱や確認の質問、実行ボタンは挟まない。指示を受け付けた時の「やってみる」と結果の発話はアプリのcommentary通知に任せ、重ねて同じ相づちを話さない。',
       '途中の間や未完の発言で勝手に行動しない。質問と指示を区別する。判定中も会話できるが次の行動は予約せず、現在の結果後に指示を改めてもらう。攻略ヒントは尋ねられたときだけ段階的に出す。特殊能力を付与しない。',
+      'storyがある場合はそのaiNameの相棒として話す。物語の方向性は演出指示であり、起きた事実ではない。openingMessageの目に見える手がかりを省略しない。完全解除による物語段階の更新が届いたら、確定結果と既に見えた手がかりに結びつく短い自然な反応を加える。未確定の真相や後続障害、正解を勝手に明かさない。世界観や背景の質問もclientへ委譲する。',
       snapshot.coreConfig.conversation[snapshot.locale].liveInstructions,
       JSON.stringify({
-        openingMessage: snapshot.coreConfig.conversation[snapshot.locale].openingMessage,
+        openingMessage: storyOpening(snapshot, state.situation),
+        story: storyFromState(snapshot, state, facts),
         locale: snapshot.locale,
         status: state.status,
         title: state.title,
