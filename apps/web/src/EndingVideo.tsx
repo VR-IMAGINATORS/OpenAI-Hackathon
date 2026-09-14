@@ -255,12 +255,7 @@ export default function EndingVideo({
         )}
       </div>
       <div className="ending-continued">
-        <img
-          src="/images/to-be-continued.png"
-          alt="to be continued"
-          width={1504}
-          height={352}
-        />
+        <img src="/images/to-be-continued.png" alt="to be continued" width={1504} height={352} />
       </div>
     </section>
   );

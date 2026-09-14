@@ -76,7 +76,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     status = 'failed';
     errorCode = 'ENDING_DIRECTION_INVALID_RESPONSE';
     await page.getByText('動画の演出を作る段階で失敗しました。', { exact: true }).waitFor();
-    assert(await arrow.isVisible(), 'the result footer remains visible when video generation fails');
+    assert(
+      await arrow.isVisible(),
+      'the result footer remains visible when video generation fails',
+    );
     assert.equal(await page.getByText('食器縛り', { exact: true }).count(), 1);
     assert.equal(await page.locator('.ending-story').isVisible(), true);
     await page.reload();
@@ -124,7 +127,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     assert(footer.last && footer.top >= footer.detailsBottom, 'arrow follows all result content');
     assert(Math.abs(footer.width - 390 * 0.4) < 1, 'arrow is two fifths of the mobile viewport');
-    assert(Math.abs(footer.right - footer.contentRight) < 1, 'arrow aligns with the result right edge');
+    assert(
+      Math.abs(footer.right - footer.contentRight) < 1,
+      'arrow aligns with the result right edge',
+    );
     await page.getByRole('button', { name: /閉じて会話を見返す/ }).click();
     assert(await arrow.isVisible(), 'collapsing video details keeps the result footer');
     status = 'failed';
