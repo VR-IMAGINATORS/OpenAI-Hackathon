@@ -405,7 +405,8 @@ export class GameSession {
       )
         throw new GameError(410, 'ACTION_INVALID');
       const facts = structuredClone(this.facts);
-      const allowedKeys = this.coreSnapshot!.scenarioV2.obstacles[this.obstacleIndex].factKeys;
+      const obstacle = this.coreSnapshot!.scenarioV2.obstacles[this.obstacleIndex];
+      const allowedKeys = obstacle.factKeys;
       const keys = new Set<string>();
       for (const change of judgment.factChanges) {
         const declaration = this.coreSnapshot!.scenarioV2.core.facts.find(
@@ -423,6 +424,14 @@ export class GameSession {
         keys.add(change.key);
         facts.values[change.key] = change.to;
       }
+      // A model cannot clear an obstacle by prose alone or silently clear it on a failure.
+      // Validate before committing inventory, facts, time or the action counter.
+      if (
+        obstacle.completionFact &&
+        judgment.success !==
+          (facts.values[obstacle.completionFact.key] === obstacle.completionFact.value)
+      )
+        throw new Error('INVALID_COMPLETION_FACT');
       const inventory = structuredClone(context.inventory);
       const ids = new Set<string>();
       for (const change of judgment.inventoryChanges) {

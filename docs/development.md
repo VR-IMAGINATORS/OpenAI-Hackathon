@@ -39,13 +39,15 @@ PCも同じURLを利用できます。1環境につき5人まで同時に独立�
 ## ゲームコア設定
 
 - 共通の会話・判断・画像検査のルール: `config/game-core.json`
-- シナリオ固有の日英表示文・状態値・遷移: `scenarios/mobile-playtest.json`（version 2）
-- `npm run validate:scenario` で参考v1・標準v2・共通設定を検証する。
+- 既定の6舞台・10ギミック・18構成: `scenarios/story-catalog.json`（version 3）
+- 旧Web版の固定シナリオ: `SCENARIO_PATH=scenarios/mobile-playtest.json`（version 2）で明示的に指定する。
+- `npm run validate:scenario` で参考v1・互換v2・標準v3の全18構成・共通設定を検証する。
 
 ローカルでは保存後に新しく開始したプレイへ反映します。進行中のプレイは開始時の設定を維持します。AWSではJSONを含めた再デプロイが必要です。不正な設定は新規開始を拒否します。モデルやAPIキー、費用上限はこのJSONに書かず、運営の環境変数で管理します。
 
 共通会話policy・factsによる判定・画像検査・英語選択UIを本編へ接続しています。参加時に選んだ言語はプレイ中固定です。開始前の概要と新規プレイは最新の有効な設定から取得します。
 
+標準v3ではプレイ作成時にだけ舞台とギミック順を抽選し、再接続や画面再読込では維持します。制限時間はカタログの `rules.totalTimeSeconds`（既定300秒）で調整できます。プレイ枠の寿命との整合条件、物語と謎の編集方法は[シナリオ編集ガイド](planner-guide.md)を参照してください。
 
 ## Game core更新
 

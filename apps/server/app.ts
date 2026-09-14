@@ -415,18 +415,13 @@ export function createHostedApp(
   app.get('/api/bootstrap', (_req, res) =>
     res.json({
       app: { name: 'Call to the Past', stage: 'hosted-multiplayer' },
-      scenario: publicScenario(config.scenario),
+      scenario: config.scenarioCatalog?.preview('ja') ?? publicScenario(config.scenario),
       supportedLocales: ['ja', 'en'],
       scenarios: config.scenarioCatalog
         ? Object.fromEntries(
             ['ja', 'en'].map((locale) => [
               locale,
-              publicScenario(
-                localizeScenario(
-                  config.scenarioCatalog!.current(locale as 'ja' | 'en').scenarioV2,
-                  locale as 'ja' | 'en',
-                ),
-              ),
+              config.scenarioCatalog!.preview(locale as 'ja' | 'en'),
             ]),
           )
         : { ja: publicScenario(config.scenario), en: publicScenario(config.scenario) },

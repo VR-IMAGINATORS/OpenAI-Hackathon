@@ -55,15 +55,35 @@ export function createGameAI(
     proposal?: RecognizedProposal,
   ): Promise<T> {
     const { scenario, obstacleIndex, situation, inventory, photos, transcript } = context;
+    const current = snapshot?.scenarioV2.obstacles[obstacleIndex];
+    const factKeys = current?.factKeys;
+    const story = snapshot?.scenarioV2.story;
     const input = [
       {
         type: 'input_text',
         text: JSON.stringify({
           setting: scenario.setting,
-          facts: context.facts,
-          declaredFacts: snapshot?.scenarioV2.core.facts,
-          factKeys: snapshot?.scenarioV2.obstacles[obstacleIndex].factKeys,
+          facts:
+            story && context.facts
+              ? {
+                  obstacleId: context.facts.obstacleId,
+                  values: Object.fromEntries(
+                    Object.entries(context.facts.values).filter(([key]) => factKeys?.includes(key)),
+                  ),
+                }
+              : context.facts,
+          declaredFacts: snapshot?.scenarioV2.core.facts.filter(
+            (fact) => !story || factKeys?.includes(fact.key),
+          ),
+          factKeys,
           obstacle: scenario.obstacles[obstacleIndex],
+          ...(proposal && current
+            ? {
+                mechanism: current.mechanism?.[snapshot!.locale],
+                hints: current.hints?.map((hint) => hint[snapshot!.locale]),
+                completionFact: current.completionFact,
+              }
+            : {}),
           situation,
           inventory,
           transcript,
@@ -121,7 +141,7 @@ export function createGameAI(
         (snapshot
           ? 'factChangesは宣言された現在障害のfactKeysの許可遷移のみ。失敗でも部分進展を保存できる。shortReasonは短い判定理由。'
           : '') +
-          '固定された認識案について現在の障害のgoalを達成するか判定。inventoryChangesには既存の在庫idだけ使用。新規道具追加・障害追加・勝敗全体の確定は禁止。narrativeは指定言語（指定がなければ日本語）の短い結果。',
+          '固定された認識案について現在の障害のgoalを達成するか判定。completionFactがある場合、完全達成したsuccess=trueと、そのfactを指定valueにする遷移は必ず一致させる。部分進展はsuccess=falseのまま通常の物性とmechanismに沿って保存する。ヒントは正解の限定列挙ではなく、他の説明可能な工夫も認める。inventoryChangesには既存の在庫idだけ使用。新規道具追加・障害追加・勝敗全体の確定は禁止。narrativeは指定言語（指定がなければ日本語）の短い結果。situationとnarrativeは現在障害への確定候補の物理的結果だけを述べ、真相・次の障害・まだ行っていない行動や追加の出来事を創作しない。',
         proposal,
       ),
   };

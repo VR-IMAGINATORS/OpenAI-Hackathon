@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   allowedHosts,
@@ -8,12 +7,14 @@ import {
   readEnvironment,
 } from '../../packages/server/config.js';
 import { loadAiConfig, type AiConfig } from '../../packages/server/ai-config.js';
+import { localizeScenario, type Scenario } from '../../packages/shared/scenario.js';
 import {
-  localizeScenario,
-  parseScenarioV2,
-  type Scenario,
-} from '../../packages/shared/scenario.js';
-import { ScenarioCatalog, readConfigJson } from './scenario-catalog.js';
+  DEFAULT_SCENARIO_PATH,
+  ScenarioCatalog,
+  parseScenarioSource,
+  readConfigJson,
+} from './scenario-catalog.js';
+import { compileStoryScenario } from '../../packages/shared/story-catalog.js';
 
 export interface HostedConfig {
   host: string;
@@ -70,14 +71,22 @@ export function loadHostedConfig(
     hosts.push(new URL(publicUrl).host);
     origins.push(publicUrl);
   }
-  const scenarioPath = resolve(cwd, values.SCENARIO_PATH ?? 'scenarios/mobile-playtest.json');
+  const ttlMs = positiveInteger(values, 'PLAY_TTL_SECONDS', 600, 600) * 1000;
+  const recoveryMs = positiveInteger(values, 'RECOVERY_GRACE_SECONDS', 60, 60) * 1000;
+  const scenarioPath = resolve(cwd, values.SCENARIO_PATH ?? DEFAULT_SCENARIO_PATH);
   // Keep detailed planner field errors at startup; HTTP admission uses CONFIG_INVALID.
-  const scenario = localizeScenario(parseScenarioV2(readConfigJson(scenarioPath)), 'ja');
+  const source = parseScenarioSource(readConfigJson(scenarioPath));
+  const scenario = localizeScenario(
+    source.version === 3 ? compileStoryScenario(source, 0) : source,
+    'ja',
+  );
   const scenarioCatalog = new ScenarioCatalog({
     scenarioPath,
     coreConfigPath: resolve(cwd, 'config/game-core.json'),
+    playTtlMs: ttlMs,
+    lifecycleReserveMs: recoveryMs + 60_000 + 12_000,
   });
-  scenarioCatalog.current('ja');
+  scenarioCatalog.validate();
   const ai = loadAiConfig(values);
   const resultTtlMs = positiveInteger(values, 'RESULT_TTL_SECONDS', 300, 600) * 1000;
   if (resultTtlMs < 150_000 || resultTtlMs < ai.imageJobTimeoutMs)
@@ -104,8 +113,8 @@ export function loadHostedConfig(
     resultTtlMs,
     enableGameTrace: values.ENABLE_GAME_TRACE === '1' && values.NODE_ENV !== 'production',
     capacity,
-    ttlMs: positiveInteger(values, 'PLAY_TTL_SECONDS', 600, 600) * 1000,
-    recoveryMs: positiveInteger(values, 'RECOVERY_GRACE_SECONDS', 60, 60) * 1000,
+    ttlMs,
+    recoveryMs,
     authAttempts: positiveInteger(values, 'AUTH_ATTEMPTS_PER_MINUTE', 100, 10000),
     ai,
   };
