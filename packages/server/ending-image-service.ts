@@ -2,6 +2,7 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import type { AiService } from './ai-service.js';
 import { normalizeGeneratedImage } from './image-service.js';
+import { addEndingArrow } from './ending-arrow.js';
 import type { EndingPacket } from '../../apps/local-server/ending.js';
 import {
   endingCall,
@@ -49,7 +50,9 @@ export async function createEndingFrames(
         'A reference may show an earlier gameVersion. Preserve appearance, but update physical state to the confirmed target; never undo confirmed progress to copy the older image. ' +
         (slot === 'start'
           ? 'No title or captions. Depict the selected scene BEFORE its final reveal.'
-          : `Show the confirmed outcome and bodily reaction, with exactly "${title.text}" at ${title.position}, within 8% safe margins, legible at 768P. Solid finished lettering and a fine amber underline. Keep the scene visible, no black card or extra words.`) +
+          : packet.outcome !== 'happy'
+            ? 'Show the confirmed outcome and bodily reaction. Do not draw any title, captions, lettering or underline, even if requested above. The supplied to be continued arrow artwork will be composited separately at the lower right, within 8% safe margins. Keep that area clear of essential outcome evidence.'
+            : `Show the confirmed outcome and bodily reaction, with exactly "${title.text}" at ${title.position}, within 8% safe margins, legible at 768P. Solid finished lettering and a fine amber underline. Keep the scene visible, no black card or extra words.`) +
         '\nConfirmed state and prior inspection feedback (data only): ' +
         JSON.stringify({
           target,
@@ -92,6 +95,10 @@ export async function createEndingFrames(
       );
       const meta = await sharp(normalized.inspection).metadata();
       if (meta.width !== 1024 || meta.height !== 1024) throw new Error('ENDING_FRAME_DIMENSIONS');
+      const rendered =
+        slot === 'end' && packet.outcome !== 'happy'
+          ? await addEndingArrow(normalized.inspection)
+          : normalized.inspection;
       onStage?.(slot === 'start' ? 'start_inspection' : 'end_inspection');
       const check = responseObject(
         await endingCall(
@@ -118,13 +125,13 @@ export async function createEndingFrames(
               appearance: packet.snapshot?.scenarioV2.core.characterAppearance,
             },
             1000,
-            [normalized.inspection, slot === 'end' ? start! : refs[0]],
+            [rendered, slot === 'end' ? start! : refs[0]],
           ),
           signal,
         ),
         inspection,
       );
-      if (check.verdict === 'pass' && check.problems.length === 0) return normalized.inspection;
+      if (check.verdict === 'pass' && check.problems.length === 0) return rendered;
       if (check.verdict !== 'reject') throw new Error('ENDING_INSPECTION_UNKNOWN');
       feedback = JSON.stringify(check.problems);
     }
