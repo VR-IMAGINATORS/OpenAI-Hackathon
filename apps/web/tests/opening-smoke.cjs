@@ -15,7 +15,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Normal 5 min · 4 actions' : 'ノーマル 5分 · 4回',
+        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -148,7 +148,8 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: '動かない扉', index: 0, count: 3 },
       situation: 'ドアノブが外れ、扉を引くことができない。代わりにつかめるものはないだろうか。',
-      actionsRemaining: 4,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
       paused: false,
@@ -283,6 +284,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
+        if (body.images.length) state.photoSendsRemaining--;
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -334,7 +336,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
           failAction = false;
           return route.abort('failed');
         }
-        state.actionsRemaining--;
+        state.actionsUsed++;
         state.obstacle.index++;
         state.proposal = null;
         state.photoCount = 0;
@@ -358,7 +360,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
-    await page.getByRole('button', { name: 'Normal 5 min · 4 actions', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
     fs.mkdirSync('artifacts', { recursive: true });
     for (const locale of ['en', 'ja']) {
       await page.getByRole('combobox').selectOption(locale);
@@ -409,7 +411,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     }
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('wrong');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
     await page.getByRole('alert').filter({ hasText: '合言葉が違います' }).waitFor();
     assert.equal(await page.locator('video').count(), 0);
     await page.getByLabel('参加の合言葉').fill('demo');
@@ -444,7 +446,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     await page.reload();
     await page.getByRole('combobox').selectOption('ja');
     await page.evaluate(() => (window.__blockMedia = true));
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回', exact: true }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信', exact: true }).click();
     await page.getByRole('button', { name: '動画を再生', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.getByRole('button', { name: '着信音を再生', exact: true }).waitFor();

@@ -105,21 +105,26 @@ export class AiService {
     });
   }
 
-  registerMedia(playId: string, jobId: string, expiresAt: number, maxActions: number): MediaPermit {
+  registerMedia(
+    playId: string,
+    jobId: string,
+    expiresAt: number,
+    sceneActionBudget: number,
+  ): MediaPermit {
     this.active(playId);
     if (
       this.media.has(jobId) ||
       !Number.isFinite(expiresAt) ||
       expiresAt <= this.now() ||
       expiresAt > this.now() + this.config.imageJobTimeoutMs ||
-      !Number.isInteger(maxActions) ||
-      maxActions < 1 ||
-      maxActions > 100
+      !Number.isInteger(sceneActionBudget) ||
+      sceneActionBudget < 1 ||
+      sceneActionBudget > 100
     )
       throw new AiServiceError(400, 'INVALID_MEDIA_PERMIT', 'Invalid media permit');
     this.mediaPlayLimits.set(
       playId,
-      Math.max(this.mediaPlayLimits.get(playId) ?? 0, 2 * (maxActions + 2)),
+      Math.max(this.mediaPlayLimits.get(playId) ?? 0, 2 * (sceneActionBudget + 2)),
     );
     const permit: MediaPermit = {
       jobId,

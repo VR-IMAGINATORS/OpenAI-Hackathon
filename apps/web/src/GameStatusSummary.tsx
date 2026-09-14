@@ -4,13 +4,13 @@ export default function GameStatusSummary({
   title,
   ended,
   remainingMs,
-  actionsRemaining,
+  photoSendsRemaining,
   locale,
 }: {
   title: string;
   ended: boolean;
   remainingMs: number;
-  actionsRemaining: number;
+  photoSendsRemaining: number;
   locale: 'ja' | 'en';
 }) {
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
@@ -36,12 +36,15 @@ export default function GameStatusSummary({
   const clock =
     String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
   const actionWarning =
-    actionsRemaining <= 0
-      ? t('行動回数が残っていません。', 'No actions remaining.')
-      : actionsRemaining === 1
-        ? t('行動は残り1回です。', 'One action remaining.')
-        : actionsRemaining === 2
-          ? t('行動は残り2回です。', 'Two actions remaining.')
+    photoSendsRemaining <= 0
+      ? t(
+          '送信回数を使い切りました。手持ちの道具で続けられます。',
+          'No photo sends left. You can continue with your existing tools.',
+        )
+      : photoSendsRemaining === 1
+        ? t('送信は残り1回です。', 'One photo send remaining.')
+        : photoSendsRemaining === 2
+          ? t('送信は残り2回です。', 'Two photo sends remaining.')
           : '';
 
   return (
@@ -73,13 +76,19 @@ export default function GameStatusSummary({
           <span
             className={
               'messenger-resource messenger-action-count' +
-              (actionsRemaining <= 1 ? ' is-urgent' : actionsRemaining === 2 ? ' is-caution' : '')
+              (photoSendsRemaining <= 1
+                ? ' is-urgent'
+                : photoSendsRemaining === 2
+                  ? ' is-caution'
+                  : '')
             }
           >
-            <span className="messenger-resource-label">{t('残り行動回数', 'Actions left')}</span>
+            <span className="messenger-resource-label">
+              {t('残り送信回数', 'Photo sends left')}
+            </span>
             <strong>
-              {actionsRemaining}
-              {actionsRemaining <= 2 && <WarningIcon />}
+              {photoSendsRemaining}
+              {photoSendsRemaining <= 2 && <WarningIcon />}
             </strong>
           </span>
         </span>

@@ -247,11 +247,11 @@ export default function PlayScreen({
       next.stateVersion < previous.stateVersion
     )
       return;
-    if (next.automaticActions && next.actionsRemaining < previous.actionsRemaining) setPhotos([]);
+    if (next.automaticActions && next.actionsUsed > previous.actionsUsed) setPhotos([]);
     if (
       next.id === previous.id &&
       (next.inputRevision < previous.inputRevision ||
-        next.actionsRemaining > previous.actionsRemaining)
+        next.photoSendsRemaining > previous.photoSendsRemaining)
     )
       return;
     if (next.id === previous.id)
@@ -472,15 +472,21 @@ export default function PlayScreen({
           )
         ).state,
       );
-      setPhotos(next);
+      setPhotos(current.current.photoCount > 0 ? next : []);
       setRetryPhotos(null);
       setUncertainAction(null);
     } catch (error) {
-      setRetryPhotos({
-        photos: next,
-        requestId:
-          error instanceof PlayApiError && error.status === 0 ? requestId : crypto.randomUUID(),
-      });
+      setRetryPhotos(
+        error instanceof PlayApiError && error.code === 'PHOTO_SEND_LIMIT'
+          ? null
+          : {
+              photos: next,
+              requestId:
+                error instanceof PlayApiError && error.status === 0
+                  ? requestId
+                  : crypto.randomUUID(),
+            },
+      );
       setError(message(error));
     } finally {
       locked.current = false;
@@ -488,7 +494,7 @@ export default function PlayScreen({
     }
   }
   async function choosePhoto(file?: File) {
-    if (!file || locked.current) return;
+    if (!file || locked.current || current.current.photoSendsRemaining <= 0) return;
     locked.current = true;
     setBusy(true);
     setError('');
@@ -579,6 +585,7 @@ export default function PlayScreen({
 
   if (state.automaticActions) {
     const cameraDisabled =
+      state.photoSendsRemaining <= 0 ||
       voice !== 'connected' ||
       busy ||
       state.busy ||
@@ -664,7 +671,7 @@ export default function PlayScreen({
             }
             ended={ended}
             remainingMs={state.remainingMs}
-            actionsRemaining={state.actionsRemaining}
+            photoSendsRemaining={state.photoSendsRemaining}
             locale={locale}
           />
           <div className="messenger-info-body">
@@ -716,6 +723,14 @@ export default function PlayScreen({
           generation={state.generation}
         />
         <footer className="messenger-composer">
+          {!ended && state.photoSendsRemaining === 0 && (
+            <p className="messenger-notice" role="status">
+              {t(
+                '送信回数を使い切りました。届いた道具を使って、声で指示を続けてください。',
+                'No photo sends left. Keep giving voice instructions using the tools already sent.',
+              )}
+            </p>
+          )}
           {state.paused && !ended && (
             <p className="messenger-notice" role="status">
               {t('接続・処理待ち：時計は停止中', 'Waiting: timer paused')} (
@@ -827,7 +842,12 @@ export default function PlayScreen({
                   className="messenger-icon messenger-send"
                   aria-label={t('この写真を送信', 'Send photo')}
                   disabled={
-                    !draftPhoto || busy || state.busy || !!retryPhotos || voice !== 'connected'
+                    state.photoSendsRemaining <= 0 ||
+                    !draftPhoto ||
+                    busy ||
+                    state.busy ||
+                    !!retryPhotos ||
+                    voice !== 'connected'
                   }
                   onClick={() => {
                     if (!draftPhoto) return;
@@ -883,9 +903,9 @@ export default function PlayScreen({
             <strong>{time(state.remainingMs)}</strong>
           </div>
           <div>
-            <span>{t('残り行動', 'Actions left')}</span>
+            <span>{t('残り送信回数', 'Photo sends left')}</span>
             <strong>
-              {state.actionsRemaining}
+              {state.photoSendsRemaining}
               <small>{t(' 回', '')}</small>
             </strong>
           </div>
@@ -1240,7 +1260,7 @@ export default function PlayScreen({
           <img src={draftPhoto.preview} alt={t('送信前の写真', 'Photo to send')} />
           <button
             className="primary-button"
-            disabled={busy || state.busy}
+            disabled={busy || state.busy || state.photoSendsRemaining <= 0}
             onClick={() => {
               const next = [...photos, draftPhoto].slice(0, state.maxPhotos);
               setDraftPhoto(null);
@@ -1289,6 +1309,7 @@ export default function PlayScreen({
           <button
             className="photo-button"
             disabled={
+              state.photoSendsRemaining <= 0 ||
               voice !== 'connected' ||
               busy ||
               state.busy ||
@@ -1316,6 +1337,14 @@ export default function PlayScreen({
         </div>
       )}
       <footer className="play-footer">
+        {!ended && state.photoSendsRemaining === 0 && (
+          <p role="status">
+            {t(
+              '送信回数を使い切りました。届いた道具を使って続けてください。',
+              'No photo sends left. Continue using the tools already sent.',
+            )}
+          </p>
+        )}
         <p>
           {t('写真と声でつながる、未来への通信', 'A call to the future, through photos and voice')}
         </p>

@@ -13,8 +13,8 @@ export const scenarioSchema = z
     playerBriefing: text,
     rules: z
       .object({
-        maxActions: z.number().int().min(1).max(20),
-        maxPhotosPerAction: z.number().int().min(1).max(2),
+        maxPhotoSends: z.number().int().min(1).max(20),
+        maxPhotosPerSend: z.number().int().min(1).max(2),
         totalTimeSeconds: z.number().int().min(30).max(3600),
       })
       .strict(),
@@ -61,13 +61,6 @@ export const scenarioSchema = z
         if (ids.has(entry.id))
           ctx.addIssue({ code: 'custom', path: [key, index, 'id'], message: 'IDが重複しています' });
         ids.add(entry.id);
-      });
-    }
-    if (scenario.obstacles.length > scenario.rules.maxActions) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['rules', 'maxActions'],
-        message: '障害数以上の行動回数が必要です',
       });
     }
     const obstacles = new Set(scenario.obstacles.map((o) => o.id));
@@ -177,8 +170,6 @@ export const scenarioV2Schema = z
       scenario.core.facts.map((f) => f.key),
       ['core', 'facts'],
     );
-    if (scenario.obstacles.length > scenario.rules.maxActions)
-      issue(['rules', 'maxActions'], 'Too few actions for obstacles');
     const obstacleIds = new Set(scenario.obstacles.map((o) => o.id));
     scenario.events.forEach((event, i) => {
       unique(event.eligibleObstacleIds, ['events', i, 'eligibleObstacleIds']);

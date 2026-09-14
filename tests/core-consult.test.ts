@@ -113,7 +113,7 @@ test('core Live instructions delegate game questions and gate action claims on a
   assert.match(prompt, /自分に実行能力がないという理由でゲーム内の依頼を断らない/);
   assert.match(prompt, /短い相づちを一度だけ伝える/);
   assert.match(prompt, /アプリから受付の相づちは届かない/);
-  assert.match(prompt, /実行可否・成否・行動回数の消費はサーバーが判断する/);
+  assert.match(prompt, /実行可否・成否・写真送信回数はサーバーが判断する/);
   assert.match(prompt, /委譲しただけでは行動の開始・成功・状態変化は未確定/);
   assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
 });

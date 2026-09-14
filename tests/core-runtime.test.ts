@@ -269,7 +269,7 @@ test('runtime accepts correction while classification is pending and discards th
   );
   assert.equal(contexts.length, 2);
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().actionsRemaining, 4);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
 });
 
 test('runtime consult consumes no action and a subsequent directive executes once', async (t) => {
@@ -290,15 +290,15 @@ test('runtime consult consumes no action and a subsequent directive executes onc
     h.runtime.pollCommands(h.generation, 0).commands.some((c) => c.content === '切れるか相談中'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().actionsRemaining, 4);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
   await h.say('実行して');
   const id = randomUUID();
   await h.delegate(id);
-  await until(() => h.runtime.state().actionsRemaining === 3);
+  await until(() => h.runtime.state().actionsUsed === 1);
   await h.delegate(id);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().actionsRemaining, 3);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
 });
 
 test('execution adds no server acknowledgement while judging and still delivers its result once', async (t) => {
@@ -332,7 +332,7 @@ test('execution adds no server acknowledgement while judging and still delivers 
   await h.delegate(delegationId);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().actionsRemaining, 3);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
   assert.deepEqual(
     newCommands()
       .filter((c) => c.type === 'session.commentary.append')
@@ -497,7 +497,7 @@ test('consult speaks answer rather than classification reason and action speaks 
   );
   await h.say('切って');
   await h.delegate();
-  await until(() => h.calls.judge === 1 && h.runtime.state().actionsRemaining === 3);
+  await until(() => h.calls.judge === 1 && h.runtime.state().actionsUsed === 1);
   assert.ok(
     h.runtime
       .pollCommands(h.generation, 0)
@@ -523,7 +523,7 @@ test('runtime missing delegation requests recovery but never judges, then announ
       .commands.some((c) => c.type === 'session.instructions.append'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().actionsRemaining, 4);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
   h.setNow(24002);
   h.runtime.tick();
   assert.equal(h.notices.length, 1);

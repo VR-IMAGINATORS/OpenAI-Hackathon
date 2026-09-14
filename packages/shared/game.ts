@@ -65,7 +65,8 @@ export interface PublicGameState {
   briefing: string;
   obstacle: { title: string; index: number; count: number };
   situation: string;
-  actionsRemaining: number;
+  photoSendsRemaining: number;
+  actionsUsed: number;
   remainingMs: number;
   waitingRemainingMs: number;
   paused: boolean;

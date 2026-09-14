@@ -1,5 +1,8 @@
 import { positiveInteger } from './config.js';
 
+// Presentation budget retained independently of the game's photo-send allowance.
+export const SCENE_ACTION_BUDGET = 4;
+
 export interface AiConfig {
   mode: 'mock' | 'live';
   apiKey?: string;

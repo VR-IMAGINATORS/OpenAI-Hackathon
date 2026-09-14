@@ -88,7 +88,7 @@ function packet(clue = 'The red mark was a signal left by the player.'): EndingP
     scenario: localizeScenario(snapshot.scenarioV2, 'en'),
     locale: 'en',
     outcome: 'normal',
-    endReason: 'action_limit',
+    endReason: 'time_limit',
     clearedIds: ['first', 'second'],
     remainingObstacles: [
       { id: 'last', title: 'Locked door', situation: 'UNPRESENTED_SECRET_SITUATION' },

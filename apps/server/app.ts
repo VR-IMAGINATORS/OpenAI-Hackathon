@@ -763,13 +763,14 @@ export function createHostedApp(
     } else if (error instanceof GameError) {
       status = error.status;
       code =
-        status === 409
+        error.code ??
+        (status === 409
           ? 'PLAY_CONFLICT'
           : status === 410
             ? 'PLAY_EXPIRED'
             : status === 503
               ? 'PHOTO_BUSY'
-              : 'GAME_REQUEST_FAILED';
+              : 'GAME_REQUEST_FAILED');
     } else if (
       error instanceof Error &&
       ['CONVERSATION_LIMIT', 'DELEGATION_LIMIT'].includes(error.message)

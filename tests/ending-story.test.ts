@@ -79,7 +79,7 @@ test('late evidence is restricted to pre-ending audio, the same generation and t
   assert.equal(ledger.snapshot().records.length, 1);
 });
 
-async function runtimeFixture(t: TestContext, core = true, maxActions = 3) {
+async function runtimeFixture(t: TestContext, core = true, maxPhotoSends = 3) {
   let now = 1000;
   let judgmentCount = 0;
   const config = loadAiConfig({ AI_MODE: 'mock' });
@@ -89,7 +89,7 @@ async function runtimeFixture(t: TestContext, core = true, maxActions = 3) {
       coreConfigPath: 'config/game-core.json',
     }).current('ja'),
   );
-  snapshot.scenarioV2.rules.maxActions = maxActions;
+  snapshot.scenarioV2.rules.maxPhotoSends = maxPhotoSends;
   const response = (value: unknown) => ({
     output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
   });
@@ -117,7 +117,7 @@ async function runtimeFixture(t: TestContext, core = true, maxActions = 3) {
           });
         if (context.proposal)
           return response({
-            success: ++judgmentCount > 1,
+            success: ++judgmentCount > 0,
             narrative: `道具で${context.obstacle.title}に働きかけた。`,
             situation: '道具はまだ手元にある。',
             inventoryChanges: [],
@@ -223,10 +223,10 @@ for (const core of [true, false])
     await f.act();
     await f.act();
     await f.act();
-    assert.equal(f.ending.outcome, 'normal');
-    assert.equal(f.ending.clearedIds.length, 2);
+    assert.equal(f.ending.outcome, 'happy');
+    assert.equal(f.ending.clearedIds.length, 3);
     assert.equal(f.ending.actions.length, 3);
-    assert.equal(f.ending.remainingObstacles.length, 1);
+    assert.equal(f.ending.remainingObstacles.length, 0);
     assert.equal(f.ending.finalMessageId, f.scenes[3].messageId);
     assert.equal(f.scenes[3].gameVersion, 3);
     assert.ok(f.events.indexOf('ending') < f.events.indexOf('ended'));
