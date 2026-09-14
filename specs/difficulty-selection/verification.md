@@ -19,3 +19,9 @@
 - `npm.cmd run check` / `npm.cmd run build`: 成功。サーバー処理の変更なし。
 - `core-smoke.cjs` / `mobile-smoke.cjs`: 新しい開始ボタンと認証中の待機に合わせて更新後、成功。日英のスクリーンショットを目視確認。
 - 今回も実スマホ・実APIの検証は未実施。
+
+## ボタンの色分けと矢印の拡大
+
+- Normalを緑、Hardをオレンジ、HELLを赤に変更。ボタン内のStart／開始の行を除去し、上部の矢印・円を拡大。
+- `npm.cmd run check`、`npm.cmd run build`、`opening-smoke.cjs` 成功。日英・4表示サイズで全3ボタンが画面内に収まり、空欄ポップアップと直接開始の既存動作を確認。
+- 日本語スクリーンショットを目視確認。実スマホ・実APIは未検証。

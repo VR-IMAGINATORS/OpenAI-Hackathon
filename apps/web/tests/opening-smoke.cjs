@@ -15,7 +15,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Normal 5 min · 4 actions Start' : 'ノーマル 5分 · 4回 開始',
+        name: english ? 'Normal 5 min · 4 actions' : 'ノーマル 5分 · 4回',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -358,9 +358,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
-    await page
-      .getByRole('button', { name: 'Normal 5 min · 4 actions Start', exact: true })
-      .waitFor();
+    await page.getByRole('button', { name: 'Normal 5 min · 4 actions', exact: true }).waitFor();
     fs.mkdirSync('artifacts', { recursive: true });
     for (const locale of ['en', 'ja']) {
       await page.getByRole('combobox').selectOption(locale);
@@ -411,7 +409,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     }
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('wrong');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回' }).click();
     await page.getByRole('alert').filter({ hasText: '合言葉が違います' }).waitFor();
     assert.equal(await page.locator('video').count(), 0);
     await page.getByLabel('参加の合言葉').fill('demo');
@@ -446,7 +444,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     await page.reload();
     await page.getByRole('combobox').selectOption('ja');
     await page.evaluate(() => (window.__blockMedia = true));
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始', exact: true }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回', exact: true }).click();
     await page.getByRole('button', { name: '動画を再生', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.getByRole('button', { name: '着信音を再生', exact: true }).waitFor();

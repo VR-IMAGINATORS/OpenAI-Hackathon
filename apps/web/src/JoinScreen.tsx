@@ -227,9 +227,6 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
                     {t('分', ' min')} · {preset.maxActions}
                     {t('回', ' actions')}
                   </small>
-                  <span className="difficulty-start">
-                    {t('開始', 'Start')} <span aria-hidden="true">↗</span>
-                  </span>
                 </button>
               );
             })}
