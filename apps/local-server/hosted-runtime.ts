@@ -12,6 +12,7 @@ import {
   openingCommand,
   factCommand,
   factCommands,
+  speechCommands,
   liveEventSchema,
 } from './live.js';
 import type { Scenario } from '../../packages/shared/scenario.js';
@@ -235,8 +236,6 @@ export class GameRuntime {
             )
               this.traceEntries.shift();
           }
-          this.sendFacts('確定結果: ' + result.narrative, delegation.id);
-          this.sendFacts(this.currentSituation(), delegation.id);
           if (result.success && !this.game.terminal && coreSnapshot.scenarioV2.story) {
             this.sendFacts(
               'Updated story stage (direction, not newly established facts): ' +
@@ -246,17 +245,11 @@ export class GameRuntime {
               delegation.id,
             );
           }
-          const command = this.speak(result.narrative, delegation.id, messageId);
-          if (!this.game.terminal)
-            this.speak(
-              result.success && coreSnapshot.scenarioV2.story
-                ? this.words(
-                    '確定結果と目に見えた手がかりを受け、今の物語段階に沿って一言だけ自然に反応してから、次の現在状況を伝えて。真相や解き方は明かさない。',
-                    'React in one short natural sentence to the confirmed result and observed clue, using the updated story stage. Then describe the following current situation. Do not reveal a mystery answer or solution. ',
-                  ) + this.currentSituation()
-                : this.currentSituation(),
-              delegation.id,
-            );
+          // Keep private narration direction out of the speakable payload.
+          const spokenResult = this.game.terminal
+            ? result.narrative
+            : result.narrative + '\n' + this.currentSituation();
+          const command = this.speak(spokenResult, delegation.id, messageId);
           this.presentScene(
             result.narrative + '\n' + this.currentSituation(),
             messageId,
@@ -363,8 +356,8 @@ export class GameRuntime {
   }
   private speak(text: string, delegationId: string | null = null, messageId: string | null = null) {
     let first: ReturnType<GameRuntime['enqueue']>;
-    for (const command of factCommands(text, delegationId)) {
-      const queued = this.enqueue({ ...command, type: 'session.commentary.append' }, messageId);
+    for (const command of speechCommands(text, delegationId)) {
+      const queued = this.enqueue(command, messageId);
       first ??= queued;
     }
     return first;
@@ -428,7 +421,9 @@ export class GameRuntime {
   }
   private enqueue(command: LiveCommand, messageId: string | null = null) {
     try {
-      return this.outbox?.append(command, messageId);
+      const queued = this.outbox?.append(command, messageId);
+      if (queued) this.recordDiagnostic('live_command_queued', command.type);
+      return queued;
     } catch {
       this.notificationFailed = true;
       this.game.error = '音声通知の上限です。画面で結果を確認してください。';

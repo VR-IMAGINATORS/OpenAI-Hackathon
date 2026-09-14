@@ -41,6 +41,7 @@ export function liveInstructions(
   if (snapshot)
     return [
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
+      'thinkingとinstructionsは内部の情報・演出指示として黙って反映する。「別の指示が来た」「サーバーが言った」「clientへ委譲した」など処理の都合を会話へ出さない。commentaryの内容は確定した伝達内容として自然に話し、同じ内容をthinkingから先に話したり復唱したりしない。',
       state.status === 'briefing'
         ? '初回の導入は呼びかけと説明を別のターンにする。アプリの最初の呼びかけを待ち、「聞こえる？ 聞こえたら返事をして」（英語では "Can you hear me? If you can, please answer."）とだけ話して止まり、ユーザーの実際の返事を待つ。無音や接続完了だけを返事とみなさず、自己紹介・状況説明・写真の依頼を続けて話さない。ユーザーが先に話した場合は呼びかけを重ねず、その発言へ応答する。「うん」「聞こえるよ」「もしもし」などの返事が来たら「よかった、つながった」（英語では "Good, we’re connected."）と一度だけ応じ、openingMessageの自己紹介・状況・協力方法へ自然に続ける。openingMessageの冒頭と同じ相づちは重複させない。聞こえない・待ってと言われたら短く応答して待ち、説明を押し通さない。'
         : 'これは本編中の再接続。最初の呼びかけやopeningMessageの自己紹介を繰り返さず、現在の状況から短く自然に会話を再開する。',
@@ -93,6 +94,30 @@ export function factCommands(content: string, delegationId: string | null = null
   }
   if (chunk) chunks.push(chunk);
   return chunks.map((part) => factCommand(part, delegationId));
+}
+
+/** Keep speech boundaries at complete sentences where the payload limit permits. */
+export function speechCommands(content: string, delegationId: string | null = null): LiveCommand[] {
+  const sentences = content.match(/[^。！？.!?\n]+[。！？.!?\n]*|[。！？.!?\n]+/gu) ?? [];
+  const chunks: string[] = [];
+  let chunk = '';
+  for (const sentence of sentences) {
+    if (Buffer.byteLength(chunk + sentence, 'utf8') <= 480) {
+      chunk += sentence;
+      continue;
+    }
+    if (chunk) chunks.push(chunk);
+    chunk = '';
+    // An unusually long sentence still needs bounded transport, without dropping text.
+    const parts = factCommands(sentence, delegationId).map((command) => command.content);
+    chunks.push(...parts.slice(0, -1));
+    chunk = parts.at(-1) ?? '';
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks.map((text) => ({
+    ...factCommand(text, delegationId),
+    type: 'session.commentary.append',
+  }));
 }
 
 // A UTF-8 byte ceiling is conservative for the provider's 500-token limit.

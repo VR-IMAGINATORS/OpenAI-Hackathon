@@ -603,4 +603,7 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.ok(spoken.includes('HINT_0_2'));
   assert.ok(spoken.includes('HINT_1_1'));
   assert.ok(!spoken.includes('HINT_2_'));
+  assert.ok(!spoken.includes('一言だけ自然に反応'));
+  assert.ok(!spoken.includes('Updated story stage'));
+  assert.ok(spoken.includes(snap.scenarioV2.obstacles[1].situationDisplay.ja));
 });
