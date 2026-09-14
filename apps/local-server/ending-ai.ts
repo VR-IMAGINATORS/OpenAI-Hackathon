@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { EndingPacket } from './ending.js';
 import type { AiService } from '../../packages/server/ai-service.js';
 import type { EndingCallKind } from '../../packages/server/ending-ai-request.js';
+import { endingVisualState } from '../../packages/server/ending-visual-state.js';
 import { endingTags } from '../../packages/shared/ending-tags.js';
 import { endingTagSchema, endingTagInstructions, validateEndingTag } from './ending-tags.js';
 
@@ -306,6 +307,7 @@ Write all image/video prompts in English. The film and established short story m
       : null,
     recentActionIds: recent.map((a) => a.actionId),
     allowedModes: canReplayActions ? ['actions', 'aftermath'] : ['aftermath'],
+    visualState: endingVisualState(packet),
     endingTitle: endingTitle(packet),
     appearance: packet.snapshot?.scenarioV2.core.characterAppearance,
     visualStyle: packet.snapshot?.scenarioV2.core.visualStyle,

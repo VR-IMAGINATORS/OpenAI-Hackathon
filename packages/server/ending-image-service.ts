@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import type { AiService } from './ai-service.js';
 import { normalizeGeneratedImage } from './image-service.js';
 import { addEndingArrow } from './ending-arrow.js';
+import { endingVisualState } from './ending-visual-state.js';
 import type { EndingPacket } from '../../apps/local-server/ending.js';
 import {
   endingCall,
@@ -41,7 +42,7 @@ export async function createEndingFrames(
     let feedback = '';
     let rejectedDraft: Buffer | undefined;
     const beforeAction = slot === 'start' && design.mode === 'actions' && firstAction;
-    const target = slot === 'start' ? startFacts : packet.facts;
+    const { target, rules } = endingVisualState(packet, slot === 'start' ? startFacts : packet.facts);
     const targetGameVersion = slot === 'start' ? startVersion : packet.gameVersion;
     const source = slot === 'start' && design.mode === 'actions' && before ? before : final;
     const continuity = slot === 'end' ? start! : source.jpeg;
@@ -51,6 +52,7 @@ export async function createEndingFrames(
       mode: design.mode,
       phase: beforeAction ? 'before_action' : 'confirmed_aftermath',
       target,
+      rules,
       targetGameVersion,
       referenceGameVersion: source.gameVersion,
       scene: slot === 'start' ? design.startPrompt : design.endPrompt,
@@ -67,6 +69,7 @@ export async function createEndingFrames(
     };
     const stateRules =
       'The supplied target facts and item states are authoritative, including failed attempts, partial progress and tool damage. Scene directions cannot override them. ' +
+      'Only target and rules describe revealed visual constraints. Interpret opaque fact IDs using their rule descriptions and selected values; never guess a physical device from its ID. Do not introduce or require any unrevealed obstacle. ' +
       (beforeAction
         ? 'This is the state BEFORE the first selected action; do not show its later result yet. '
         : 'This is the confirmed ending state. Do not add a new attempt, success, escape, rescue, capture or death. ') +
@@ -138,7 +141,8 @@ export async function createEndingFrames(
               'The SECOND image is the continuity reference; preserve character, tool identities and room but allow intentional pose/composition changes described by the scene. ' +
               'The reference may precede the target gameVersion. Allow changes required by confirmed target facts; do not reject them merely because the earlier image differs. Never undo confirmed progress. ' +
               'Ignore minor aesthetic or framing differences. Missing action spectacle is not a contradiction; a still-required restraint disappearing or an unearned open exit are. ' +
-              'Return unknown if not assessable; pass only if all assessable major constraints and required title are satisfied.',
+              'Judge visible physical contradictions, not whether a still image proves the entire story or every inventory item. Do not demand off-screen items, hidden faces, internal mechanisms, or past actions to be visible. ' +
+              'Return unknown only if the images are unreadable or essential visible outcome evidence cannot be assessed. Return pass with no problems when the assessable major constraints and required title are satisfied.',
             {
               ...context,
               referenceGameVersion: continuityVersion,
