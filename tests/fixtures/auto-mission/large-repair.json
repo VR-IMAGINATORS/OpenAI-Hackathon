@@ -1,0 +1,2060 @@
+{
+  "contract": {
+    "locations": [
+      {
+        "id": "start-room",
+        "description": "平坦な床の小室。固定椅子と受取台があり、前室への唯一の通路は仕切り扉。椅子から扉まで2m。"
+      },
+      {
+        "id": "vestibule",
+        "description": "仕切り扉の先の前室。給水台と注水式解錠装置、屋外への出口扉がある。床は乾いており、各設備には立って正面から近づける。"
+      },
+      {
+        "id": "outside",
+        "description": "出口扉の外の地上通路。段差や囲いはなく、そのまま公道へ歩いて離れられる。"
+      }
+    ],
+    "factDefinitions": [
+      {
+        "key": "player-location",
+        "allowedValues": ["start-room", "vestibule", "outside"],
+        "initialValue": "start-room"
+      },
+      {
+        "key": "ankle-tether",
+        "allowedValues": ["attached", "free"],
+        "initialValue": "attached"
+      },
+      {
+        "key": "body-posture",
+        "allowedValues": ["seated", "standing"],
+        "initialValue": "seated"
+      },
+      {
+        "key": "gate-latch",
+        "allowedValues": ["engaged", "retained-up"],
+        "initialValue": "engaged"
+      },
+      {
+        "key": "gate-position",
+        "allowedValues": ["closed", "open"],
+        "initialValue": "closed"
+      },
+      {
+        "key": "tank-charge",
+        "allowedValues": ["empty", "below-threshold", "at-threshold"],
+        "initialValue": "empty"
+      },
+      {
+        "key": "float-bolt",
+        "allowedValues": ["down-locked", "up-retracted"],
+        "initialValue": "down-locked"
+      },
+      {
+        "key": "exit-position",
+        "allowedValues": ["closed", "open"],
+        "initialValue": "closed"
+      }
+    ],
+    "initialState": {
+      "locationId": "start-room",
+      "description": "未来の本人は固定椅子に座っている。意識、視力、筋力は正常で負傷はない。両手、腕、上体と右脚は自由。左足首だけが椅子につながれ、椅子から離れられない。前屈して足首前方の紐を両手で扱える。指先の厚さは最小16mm。受取台の全面に座ったまま手が届く。初期所持品はない。写真から具現化する道具は初期小道具には含まれず、受取台または到達済みの前室の棚で受け取り、手で回収・運搬できる。足首の連結がなくなれば立って自由に歩ける。",
+      "props": [
+        {
+          "id": "anchored-seat",
+          "description": "床に固定された椅子。左足首の緩い柔らかな輪と椅子脚を、直径1mmの乾いた薄い綿紐一本で連結している。足首の輪は歩行を妨げない。連結紐の中央には長さ120mmの露出した一重の部分があり、皮膚から80mm以上離れ、周囲30mmは空いている。端の結び目は固定カバー内で触れない。連結部分を断てば左足は椅子から完全に離れる。",
+          "locationId": "start-room"
+        },
+        {
+          "id": "receiving-table",
+          "description": "椅子の右横、座面より200mm高い位置にある幅400mm、奥行300mmの空の固定台。手前縁は上体から250mm。落下した道具も椅子周囲なら前屈して拾える。",
+          "locationId": "start-room"
+        },
+        {
+          "id": "divider-gate",
+          "description": "前室へ内開きする幅800mmの軽い仕切り扉。取っ手と掛け金窓は床上900mm。掛け金は固定ガード内にあり、唯一の開口は幅30mm、高さ12mm、壁厚2mmの横長窓。窓の外面から15mm奥に、水平な掛け金下面がある。その下面は窓下端より4mm高く、下側へ平たい物を差し込める。掛け金を0.5N以下の力で4mm上げると上位置に保持され、扉から外れる。窓と掛け金の周囲には工具を動かす空間があり、保持後は工具を抜ける。扉は手で押して開き、そのまま止まる。",
+          "locationId": "start-room"
+        },
+        {
+          "id": "water-station",
+          "description": "前室の固定給水台。蛇口から常温の水が毎秒50mLで常時流れ、深さ250mmの流しへ落ちて排水される。蛇口下には高さ180mm、幅150mmの空間があり、手持ち容器や布を流れに当てられる。蛇口は固定され、ホースはない。横に床上800mm、幅400mm、奥行300mmの空の棚があり、道具の受取りと一時置きに使える。",
+          "locationId": "vestibule"
+        },
+        {
+          "id": "float-release",
+          "description": "給水台から水平に1m離れた出口脇の透明な固定タンク。床上850mmの上面に直径120mmの開放注水口がある。タンクは初め空で、排水栓はなく、250mLを超えた分だけ専用管から排水される。保護された中空フロートと出口の軽いボルトが直結し、正味150mLの注水でフロートが上がりボルトが完全に引っ込むよう調整済み。150mL未満では施錠を維持し、150〜250mLでは解錠を維持する。内部金具は穴径3mmの固定格子の下にあり、手や道具で直接動かせない。注水口の周囲と上方300mmは空いており、こぼさず注げる。",
+          "locationId": "vestibule"
+        },
+        {
+          "id": "outer-door",
+          "description": "屋外通路へ外開きする幅850mmの出口扉。唯一の施錠は注水装置に直結したボルト。解錠後は床上900mmの取っ手を片手で押して開けられ、開いた位置で止まる。他の錠、段差、自動閉鎖装置はない。",
+          "locationId": "vestibule"
+        }
+      ]
+    },
+    "orderedObstacles": [
+      {
+        "id": "release-ankle",
+        "locationId": "start-room",
+        "goalConditions": [
+          {
+            "key": "ankle-tether",
+            "value": "free"
+          },
+          {
+            "key": "body-posture",
+            "value": "standing"
+          }
+        ],
+        "constraints": [
+          "椅子と結び目カバーは動かせない。皮膚や足首の輪を傷つけず、露出した連結紐を対象に拘束を解除する。",
+          "連結中に仕切り扉へ近づくことはできない。道具の受取り、保持、連結紐への到達は座った状態で行える。",
+          "連結紐が椅子と足をつながなくなったときだけankle-tetherをfreeにできる。立ち上がったときbody-postureをstandingにする。"
+        ]
+      },
+      {
+        "id": "lift-gate-latch",
+        "locationId": "start-room",
+        "goalConditions": [
+          {
+            "key": "gate-latch",
+            "value": "retained-up"
+          },
+          {
+            "key": "gate-position",
+            "value": "open"
+          },
+          {
+            "key": "player-location",
+            "value": "vestibule"
+          }
+        ],
+        "constraints": [
+          "足首の連結解除後に扉へ歩いて近づく。受取台の道具は手で持って移動できる。",
+          "指は高さ12mmの窓を通らない。ガードの取り外しや別のアクセス穴はない。差し込む部分の厚さ、幅、到達長と4mmの上昇余地を確認する必要がある。",
+          "掛け金を規定の高さまで上げるとgate-latchがretained-upとなる。その後に扉を押し開け、実際に通過して前室へ移る。"
+        ]
+      },
+      {
+        "id": "charge-exit-release",
+        "locationId": "vestibule",
+        "goalConditions": [
+          {
+            "key": "tank-charge",
+            "value": "at-threshold"
+          },
+          {
+            "key": "float-bolt",
+            "value": "up-retracted"
+          },
+          {
+            "key": "exit-position",
+            "value": "open"
+          },
+          {
+            "key": "player-location",
+            "value": "outside"
+          }
+        ],
+        "constraints": [
+          "前室へ入るまで給水台、注水口、出口扉には手が届かない。給水台とタンクは移動できず、水流は注水口へ直接届かない。",
+          "tank-chargeは正味注水量0mLでempty、0mL超150mL未満でbelow-threshold、150mL以上でat-threshold。水はタンクに保持され、複数回に分けて運べる。",
+          "規定量の水によってのみfloat-boltがdown-lockedからup-retractedへ変わる。容器や布を使う場合は、実際にタンクへ移せる水量を根拠にする。",
+          "解錠だけでは脱出完了ではない。出口扉を手で開けて通過し、本人が屋外通路へ出る必要がある。"
+        ]
+      }
+    ],
+    "escapeConditions": [
+      {
+        "key": "ankle-tether",
+        "value": "free"
+      },
+      {
+        "key": "exit-position",
+        "value": "open"
+      },
+      {
+        "key": "player-location",
+        "value": "outside"
+      }
+    ],
+    "schemaVersion": 1,
+    "inputDigest": "80ec249c9e1eb75d3bb14b92ed212ebf4c442476cbdcbe5770858ca040546b6f",
+    "world": {
+      "premise": "過去のあなたが写真から具現化した身近な道具と音声の指示で、未来の自分の脱出を助ける。",
+      "constraints": [
+        "物の具現化以外の特殊能力はない。",
+        "道具は日用品の通常の性質のみを持つ。",
+        "拘束状態、手の届く範囲、道具の配置と回収を説明する。"
+      ]
+    },
+    "difficulty": {
+      "maxPhotoSends": 4,
+      "maxPhotosPerSend": 2,
+      "maxActions": null,
+      "totalTimeSeconds": 300,
+      "obstacleCount": 3
+    },
+    "objectCatalog": [
+      {
+        "id": "paper",
+        "name": "紙",
+        "ordinaryProperties": [
+          "A4サイズ210mm×297mm、厚さ約0.1mmの普通紙1枚",
+          "折れる、丸められる、水で弱くなる"
+        ]
+      },
+      {
+        "id": "pen",
+        "name": "ペン",
+        "ordinaryProperties": [
+          "長さ140mm、外径10mmの硬い樹脂製ボールペン",
+          "筆記できる",
+          "先端から60mmは外径10mm以内の棒状で、軽い1N程度の押圧を伝えられる"
+        ]
+      },
+      {
+        "id": "scissors",
+        "name": "ハサミ",
+        "ordinaryProperties": [
+          "全長160mm、刃渡り60mmの一般的な手動ハサミ",
+          "刃が届く一重の紙や薄い綿紐を切れる",
+          "刃の先端20mmの厚さは3mm以下、硬い金属は切れない"
+        ]
+      },
+      {
+        "id": "towel",
+        "name": "タオル",
+        "ordinaryProperties": [
+          "30cm四方の乾いた綿タオル",
+          "柔らかい、折り重ねられる、少量の水を吸える",
+          "少なくとも50mLの水を吸うが、防火・高温耐熱の性能は保証しない"
+        ]
+      },
+      {
+        "id": "cup",
+        "name": "コップ",
+        "ordinaryProperties": [
+          "高さ100mm、外径80mm、実用容量200mLの空の樹脂コップ",
+          "底が閉じ液漏れせず、口から注水と排水ができる",
+          "軽量で片手で持てる"
+        ]
+      },
+      {
+        "id": "spoon",
+        "name": "スプーン",
+        "ordinaryProperties": [
+          "普通の金属製スプーン",
+          "柄は長さ100mm、幅20mm、厚さ1mmの平たい棒状",
+          "小さな物をすくえる、軽い金具を押し上げる程度で曲がらない"
+        ]
+      },
+      {
+        "id": "rubber-band",
+        "name": "輪ゴム",
+        "ordinaryProperties": [
+          "周長約100mmの普通の輪ゴム",
+          "軽い張力で伸縮するが重い構造物を固定できない"
+        ]
+      },
+      {
+        "id": "string",
+        "name": "紐",
+        "ordinaryProperties": [
+          "長さ1m、直径2mmの柔らかい綿紐",
+          "結べる、軽い物を引ける、水中や空中で硬い棒として押せない"
+        ]
+      }
+    ]
+  },
+  "previous": {
+    "candidate": {
+      "revision": 0,
+      "contractDigest": "59103efcd0cae8840543d62b6de4ec4c5e8b08ee44fc15205f2b207cc2b83156",
+      "title": "三つの道具で未来の自分を出口へ",
+      "opening": "写真を送る過去のあなたに、未来の自分が状況を伝える。左足首は椅子につながれているが、両手と上体は自由で、右横の受取台にも露出した連結紐にも手が届く。まずハサミとスプーンを台に具現化し、足を自由にする。以下は既存設備とカタログの道具だけを使う、実行可能な一例である。",
+      "obstacles": [
+        {
+          "id": "release-ankle",
+          "description": "座ったまま、皮膚と足首の輪を傷つけずに椅子への連結を断ち、立ち上がる。",
+          "solutionExample": "受取台からハサミを取り、皮膚から80mm以上離れた直径1mmの綿紐の露出部分だけを切る。ハサミを台に置いてから立つ。"
+        },
+        {
+          "id": "lift-gate-latch",
+          "description": "高さ12mmの窓の奥にある掛け金を4mm持ち上げ、仕切り扉を開けて前室に入る。",
+          "solutionExample": "スプーンの柄は幅20mm、厚さ1mm、長さ100mmなので、幅30mmの窓から15mm奥まで届く。柄の下面を窓下端から2mm、上面を3mmの高さにして差し込み、全体を5mm上げれば、高さ4mmの掛け金下面に接触した後、掛け金を4mm上げられる。最終的な柄の上面は8mmで、窓上端12mmに干渉しない。保持されたら柄を抜き、空いている手で扉を押す。"
+        },
+        {
+          "id": "charge-exit-release",
+          "description": "給水台から水を運んでタンクに正味150mL以上を入れ、出口を開けて屋外へ出る。",
+          "solutionExample": "前室の棚で空のコップを受け取り、蛇口で満たす。実用容量200mLの水を水平に保って1m運び、直径120mmの注水口へ注ぐ。外径80mmのコップからこぼさず注げる空間があり、200mLは解錠維持範囲150〜250mLに入る。ボルトが引っ込んだ後に扉を押し開け、通過する。"
+        }
+      ],
+      "ending": "未来の本人は左足の連結を失い、開いた出口を通って屋外通路に出た。ハサミは小室の受取台、スプーンは前室の棚に残し、空のコップだけを手に持っている。写真送信は2回、通常アクションは19回。記載したゲーム内所要時間の合計は90秒で、上限300秒以内である。これは身体動作とゲーム内の受取確認の見積もりであり、API処理や通信の待ち時間は含めない。",
+      "items": [
+        {
+          "id": "tool-scissors",
+          "catalogId": "scissors",
+          "initialPlacement": "初期状態は未具現化。最初の送信で、座った本人が全面に手を伸ばせる既存の受取台上に具現化する。"
+        },
+        {
+          "id": "tool-spoon",
+          "catalogId": "spoon",
+          "initialPlacement": "初期状態は未具現化。最初の送信で、既存の受取台上にハサミと重ならないように具現化する。"
+        },
+        {
+          "id": "tool-cup",
+          "catalogId": "cup",
+          "initialPlacement": "初期状態は未具現化。本人が前室の給水台の棚に到達してから、既存の棚上に空の状態で具現化する。"
+        }
+      ],
+      "steps": [
+        {
+          "id": "step-01",
+          "obstacleId": "release-ankle",
+          "kind": "send",
+          "description": "写真を2枚送り、ハサミとスプーンを受取台上に重ならないよう具現化する。本人は着座したままで両手が自由。台の全面に手が届き、まだ道具を握る必要はない。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "attached"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            }
+          ],
+          "itemIds": ["tool-scissors", "tool-spoon"],
+          "targetLocationId": "start-room",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-scissors",
+              "from": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-spoon",
+              "from": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "ゲーム内の送信と配置確認の見積もり。写真送信1回を消費し、API・通信待ちは含めない。"
+        },
+        {
+          "id": "step-02",
+          "obstacleId": "release-ankle",
+          "kind": "retrieve",
+          "description": "座ったまま右手を受取台へ伸ばし、ハサミの柄を握って回収する。左手は空けておく。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "attached"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            }
+          ],
+          "itemIds": ["tool-scissors"],
+          "targetLocationId": "start-room",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-scissors",
+              "from": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "held",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "手の届く台から道具を一つ取る時間。"
+        },
+        {
+          "id": "step-03",
+          "obstacleId": "release-ankle",
+          "kind": "use",
+          "description": "ハサミを右手に保持したまま前屈する。左手で露出した連結紐を安定させ、皮膚から80mm以上離れた一重部分だけを刃に挟んで切断する。直径1mmの薄い綿紐はハサミの切断対象であり、周囲30mmの空間を使える。足首の輪と皮膚には刃を当てない。連結が断たれ、左足が椅子から完全に離れる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "attached"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            }
+          ],
+          "itemIds": ["tool-scissors"],
+          "targetLocationId": "start-room",
+          "factEffects": [
+            {
+              "key": "ankle-tether",
+              "from": "attached",
+              "to": "free"
+            }
+          ],
+          "itemEffects": [],
+          "estimatedSeconds": 8,
+          "timeRationale": "安全な露出部分を確認し、刃を合わせて薄い紐を切る時間。"
+        },
+        {
+          "id": "step-04",
+          "obstacleId": "release-ankle",
+          "kind": "place",
+          "description": "座ったまま、右手のハサミを既存の受取台上に置く。台は引き続き手の届く範囲にあり、置いた後は両手が空く。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            }
+          ],
+          "itemIds": ["tool-scissors"],
+          "targetLocationId": "start-room",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-scissors",
+              "from": {
+                "phase": "held",
+                "locationId": "start-room",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "横の台へ安全に道具を置く時間。"
+        },
+        {
+          "id": "step-05",
+          "obstacleId": "release-ankle",
+          "kind": "move",
+          "description": "椅子への連結が切れ、両脚と両手が自由になった状態で立ち上がる。足首に残る緩い輪は歩行を妨げない。道具は持たず、受取台のそばに立つ。これで最初の障害の両目標を満たす。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            }
+          ],
+          "itemIds": [],
+          "targetLocationId": "start-room",
+          "factEffects": [
+            {
+              "key": "body-posture",
+              "from": "seated",
+              "to": "standing"
+            }
+          ],
+          "itemEffects": [],
+          "estimatedSeconds": 4,
+          "timeRationale": "連結が残っていないことを確認して立つ時間。"
+        },
+        {
+          "id": "step-06",
+          "obstacleId": "lift-gate-latch",
+          "kind": "retrieve",
+          "description": "受取台のそばに立ち、空いている右手で台上のスプーンを回収する。ハサミは台に残す。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            }
+          ],
+          "itemIds": ["tool-spoon"],
+          "targetLocationId": "start-room",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-spoon",
+              "from": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "held",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "台上の道具を一つ回収する時間。"
+        },
+        {
+          "id": "step-07",
+          "obstacleId": "lift-gate-latch",
+          "kind": "move",
+          "description": "スプーンを右手に持ち、椅子付近から2m先の仕切り扉の正面まで歩く。両脚は自由で、左手は空いている。床上900mmの掛け金窓に手を届かせられる位置で止まる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            }
+          ],
+          "itemIds": ["tool-spoon"],
+          "targetLocationId": "start-room",
+          "factEffects": [],
+          "itemEffects": [],
+          "estimatedSeconds": 5,
+          "timeRationale": "2mを歩き、窓の正面で姿勢を整える時間。同室内なので位置の宣言値は変わらない。"
+        },
+        {
+          "id": "step-08",
+          "obstacleId": "lift-gate-latch",
+          "kind": "use",
+          "description": "窓の正面に立ち、右手でスプーンの皿側を持つ。幅20mm、厚さ1mmの柄を水平にし、下面を窓下端から2mmに合わせ、外面から15mm奥の掛け金下面の下まで差し込む。長さ100mmの柄は壁厚2mmを通って十分届く。柄を水平のまま5mm上げると、最初の1mmで掛け金に接触し、その後の4mmで保持位置まで押し上げる。柄の上面は最終8mmで、高さ12mmの窓内に収まる。必要な力は0.5N以下で、金属の柄が耐える。掛け金の保持後、同じ工具操作として柄を抜き、右手に保持する。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "gate-latch",
+              "value": "engaged"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            }
+          ],
+          "itemIds": ["tool-spoon"],
+          "targetLocationId": "start-room",
+          "factEffects": [
+            {
+              "key": "gate-latch",
+              "from": "engaged",
+              "to": "retained-up"
+            }
+          ],
+          "itemEffects": [],
+          "estimatedSeconds": 8,
+          "timeRationale": "薄い柄を位置合わせし、軽い掛け金を上げて工具を抜く一連の工具操作の時間。"
+        },
+        {
+          "id": "step-09",
+          "obstacleId": "lift-gate-latch",
+          "kind": "use",
+          "description": "扉の正面で、スプーンは右手に持ったまま、空いた左手で既存の仕切り扉を前室側へ押し開ける。掛け金は上位置に保持されており、扉は開いたまま止まる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "gate-latch",
+              "value": "retained-up"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            }
+          ],
+          "itemIds": [],
+          "targetLocationId": "start-room",
+          "factEffects": [
+            {
+              "key": "gate-position",
+              "from": "closed",
+              "to": "open"
+            }
+          ],
+          "itemEffects": [],
+          "estimatedSeconds": 3,
+          "timeRationale": "解錠済みの軽い扉を手で押し開ける時間。"
+        },
+        {
+          "id": "step-10",
+          "obstacleId": "lift-gate-latch",
+          "kind": "move",
+          "description": "右手にスプーンを保持して、開いた幅800mmの仕切り扉を歩いて通過し、前室に入る。ハサミは小室の受取台に残る。これで掛け金保持、扉開放、前室到達の三目標がそろう。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "gate-latch",
+              "value": "retained-up"
+            },
+            {
+              "key": "gate-position",
+              "value": "open"
+            }
+          ],
+          "itemIds": ["tool-spoon"],
+          "targetLocationId": "vestibule",
+          "factEffects": [
+            {
+              "key": "player-location",
+              "from": "start-room",
+              "to": "vestibule"
+            }
+          ],
+          "itemEffects": [
+            {
+              "itemId": "tool-spoon",
+              "from": {
+                "phase": "held",
+                "locationId": "start-room",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "held",
+                "locationId": "vestibule",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 5,
+          "timeRationale": "道具を持って開口を通過する時間。"
+        },
+        {
+          "id": "step-11",
+          "obstacleId": "charge-exit-release",
+          "kind": "move",
+          "description": "前室内を歩き、給水台横の棚の正面に立つ。設備には立って正面から近づける。スプーンは右手で運び、左手は空けたまま、床上800mmの棚に手が届く位置で止まる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "gate-latch",
+              "value": "retained-up"
+            },
+            {
+              "key": "gate-position",
+              "value": "open"
+            }
+          ],
+          "itemIds": ["tool-spoon"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [],
+          "estimatedSeconds": 6,
+          "timeRationale": "前室内の接近動作のゲーム内見積もり。契約にない距離や歩行速度は確定値として仮定しない。"
+        },
+        {
+          "id": "step-12",
+          "obstacleId": "charge-exit-release",
+          "kind": "place",
+          "description": "棚の正面から右手のスプーンを棚上に置く。コップの外径80mmの底を置ける領域を空ける。幅400mm、奥行300mmの棚を使い、置いた後は両手が自由になる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            }
+          ],
+          "itemIds": ["tool-spoon"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-spoon",
+              "from": {
+                "phase": "held",
+                "locationId": "vestibule",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "placed",
+                "locationId": "vestibule",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "手の届く棚に道具を一つ置く時間。"
+        },
+        {
+          "id": "step-13",
+          "obstacleId": "charge-exit-release",
+          "kind": "send",
+          "description": "本人が棚の正面に到達し両手を空けている状態で、写真を1枚送り、空のコップを棚上の空けた領域に正立させて具現化する。スプーンとは重ねない。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-cup",
+              "from": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "placed",
+                "locationId": "vestibule",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "ゲーム内の送信と配置確認の見積もり。2回目の写真送信であり、API・通信待ちは含めない。"
+        },
+        {
+          "id": "step-14",
+          "obstacleId": "charge-exit-release",
+          "kind": "retrieve",
+          "description": "棚の正面から右手で空のコップを回収し、口を上に向けて持つ。軽量で片手保持でき、左手は自由。スプーンは棚に残す。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [
+            {
+              "itemId": "tool-cup",
+              "from": {
+                "phase": "placed",
+                "locationId": "vestibule",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "held",
+                "locationId": "vestibule",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 3,
+          "timeRationale": "棚からコップを一つ取る時間。"
+        },
+        {
+          "id": "step-15",
+          "obstacleId": "charge-exit-release",
+          "kind": "move",
+          "description": "空のコップを右手に持って棚横の蛇口の正面へ位置を移し、流れの下に手持ちのコップを入れられる位置に立つ。両脚は自由で、床は乾いている。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [],
+          "estimatedSeconds": 3,
+          "timeRationale": "隣接する棚から蛇口正面への位置調整の時間。"
+        },
+        {
+          "id": "step-16",
+          "obstacleId": "charge-exit-release",
+          "kind": "use",
+          "description": "右手に持つ空のコップを、常時流れている蛇口の下に正立させて入れ、満たしてから流れから外す。高さ100mm、外径80mmなので高さ180mm、幅150mmの空間に入る。毎秒50mLの流れで実用容量200mLを満たすには4秒分の流入が必要であり、満杯まで受けて200mLの運搬水を確保する。余分な水は流しで排水される。水はまだタンクに入っておらず、タンクの状態は変えない。以後、注ぐまでコップを正立保持する。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [],
+          "estimatedSeconds": 6,
+          "timeRationale": "200mL分の流入4秒と、流れに入れて満杯を確認し外す操作の余裕2秒。"
+        },
+        {
+          "id": "step-17",
+          "obstacleId": "charge-exit-release",
+          "kind": "move",
+          "description": "直前に満たしたコップを右手で正立保持し、必要に応じて空いている左手を添え、水をこぼさないよう給水台から水平に1m離れたタンク正面へ歩く。底からの漏れはない。床上850mmの注水口にコップを届かせられる位置で止まる。水はコップ内に保持され、タンクはまだ空である。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [],
+          "estimatedSeconds": 4,
+          "timeRationale": "満たしたコップを水平に保って1mを慎重に運ぶ時間。"
+        },
+        {
+          "id": "step-18",
+          "obstacleId": "charge-exit-release",
+          "kind": "use",
+          "description": "タンク正面で、こぼさず運んだ200mL入りのコップを直径120mmの注水口の上へ持ち上げ、口を傾けて全量をタンク内へ注ぐ。コップの外径は80mmで、注水口の周囲と上方300mmは空いている。正味注水量は200mLとなり、注水途中に150mLへ達した時点でフロートがボルトを引き込む。完了時は保持範囲150〜250mL内であり、コップは空になって右手に残る。通常の注水ではコップ自体は消耗しない。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [
+            {
+              "key": "tank-charge",
+              "from": "empty",
+              "to": "at-threshold"
+            },
+            {
+              "key": "float-bolt",
+              "from": "down-locked",
+              "to": "up-retracted"
+            }
+          ],
+          "itemEffects": [],
+          "estimatedSeconds": 6,
+          "timeRationale": "注水口へ合わせて一杯分を注ぎ切り、ボルトが引っ込んだことを確認する時間。効果は注水操作完了時の状態を示す。"
+        },
+        {
+          "id": "step-19",
+          "obstacleId": "charge-exit-release",
+          "kind": "move",
+          "description": "空のコップを右手で持ち、タンクの正面から出口扉の取っ手の正面へ位置を移す。タンクは出口脇にあり、設備の正面へ立って近づける。左手を空け、床上900mmの取っ手に届く位置で止まる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "tank-charge",
+              "value": "at-threshold"
+            },
+            {
+              "key": "float-bolt",
+              "value": "up-retracted"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "vestibule",
+          "factEffects": [],
+          "itemEffects": [],
+          "estimatedSeconds": 3,
+          "timeRationale": "出口脇のタンクから扉の取っ手正面への位置調整の時間。"
+        },
+        {
+          "id": "step-20",
+          "obstacleId": "charge-exit-release",
+          "kind": "use",
+          "description": "出口の取っ手に届く位置で、空のコップは右手に保持し、左手で既存の出口扉の取っ手を屋外側へ押して開ける。唯一のボルトは引っ込んでおり、扉は開いた位置で止まる。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "tank-charge",
+              "value": "at-threshold"
+            },
+            {
+              "key": "float-bolt",
+              "value": "up-retracted"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "itemIds": [],
+          "targetLocationId": "vestibule",
+          "factEffects": [
+            {
+              "key": "exit-position",
+              "from": "closed",
+              "to": "open"
+            }
+          ],
+          "itemEffects": [],
+          "estimatedSeconds": 3,
+          "timeRationale": "解錠済みの出口扉を片手で押し開ける時間。"
+        },
+        {
+          "id": "step-21",
+          "obstacleId": "charge-exit-release",
+          "kind": "move",
+          "description": "右手に空のコップを持ち、開いた幅850mmの出口を歩いて通過し、本人の身体全体が屋外の地上通路へ出る。段差も囲いもない。スプーンは前室の棚、ハサミは小室の受取台に残る。足首は自由で、出口は開いたまま、本人は屋外に到達し、すべての脱出条件を満たす。",
+          "preconditions": [
+            {
+              "key": "player-location",
+              "value": "vestibule"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "standing"
+            },
+            {
+              "key": "tank-charge",
+              "value": "at-threshold"
+            },
+            {
+              "key": "float-bolt",
+              "value": "up-retracted"
+            },
+            {
+              "key": "exit-position",
+              "value": "open"
+            }
+          ],
+          "itemIds": ["tool-cup"],
+          "targetLocationId": "outside",
+          "factEffects": [
+            {
+              "key": "player-location",
+              "from": "vestibule",
+              "to": "outside"
+            }
+          ],
+          "itemEffects": [
+            {
+              "itemId": "tool-cup",
+              "from": {
+                "phase": "held",
+                "locationId": "vestibule",
+                "condition": "usable"
+              },
+              "to": {
+                "phase": "held",
+                "locationId": "outside",
+                "condition": "usable"
+              }
+            }
+          ],
+          "estimatedSeconds": 5,
+          "timeRationale": "開いた出口を通り、身体全体が屋外へ出るまでの歩行時間。"
+        }
+      ]
+    },
+    "digest": "be3fa5971b471060c6e15ac8c5e003ba11eea5d7ff8db2c053688b9e1b2f4b76",
+    "mechanical": {
+      "candidateDigest": "be3fa5971b471060c6e15ac8c5e003ba11eea5d7ff8db2c053688b9e1b2f4b76",
+      "checks": [
+        {
+          "id": "check-1",
+          "status": "pass",
+          "path": "/contractDigest",
+          "reason": "固定コントラクトのdigest一致"
+        },
+        {
+          "id": "check-2",
+          "status": "pass",
+          "path": "/items",
+          "reason": "道具インスタンスIDの一意性"
+        },
+        {
+          "id": "check-3",
+          "status": "pass",
+          "path": "/steps",
+          "reason": "手順IDの一意性"
+        },
+        {
+          "id": "check-4",
+          "status": "pass",
+          "path": "/obstacles",
+          "reason": "固定された全ギミックと順序の一致"
+        },
+        {
+          "id": "check-5",
+          "status": "pass",
+          "path": "/items/0/catalogId",
+          "reason": "身近な道具リストに含まれる"
+        },
+        {
+          "id": "check-6",
+          "status": "pass",
+          "path": "/items/0/id",
+          "reason": "備品IDとの衝突がない"
+        },
+        {
+          "id": "check-7",
+          "status": "pass",
+          "path": "/items/1/catalogId",
+          "reason": "身近な道具リストに含まれる"
+        },
+        {
+          "id": "check-8",
+          "status": "pass",
+          "path": "/items/1/id",
+          "reason": "備品IDとの衝突がない"
+        },
+        {
+          "id": "check-9",
+          "status": "pass",
+          "path": "/items/2/catalogId",
+          "reason": "身近な道具リストに含まれる"
+        },
+        {
+          "id": "check-10",
+          "status": "pass",
+          "path": "/items/2/id",
+          "reason": "備品IDとの衝突がない"
+        },
+        {
+          "id": "check-11",
+          "status": "pass",
+          "path": "/steps/0/obstacleId",
+          "reason": "ギミック順序が連続している"
+        },
+        {
+          "id": "check-12",
+          "status": "pass",
+          "path": "/steps/0/obstacleId",
+          "reason": "既知のギミック"
+        },
+        {
+          "id": "check-13",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "同じ道具を二重に指定しない"
+        },
+        {
+          "id": "check-14",
+          "status": "pass",
+          "path": "/steps/0/preconditions",
+          "reason": "前提条件の重複がない"
+        },
+        {
+          "id": "check-15",
+          "status": "pass",
+          "path": "/steps/0/preconditions/0",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-16",
+          "status": "pass",
+          "path": "/steps/0/preconditions/1",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-17",
+          "status": "pass",
+          "path": "/steps/0/preconditions/2",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-18",
+          "status": "pass",
+          "path": "/steps/0/targetLocationId",
+          "reason": "移動・具現化先が既知の場所"
+        },
+        {
+          "id": "check-19",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "送信枚数の上限"
+        },
+        {
+          "id": "check-20",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "操作対象が指定されている"
+        },
+        {
+          "id": "check-21",
+          "status": "pass",
+          "path": "/steps/0/itemEffects",
+          "reason": "道具効果の重複がない"
+        },
+        {
+          "id": "check-22",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "道具インスタンスが宣言されている"
+        },
+        {
+          "id": "check-23",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "道具が現在地で使用可能、または未具現化である"
+        },
+        {
+          "id": "check-24",
+          "status": "pass",
+          "path": "/steps/0/itemEffects",
+          "reason": "道具の状態変化が明示されている"
+        },
+        {
+          "id": "check-25",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "道具インスタンスが宣言されている"
+        },
+        {
+          "id": "check-26",
+          "status": "pass",
+          "path": "/steps/0/itemIds",
+          "reason": "道具が現在地で使用可能、または未具現化である"
+        },
+        {
+          "id": "check-27",
+          "status": "pass",
+          "path": "/steps/0/itemEffects",
+          "reason": "道具の状態変化が明示されている"
+        },
+        {
+          "id": "check-28",
+          "status": "pass",
+          "path": "/steps/0/itemEffects/0",
+          "reason": "指定道具の実行前状態が一致"
+        },
+        {
+          "id": "check-29",
+          "status": "pass",
+          "path": "/steps/0/itemEffects/0/to",
+          "reason": "操作種別に対して合法な状態遷移"
+        },
+        {
+          "id": "check-30",
+          "status": "pass",
+          "path": "/steps/0/itemEffects/1",
+          "reason": "指定道具の実行前状態が一致"
+        },
+        {
+          "id": "check-31",
+          "status": "pass",
+          "path": "/steps/0/itemEffects/1/to",
+          "reason": "操作種別に対して合法な状態遷移"
+        },
+        {
+          "id": "check-32",
+          "status": "pass",
+          "path": "/steps/0/factEffects",
+          "reason": "事実効果の重複がない"
+        },
+        {
+          "id": "check-33",
+          "status": "pass",
+          "path": "/steps/1/obstacleId",
+          "reason": "ギミック順序が連続している"
+        },
+        {
+          "id": "check-34",
+          "status": "pass",
+          "path": "/steps/1/obstacleId",
+          "reason": "既知のギミック"
+        },
+        {
+          "id": "check-35",
+          "status": "pass",
+          "path": "/steps/1/itemIds",
+          "reason": "同じ道具を二重に指定しない"
+        },
+        {
+          "id": "check-36",
+          "status": "pass",
+          "path": "/steps/1/preconditions",
+          "reason": "前提条件の重複がない"
+        },
+        {
+          "id": "check-37",
+          "status": "pass",
+          "path": "/steps/1/preconditions/0",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-38",
+          "status": "pass",
+          "path": "/steps/1/preconditions/1",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-39",
+          "status": "pass",
+          "path": "/steps/1/preconditions/2",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-40",
+          "status": "pass",
+          "path": "/steps/1/targetLocationId",
+          "reason": "移動・具現化先が既知の場所"
+        },
+        {
+          "id": "check-41",
+          "status": "pass",
+          "path": "/steps/1/itemIds",
+          "reason": "操作対象が指定されている"
+        },
+        {
+          "id": "check-42",
+          "status": "pass",
+          "path": "/steps/1/targetLocationId",
+          "reason": "遠隔の道具操作ではない"
+        },
+        {
+          "id": "check-43",
+          "status": "pass",
+          "path": "/steps/1",
+          "reason": "ギミックの場所で操作する"
+        },
+        {
+          "id": "check-44",
+          "status": "pass",
+          "path": "/steps/1/itemEffects",
+          "reason": "道具効果の重複がない"
+        },
+        {
+          "id": "check-45",
+          "status": "pass",
+          "path": "/steps/1/itemIds",
+          "reason": "道具インスタンスが宣言されている"
+        },
+        {
+          "id": "check-46",
+          "status": "pass",
+          "path": "/steps/1/itemIds",
+          "reason": "道具が現在地で使用可能、または未具現化である"
+        },
+        {
+          "id": "check-47",
+          "status": "pass",
+          "path": "/steps/1",
+          "reason": "回収対象が設置済み"
+        },
+        {
+          "id": "check-48",
+          "status": "pass",
+          "path": "/steps/1/itemEffects",
+          "reason": "道具の状態変化が明示されている"
+        },
+        {
+          "id": "check-49",
+          "status": "pass",
+          "path": "/steps/1/itemEffects/0",
+          "reason": "指定道具の実行前状態が一致"
+        },
+        {
+          "id": "check-50",
+          "status": "pass",
+          "path": "/steps/1/itemEffects/0/to",
+          "reason": "操作種別に対して合法な状態遷移"
+        },
+        {
+          "id": "check-51",
+          "status": "pass",
+          "path": "/steps/1/factEffects",
+          "reason": "事実効果の重複がない"
+        },
+        {
+          "id": "check-52",
+          "status": "pass",
+          "path": "/steps/2/obstacleId",
+          "reason": "ギミック順序が連続している"
+        },
+        {
+          "id": "check-53",
+          "status": "pass",
+          "path": "/steps/2/obstacleId",
+          "reason": "既知のギミック"
+        },
+        {
+          "id": "check-54",
+          "status": "pass",
+          "path": "/steps/2/itemIds",
+          "reason": "同じ道具を二重に指定しない"
+        },
+        {
+          "id": "check-55",
+          "status": "pass",
+          "path": "/steps/2/preconditions",
+          "reason": "前提条件の重複がない"
+        },
+        {
+          "id": "check-56",
+          "status": "pass",
+          "path": "/steps/2/preconditions/0",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-57",
+          "status": "pass",
+          "path": "/steps/2/preconditions/1",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-58",
+          "status": "pass",
+          "path": "/steps/2/preconditions/2",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-59",
+          "status": "pass",
+          "path": "/steps/2/targetLocationId",
+          "reason": "移動・具現化先が既知の場所"
+        },
+        {
+          "id": "check-60",
+          "status": "pass",
+          "path": "/steps/2/targetLocationId",
+          "reason": "遠隔の道具操作ではない"
+        },
+        {
+          "id": "check-61",
+          "status": "pass",
+          "path": "/steps/2",
+          "reason": "ギミックの場所で操作する"
+        },
+        {
+          "id": "check-62",
+          "status": "pass",
+          "path": "/steps/2/itemEffects",
+          "reason": "道具効果の重複がない"
+        },
+        {
+          "id": "check-63",
+          "status": "pass",
+          "path": "/steps/2/itemIds",
+          "reason": "道具インスタンスが宣言されている"
+        },
+        {
+          "id": "check-64",
+          "status": "pass",
+          "path": "/steps/2/itemIds",
+          "reason": "道具が現在地で使用可能、または未具現化である"
+        },
+        {
+          "id": "check-65",
+          "status": "pass",
+          "path": "/steps/2/factEffects",
+          "reason": "事実効果の重複がない"
+        },
+        {
+          "id": "check-66",
+          "status": "pass",
+          "path": "/steps/2/factEffects/0",
+          "reason": "事実の変更元・変更先が宣言と一致"
+        },
+        {
+          "id": "check-67",
+          "status": "pass",
+          "path": "/steps/3/obstacleId",
+          "reason": "ギミック順序が連続している"
+        },
+        {
+          "id": "check-68",
+          "status": "pass",
+          "path": "/steps/3/obstacleId",
+          "reason": "既知のギミック"
+        },
+        {
+          "id": "check-69",
+          "status": "pass",
+          "path": "/steps/3/itemIds",
+          "reason": "同じ道具を二重に指定しない"
+        },
+        {
+          "id": "check-70",
+          "status": "pass",
+          "path": "/steps/3/preconditions",
+          "reason": "前提条件の重複がない"
+        },
+        {
+          "id": "check-71",
+          "status": "pass",
+          "path": "/steps/3/preconditions/0",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-72",
+          "status": "pass",
+          "path": "/steps/3/preconditions/1",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-73",
+          "status": "pass",
+          "path": "/steps/3/preconditions/2",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-74",
+          "status": "pass",
+          "path": "/steps/3/targetLocationId",
+          "reason": "移動・具現化先が既知の場所"
+        },
+        {
+          "id": "check-75",
+          "status": "pass",
+          "path": "/steps/3/itemIds",
+          "reason": "操作対象が指定されている"
+        },
+        {
+          "id": "check-76",
+          "status": "pass",
+          "path": "/steps/3/targetLocationId",
+          "reason": "遠隔の道具操作ではない"
+        },
+        {
+          "id": "check-77",
+          "status": "pass",
+          "path": "/steps/3",
+          "reason": "ギミックの場所で操作する"
+        },
+        {
+          "id": "check-78",
+          "status": "pass",
+          "path": "/steps/3/itemEffects",
+          "reason": "道具効果の重複がない"
+        },
+        {
+          "id": "check-79",
+          "status": "pass",
+          "path": "/steps/3/itemIds",
+          "reason": "道具インスタンスが宣言されている"
+        },
+        {
+          "id": "check-80",
+          "status": "pass",
+          "path": "/steps/3/itemIds",
+          "reason": "道具が現在地で使用可能、または未具現化である"
+        },
+        {
+          "id": "check-81",
+          "status": "pass",
+          "path": "/steps/3",
+          "reason": "設置前に道具を持っている"
+        },
+        {
+          "id": "check-82",
+          "status": "pass",
+          "path": "/steps/3/itemEffects",
+          "reason": "道具の状態変化が明示されている"
+        },
+        {
+          "id": "check-83",
+          "status": "pass",
+          "path": "/steps/3/itemEffects/0",
+          "reason": "指定道具の実行前状態が一致"
+        },
+        {
+          "id": "check-84",
+          "status": "pass",
+          "path": "/steps/3/itemEffects/0/to",
+          "reason": "操作種別に対して合法な状態遷移"
+        },
+        {
+          "id": "check-85",
+          "status": "pass",
+          "path": "/steps/3/factEffects",
+          "reason": "事実効果の重複がない"
+        },
+        {
+          "id": "check-86",
+          "status": "pass",
+          "path": "/steps/4/obstacleId",
+          "reason": "ギミック順序が連続している"
+        },
+        {
+          "id": "check-87",
+          "status": "pass",
+          "path": "/steps/4/obstacleId",
+          "reason": "既知のギミック"
+        },
+        {
+          "id": "check-88",
+          "status": "pass",
+          "path": "/steps/4/itemIds",
+          "reason": "同じ道具を二重に指定しない"
+        },
+        {
+          "id": "check-89",
+          "status": "pass",
+          "path": "/steps/4/preconditions",
+          "reason": "前提条件の重複がない"
+        },
+        {
+          "id": "check-90",
+          "status": "pass",
+          "path": "/steps/4/preconditions/0",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-91",
+          "status": "pass",
+          "path": "/steps/4/preconditions/1",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-92",
+          "status": "pass",
+          "path": "/steps/4/preconditions/2",
+          "reason": "宣言された前提条件が成立する"
+        },
+        {
+          "id": "check-93",
+          "status": "pass",
+          "path": "/steps/4/targetLocationId",
+          "reason": "移動・具現化先が既知の場所"
+        },
+        {
+          "id": "check-94",
+          "status": "fail",
+          "path": "/steps/4",
+          "reason": "移動には別の目的地だけを指定し、道具操作を混ぜない"
+        },
+        {
+          "id": "check-95",
+          "status": "pass",
+          "path": "/steps/4/itemEffects",
+          "reason": "道具効果の重複がない"
+        },
+        {
+          "id": "check-96",
+          "status": "pass",
+          "path": "/steps/4/factEffects",
+          "reason": "事実効果の重複がない"
+        },
+        {
+          "id": "check-97",
+          "status": "pass",
+          "path": "/steps/4/factEffects/0",
+          "reason": "事実の変更元・変更先が宣言と一致"
+        },
+        {
+          "id": "check-98",
+          "status": "pass",
+          "path": "/steps",
+          "reason": "写真送信回数の上限"
+        },
+        {
+          "id": "check-99",
+          "status": "pass",
+          "path": "/steps",
+          "reason": "行動回数の上限"
+        },
+        {
+          "id": "check-100",
+          "status": "pass",
+          "path": "/steps",
+          "reason": "手順の見積り時間の上限（実プレイ未測定）"
+        },
+        {
+          "id": "check-101",
+          "status": "fail",
+          "path": "/steps",
+          "reason": "全手順が合法に完了する"
+        },
+        {
+          "id": "check-102",
+          "status": "fail",
+          "path": "/steps",
+          "reason": "release-ankleの終端達成条件"
+        },
+        {
+          "id": "check-103",
+          "status": "fail",
+          "path": "/steps",
+          "reason": "lift-gate-latchの終端達成条件"
+        },
+        {
+          "id": "check-104",
+          "status": "fail",
+          "path": "/steps",
+          "reason": "charge-exit-releaseの終端達成条件"
+        },
+        {
+          "id": "check-105",
+          "status": "fail",
+          "path": "/ending",
+          "reason": "脱出条件が成立する"
+        }
+      ],
+      "stateTrace": [
+        {
+          "stepId": "step-01",
+          "locationId": "start-room",
+          "facts": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "attached"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            },
+            {
+              "key": "gate-latch",
+              "value": "engaged"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "items": [
+            {
+              "itemId": "tool-scissors",
+              "state": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-spoon",
+              "state": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-cup",
+              "state": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              }
+            }
+          ]
+        },
+        {
+          "stepId": "step-02",
+          "locationId": "start-room",
+          "facts": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "attached"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            },
+            {
+              "key": "gate-latch",
+              "value": "engaged"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "items": [
+            {
+              "itemId": "tool-scissors",
+              "state": {
+                "phase": "held",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-spoon",
+              "state": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-cup",
+              "state": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              }
+            }
+          ]
+        },
+        {
+          "stepId": "step-03",
+          "locationId": "start-room",
+          "facts": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            },
+            {
+              "key": "gate-latch",
+              "value": "engaged"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "items": [
+            {
+              "itemId": "tool-scissors",
+              "state": {
+                "phase": "held",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-spoon",
+              "state": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-cup",
+              "state": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              }
+            }
+          ]
+        },
+        {
+          "stepId": "step-04",
+          "locationId": "start-room",
+          "facts": [
+            {
+              "key": "player-location",
+              "value": "start-room"
+            },
+            {
+              "key": "ankle-tether",
+              "value": "free"
+            },
+            {
+              "key": "body-posture",
+              "value": "seated"
+            },
+            {
+              "key": "gate-latch",
+              "value": "engaged"
+            },
+            {
+              "key": "gate-position",
+              "value": "closed"
+            },
+            {
+              "key": "tank-charge",
+              "value": "empty"
+            },
+            {
+              "key": "float-bolt",
+              "value": "down-locked"
+            },
+            {
+              "key": "exit-position",
+              "value": "closed"
+            }
+          ],
+          "items": [
+            {
+              "itemId": "tool-scissors",
+              "state": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-spoon",
+              "state": {
+                "phase": "placed",
+                "locationId": "start-room",
+                "condition": "usable"
+              }
+            },
+            {
+              "itemId": "tool-cup",
+              "state": {
+                "phase": "unmaterialized",
+                "locationId": null,
+                "condition": "usable"
+              }
+            }
+          ]
+        }
+      ],
+      "resourceTotals": {
+        "photoSends": 1,
+        "actions": 4,
+        "photos": 2
+      },
+      "estimatedTotalSeconds": 21
+    },
+    "reviews": [],
+    "verification": null,
+    "verdict": {
+      "passed": false,
+      "failureCode": "STORY_REJECTED",
+      "reasons": ["機械検査で成立性を確認できませんでした"]
+    }
+  }
+}

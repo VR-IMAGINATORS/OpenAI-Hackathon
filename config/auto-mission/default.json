@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "locale": "ja",
+  "world": {
+    "premise": "過去のあなたが写真から具現化した身近な道具と音声の指示で、未来の自分の脱出を助ける。",
+    "constraints": [
+      "物の具現化以外の特殊能力はない。",
+      "道具は日用品の通常の性質のみを持つ。",
+      "拘束状態、手の届く範囲、道具の配置と回収を説明する。"
+    ]
+  },
+  "difficulty": {
+    "maxPhotoSends": 4,
+    "maxPhotosPerSend": 2,
+    "maxActions": null,
+    "totalTimeSeconds": 300,
+    "obstacleCount": 3
+  },
+  "objectCatalog": [
+    {
+      "id": "paper",
+      "name": "紙",
+      "ordinaryProperties": [
+        "A4サイズ210mm×297mm、厚さ約0.1mmの普通紙1枚",
+        "折れる、丸められる、水で弱くなる"
+      ]
+    },
+    {
+      "id": "pen",
+      "name": "ペン",
+      "ordinaryProperties": [
+        "長さ140mm、外径10mmの硬い樹脂製ボールペン",
+        "筆記できる",
+        "先端から60mmは外径10mm以内の棒状で、軽い1N程度の押圧を伝えられる"
+      ]
+    },
+    {
+      "id": "scissors",
+      "name": "ハサミ",
+      "ordinaryProperties": [
+        "全長160mm、刃渡り60mmの一般的な手動ハサミ",
+        "刃が届く一重の紙や薄い綿紐を切れる",
+        "刃の先端20mmの厚さは3mm以下、硬い金属は切れない"
+      ]
+    },
+    {
+      "id": "towel",
+      "name": "タオル",
+      "ordinaryProperties": [
+        "30cm四方の乾いた綿タオル",
+        "柔らかい、折り重ねられる、少量の水を吸える",
+        "少なくとも50mLの水を吸うが、防火・高温耐熱の性能は保証しない"
+      ]
+    },
+    {
+      "id": "cup",
+      "name": "コップ",
+      "ordinaryProperties": [
+        "高さ100mm、外径80mm、実用容量200mLの空の樹脂コップ",
+        "底が閉じ液漏れせず、口から注水と排水ができる",
+        "軽量で片手で持てる"
+      ]
+    },
+    {
+      "id": "spoon",
+      "name": "スプーン",
+      "ordinaryProperties": [
+        "普通の金属製スプーン",
+        "柄は長さ100mm、幅20mm、厚さ1mmの平たい棒状",
+        "小さな物をすくえる、軽い金具を押し上げる程度で曲がらない"
+      ]
+    },
+    {
+      "id": "rubber-band",
+      "name": "輪ゴム",
+      "ordinaryProperties": [
+        "周長約100mmの普通の輪ゴム",
+        "軽い張力で伸縮するが重い構造物を固定できない"
+      ]
+    },
+    {
+      "id": "string",
+      "name": "紐",
+      "ordinaryProperties": [
+        "長さ1m、直径2mmの柔らかい綿紐",
+        "結べる、軽い物を引ける、水中や空中で硬い棒として押せない"
+      ]
+    }
+  ],
+  "referenceScenarios": [],
+  "models": {
+    "contractGenerator": {
+      "model": "gpt-6-astra",
+      "reasoningEffort": "medium",
+      "maxOutputTokens": 8000
+    },
+    "contractChecker": {
+      "model": "gpt-6-astra",
+      "reasoningEffort": "high",
+      "maxOutputTokens": 4000
+    },
+    "storyGenerator": {
+      "model": "gpt-6-astra",
+      "reasoningEffort": "medium",
+      "maxOutputTokens": 12000
+    },
+    "repairer": {
+      "model": "gpt-6-astra",
+      "reasoningEffort": "medium",
+      "maxOutputTokens": 12000
+    },
+    "physics": {
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium",
+      "maxOutputTokens": 3000
+    },
+    "resources": {
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "medium",
+      "maxOutputTokens": 3000
+    },
+    "causality": {
+      "model": "gpt-5.6-terra",
+      "reasoningEffort": "medium",
+      "maxOutputTokens": 3000
+    },
+    "verifier": {
+      "model": "gpt-6-astra",
+      "reasoningEffort": "high",
+      "maxOutputTokens": 6000
+    }
+  },
+  "limits": {
+    "maxRepairs": 2,
+    "maxApiCalls": 17,
+    "maxOutputTokensTotal": 100000,
+    "deadlineSeconds": 600,
+    "requestTimeoutSeconds": 600,
+    "maxInputBytesPerCall": 49152,
+    "maxConcurrentReviews": 3
+  }
+}
