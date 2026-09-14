@@ -31,9 +31,11 @@ export function endingErrorText(code: string | null, locale: 'ja' | 'en'): strin
     );
   if (code.startsWith('ENDING_STORY_'))
     return t(
-      'このプレイの物語・演出を作る段階で失敗しました。',
-      'The story and direction for this play could not be prepared.',
+      'このプレイのタグ・結末文を作る段階で失敗しました。',
+      'The story and tag for this play could not be prepared.',
     );
+  if (code.startsWith('ENDING_DIRECTION_'))
+    return t('動画の演出を作る段階で失敗しました。', 'The video direction could not be prepared.');
   if (code.startsWith('ENDING_START_FRAME_'))
     return t(
       '動画の開始画像を作る段階で失敗しました。',
@@ -41,11 +43,45 @@ export function endingErrorText(code: string | null, locale: 'ja' | 'en'): strin
     );
   if (code.startsWith('ENDING_END_FRAME_'))
     return t('動画の終了画像を作る段階で失敗しました。', 'The ending image could not be created.');
-  if (code.startsWith('ENDING_START_INSPECTION_') || code.startsWith('ENDING_END_INSPECTION_'))
+  if (code.startsWith('ENDING_START_INSPECTION_') || code.startsWith('ENDING_END_INSPECTION_')) {
+    const frame = code.startsWith('ENDING_START_')
+      ? t('開始画像', 'starting image')
+      : t('終了画像', 'ending image');
+    if (code.endsWith('_REJECTED'))
+      return t(
+        `${frame}が内容検査に合格しませんでした。`,
+        `The ${frame} did not pass its content check.`,
+      );
+    if (code.endsWith('_UNCERTAIN'))
+      return t(
+        `${frame}の内容を、画像検査AIが判定できませんでした。`,
+        `The inspection AI could not assess the ${frame}.`,
+      );
+    if (code.endsWith('_RESPONSE_INCOMPLETE'))
+      return t(
+        `${frame}の検査AIの応答が完了しませんでした。`,
+        `The inspection AI's response for the ${frame} was incomplete.`,
+      );
+    if (code.endsWith('_INVALID_RESPONSE'))
+      return t(
+        `${frame}の検査AIから、読み取れない形式の応答が返りました。`,
+        `The inspection AI returned an invalid response for the ${frame}.`,
+      );
+    if (code.endsWith('_RESPONSE_REFUSED'))
+      return t(
+        `${frame}の検査をAIが受け付けませんでした。`,
+        `The AI declined to inspect the ${frame}.`,
+      );
+    if (code.endsWith('_TIMEOUT'))
+      return t(
+        `${frame}の内容検査が時間内に完了しませんでした。`,
+        `The ${frame} inspection timed out.`,
+      );
     return t(
-      '開始・終了画像の内容を確認できませんでした。',
-      'The starting or ending image could not pass its content check.',
+      `${frame}の内容検査中にエラーが発生しました。`,
+      `An error occurred while inspecting the ${frame}.`,
     );
+  }
   if (code === 'ENDING_VIDEO_SUBMIT_UNCONFIRMED')
     return t(
       '動画生成サービスへの依頼結果を確認できませんでした。',

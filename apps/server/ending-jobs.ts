@@ -13,18 +13,25 @@ import { createEndingFrames } from '../../packages/server/ending-image-service.j
 import {
   abortableDelay,
   createEndingDesign,
+  createEndingText,
+  type EndingNarrative,
   type EndingReference,
 } from '../local-server/ending-ai.js';
 import type { EndingPacket } from '../local-server/ending.js';
+import { publicEndingStory } from '../local-server/ending-tags.js';
 import type { EndingStory, EndingVideoStatus } from '../../packages/shared/ending.js';
 import { ResultStore } from './result-store.js';
-import { endingFailureCode, type EndingStage } from './ending-failure.js';
+import {
+  endingFailureCode,
+  endingValidationFields,
+  type EndingFailureContext,
+  type EndingStage,
+} from './ending-failure.js';
 
 export interface PreparedEnding {
   start: Buffer;
   end: Buffer;
   prompt: string;
-  story: EndingStory;
 }
 interface Job {
   id: string;
@@ -42,6 +49,11 @@ interface Job {
   stage: EndingStage;
   scene: EndingReference | null;
   before: EndingReference[];
+  video: boolean;
+  storyReady: boolean;
+  phase: 'text' | 'video';
+  narrative?: EndingNarrative;
+  sealedPacket?: EndingPacket;
 }
 interface UnconfirmedRequest {
   handle?: FalRequestHandle;
@@ -52,8 +64,19 @@ export interface EndingJobsOptions {
   fal?: FalTransport;
   graceMs?: number;
   pollMs?: number;
-  prepare?: (jobId: string, packet: EndingPacket, signal: AbortSignal) => Promise<PreparedEnding>;
-  onFailure?: (playId: string, stage: EndingStage | 'admission', errorCode: string) => void;
+  storyTimeoutMs?: number;
+  prepare?: (
+    jobId: string,
+    packet: EndingPacket,
+    signal: AbortSignal,
+    publishedStory: EndingStory | null,
+  ) => Promise<PreparedEnding>;
+  onFailure?: (
+    playId: string,
+    stage: EndingStage | 'admission',
+    errorCode: string,
+    context?: EndingFailureContext,
+  ) => void;
 }
 
 /** One job per retained result. Unconfirmed submissions retain capacity after local cancellation. */
@@ -85,15 +108,35 @@ export class EndingJobs {
       /* Result eviction cancels separately. */
     }
   }
-  private reportFailure(playId: string, stage: EndingStage | 'admission', errorCode: string) {
+  private reportFailure(
+    playId: string,
+    stage: EndingStage | 'admission',
+    errorCode: string,
+    error?: unknown,
+  ) {
     try {
-      this.options.onFailure?.(playId, stage, errorCode);
+      const job = this.jobs.get(playId);
+      const packet = job?.sealedPacket ?? job?.packet;
+      this.options.onFailure?.(
+        playId,
+        stage,
+        errorCode,
+        packet
+          ? {
+              clearedCount: packet.clearedIds.length,
+              actionCount: packet.actions.length,
+              failedActionCount: packet.actions.filter((action) => !action.success).length,
+              validationFields: endingValidationFields(error),
+            }
+          : undefined,
+      );
     } catch {
       /* Diagnostics cannot interrupt cleanup. */
     }
   }
   enqueue(packet: EndingPacket, seal: () => EndingPacket): void {
     const enabled = !!this.fal;
+    const writeStory = packet.outcome !== null && this.ai.config.mode === 'live';
     const status: EndingVideoStatus =
       packet.outcome === null ? 'not_applicable' : enabled ? 'queued' : 'disabled';
     if (
@@ -103,24 +146,36 @@ export class EndingJobs {
         clearedCount: packet.clearedIds.length,
         status,
         errorCode: null,
+        storyErrorCode: null,
         retainUntil: null,
         videoPath: null,
         story: null,
+        storyStatus:
+          packet.outcome === null ? 'not_applicable' : writeStory ? 'queued' : 'disabled',
       })
     )
       return;
-    if (status !== 'queued') return;
+    if (!writeStory) return;
     const failed = (errorCode: string) => {
-      this.update(packet.playId, { status: 'failed', errorCode });
+      this.update(packet.playId, {
+        status: enabled ? 'failed' : status,
+        storyStatus: 'failed',
+        storyErrorCode: errorCode,
+        errorCode,
+      });
       this.reportFailure(packet.playId, 'admission', errorCode);
     };
     if (this.stopped) return failed('ENDING_DRAINING');
-    if (this.submitted + this.reserved >= this.config.globalAttempts)
-      return failed('ENDING_BUDGET_EXHAUSTED');
+    const video = enabled && this.submitted + this.reserved < this.config.globalAttempts;
+    if (enabled && !video) {
+      this.update(packet.playId, { status: 'failed', errorCode: 'ENDING_BUDGET_EXHAUSTED' });
+      this.reportFailure(packet.playId, 'admission', 'ENDING_BUDGET_EXHAUSTED');
+    }
     if ([...this.jobs.values()].filter((j) => !j.running).length >= 10)
       return failed('ENDING_QUEUE_FULL');
     const id = randomUUID(),
-      deadline = packet.endedAt + this.config.timeoutMs;
+      deadline =
+        packet.endedAt + (video ? this.config.timeoutMs : Math.min(120_000, this.config.timeoutMs));
     try {
       this.ai.registerEnding(packet.playId, id, deadline);
     } catch {
@@ -133,12 +188,12 @@ export class EndingJobs {
     );
     timer.unref?.();
     // Freeze visual inputs at game end, before the transcript grace period or queue wait.
-    const ready = this.results.readySceneReferences(packet.playId, packet.gameVersion);
+    const ready = video ? this.results.readySceneReferences(packet.playId, packet.gameVersion) : [];
     const before = packet.actions.slice(-2).flatMap((action) => {
       const reference = ready.find((r) => r.gameVersion === action.beforeVersion);
       return reference ? [reference] : [];
     });
-    this.reserved++;
+    if (video) this.reserved++;
     this.jobs.set(packet.playId, {
       id,
       playId: packet.playId,
@@ -152,6 +207,9 @@ export class EndingJobs {
       stage: 'reference',
       scene: ready[0] ?? null,
       before,
+      video,
+      storyReady: false,
+      phase: 'text',
     });
     // Defer until runtime has emitted its final scene and stored the ended result.
     queueMicrotask(() => this.pump());
@@ -162,10 +220,17 @@ export class EndingJobs {
   private pump(): void {
     if (this.stopped) return;
     for (const job of this.jobs.values()) {
-      if (this.occupancy() >= this.config.concurrent) break;
       if (job.running) continue;
+      const running = [...this.jobs.values()].filter(
+        (other) => !!other.running && other.phase === job.phase,
+      ).length;
+      // A slow or unconfirmed video must not prevent text-only results from being written.
+      if (running + (job.phase === 'video' ? this.unknown.size : 0) >= this.config.concurrent)
+        continue;
       // Set the marker synchronously before invoking any producer callbacks.
-      job.running = Promise.resolve().then(() => this.run(job));
+      job.running = Promise.resolve().then(() =>
+        job.phase === 'text' ? this.runStory(job) : this.run(job),
+      );
     }
   }
   private assertCurrent(job: Job): void {
@@ -173,13 +238,29 @@ export class EndingJobs {
     if (this.stopped || this.now() >= job.deadline || !this.results.has(job.playId))
       throw new Error('ENDING_EXPIRED');
   }
+  private publishStory(job: Job, story: EndingStory): void {
+    this.assertCurrent(job);
+    this.results.updateEnding(job.playId, { story, storyStatus: 'ready' });
+    job.storyReady = true;
+  }
   private async prepare(job: Job, packet: EndingPacket): Promise<PreparedEnding> {
     const signal = job.controller.signal;
-    if (this.options.prepare) return this.options.prepare(job.id, packet, signal);
+    const narrative = job.narrative;
+    job.stage = 'direction';
+    if (this.options.prepare && job.video)
+      return this.options.prepare(
+        job.id,
+        packet,
+        signal,
+        narrative ? publicEndingStory(narrative) : null,
+      );
     const scene = job.scene;
-    if (!scene) throw new Error('ENDING_REFERENCE_MISSING');
+    if (!scene) {
+      job.stage = 'reference';
+      throw new Error('ENDING_REFERENCE_MISSING');
+    }
     const availableBefore = job.before;
-    job.stage = 'story';
+    job.stage = 'direction';
     const design = await createEndingDesign(
       this.ai,
       job.id,
@@ -187,6 +268,7 @@ export class EndingJobs {
       scene,
       availableBefore[0],
       signal,
+      narrative,
       availableBefore,
     );
     const selected = packet.actions.find((action) => action.actionId === design.usedActionIds[0]);
@@ -208,21 +290,64 @@ export class EndingJobs {
     return {
       ...frames,
       prompt: design.videoPrompt,
-      story: { title: design.title, text: design.story, evaluation: design.evaluation },
     };
+  }
+  private async runStory(job: Job): Promise<void> {
+    try {
+      this.assertCurrent(job);
+      job.stage = 'story';
+      this.update(job.playId, { storyStatus: 'generating' });
+      const graceUntil = job.packet.endedAt + (this.options.graceMs ?? 12_000);
+      if (this.now() < graceUntil)
+        await abortableDelay(graceUntil - this.now(), job.controller.signal);
+      this.assertCurrent(job);
+      const packet = job.seal();
+      job.sealedPacket = packet;
+      // A text-only timeout must leave time and a live permit for video work.
+      const textDeadline = AbortSignal.timeout(this.options.storyTimeoutMs ?? 60_000);
+      try {
+        const narrative = await createEndingText(
+          this.ai,
+          job.id,
+          packet,
+          AbortSignal.any([job.controller.signal, textDeadline]),
+        );
+        textDeadline.throwIfAborted();
+        this.publishStory(job, publicEndingStory(narrative));
+        job.narrative = narrative;
+      } catch (error) {
+        this.assertCurrent(job);
+        const errorCode = textDeadline.aborted
+          ? 'ENDING_STORY_TIMEOUT'
+          : endingFailureCode(error, 'story');
+        this.update(job.playId, { storyStatus: 'failed', storyErrorCode: errorCode });
+        this.reportFailure(job.playId, 'story', errorCode, error);
+      }
+      this.assertCurrent(job);
+      if (job.video) {
+        job.phase = 'video';
+      }
+    } catch (error) {
+      this.failJob(job, error);
+    } finally {
+      if (job.phase === 'video') {
+        job.running = undefined;
+        this.pump();
+      } else {
+        this.finish(job);
+      }
+    }
   }
   private async run(job: Job): Promise<void> {
     const signal = job.controller.signal;
     try {
       this.assertCurrent(job);
-      this.update(job.playId, { status: 'preparing' });
-      const graceUntil = job.packet.endedAt + (this.options.graceMs ?? 12_000);
-      if (this.now() < graceUntil) await abortableDelay(graceUntil - this.now(), signal);
-      this.assertCurrent(job);
-      const packet = job.seal();
+      this.update(job.playId, {
+        status: 'preparing',
+      });
+      const packet = job.sealedPacket!;
       const prepared = await this.prepare(job, packet);
       this.assertCurrent(job);
-      this.update(job.playId, { story: prepared.story });
       // Reserve before download and before incurring a video charge.
       job.stage = 'storage';
       this.results.reserveVideo(job.playId);
@@ -292,35 +417,47 @@ export class EndingJobs {
         videoPath: '/api/play/ending/video?playId=' + encodeURIComponent(job.playId),
       });
     } catch (error) {
-      const cancelled = new Set([
-        'ENDING_TIMEOUT',
-        'ENDING_CANCELLED',
-        'ENDING_DRAINING',
-        'ENDING_RESULT_EXPIRED',
-      ]);
-      const errorCode = signal.aborted
-        ? typeof signal.reason === 'string' && cancelled.has(signal.reason)
-          ? signal.reason
-          : 'ENDING_CANCELLED'
-        : endingFailureCode(error, job.stage);
-      this.update(job.playId, {
-        status: signal.reason === 'ENDING_TIMEOUT' ? 'expired' : 'failed',
-        errorCode,
-        videoPath: null,
-      });
-      this.reportFailure(job.playId, job.stage, errorCode);
+      this.failJob(job, error);
     } finally {
-      clearTimeout(job.timer);
-      this.ai.releaseMedia(job.id);
-      this.results.releaseVideoReservation(job.playId);
-      if (!job.submitted) this.reserved--;
-      if (job.upstreamPending) {
-        this.unknown.set(job.id, { handle: job.handle, checking: false });
-        void this.checkUnknown(job.id);
-      }
-      this.jobs.delete(job.playId);
-      this.pump();
+      this.finish(job);
     }
+  }
+  private failJob(job: Job, error: unknown): void {
+    const signal = job.controller.signal;
+    const cancelled = new Set([
+      'ENDING_TIMEOUT',
+      'ENDING_CANCELLED',
+      'ENDING_DRAINING',
+      'ENDING_RESULT_EXPIRED',
+    ]);
+    const errorCode = signal.aborted
+      ? typeof signal.reason === 'string' && cancelled.has(signal.reason)
+        ? signal.reason
+        : 'ENDING_CANCELLED'
+      : endingFailureCode(error, job.stage);
+    this.update(job.playId, {
+      ...(job.video
+        ? {
+            status: signal.reason === 'ENDING_TIMEOUT' ? ('expired' as const) : ('failed' as const),
+          }
+        : {}),
+      storyStatus: job.storyReady ? 'ready' : 'failed',
+      errorCode,
+      videoPath: null,
+    });
+    this.reportFailure(job.playId, job.stage, errorCode, error);
+  }
+  private finish(job: Job): void {
+    clearTimeout(job.timer);
+    this.ai.releaseMedia(job.id);
+    this.results.releaseVideoReservation(job.playId);
+    if (job.video && !job.submitted) this.reserved--;
+    if (job.upstreamPending) {
+      this.unknown.set(job.id, { handle: job.handle, checking: false });
+      void this.checkUnknown(job.id);
+    }
+    this.jobs.delete(job.playId);
+    this.pump();
   }
   cancelPlay(playId: string, reason = 'ENDING_RESULT_EXPIRED'): void {
     const job = this.jobs.get(playId);
@@ -328,13 +465,17 @@ export class EndingJobs {
     job.controller.abort(reason);
     this.ai.cancelMedia(job.id);
     this.update(playId, {
-      status: reason === 'ENDING_TIMEOUT' ? 'expired' : 'failed',
+      ...(job.video
+        ? { status: reason === 'ENDING_TIMEOUT' ? ('expired' as const) : ('failed' as const) }
+        : {}),
+      storyStatus: job.storyReady ? 'ready' : 'failed',
       errorCode: reason,
       videoPath: null,
     });
     if (!job.running) {
       clearTimeout(job.timer);
-      this.reserved--;
+      if (job.video) this.reserved--;
+      this.ai.releaseMedia(job.id);
       this.jobs.delete(playId);
       this.pump();
     }

@@ -74,7 +74,7 @@ function fixture(values: NodeJS.ProcessEnv = {}, overrides: Partial<OpenAITransp
       now = value;
     },
     call: (
-      kind: 'extraction' | 'story' | 'frame' | 'inspection',
+      kind: 'extraction' | 'story' | 'direction' | 'frame' | 'inspection',
       body: unknown,
       frame: 'start' | 'end' = 'start',
     ) => ai.endingCall('ending', 0, kind, body, signal, frame),
@@ -108,6 +108,8 @@ test('one ending permit bounds extraction/story/start/end/inspection independent
   await assert.rejects(f.call('extraction', responseBody()), { code: 'REQUEST_LIMIT' });
   await f.call('story', responseBody(undefined, 4096));
   await assert.rejects(f.call('story', responseBody()), { code: 'REQUEST_LIMIT' });
+  await f.call('direction', responseBody(undefined, 4096));
+  await assert.rejects(f.call('direction', responseBody()), { code: 'REQUEST_LIMIT' });
   for (const frame of ['start', 'end'] as const) {
     await f.call('frame', frameBody, frame);
     await f.call('frame', frameBody, frame);
@@ -117,11 +119,18 @@ test('one ending permit bounds extraction/story/start/end/inspection independent
   await assert.rejects(f.call('inspection', responseBody('gpt-5.6-luna')), {
     code: 'REQUEST_LIMIT',
   });
-  assert.deepEqual(f.permit.ending, { extraction: 6, story: 1, start: 2, end: 2, inspection: 4 });
-  assert.equal(f.ai.snapshot().responseAttempts, 7);
+  assert.deepEqual(f.permit.ending, {
+    extraction: 6,
+    story: 1,
+    direction: 1,
+    start: 2,
+    end: 2,
+    inspection: 4,
+  });
+  assert.equal(f.ai.snapshot().responseAttempts, 8);
   assert.equal(f.ai.snapshot().imageAttempts, 4);
   assert.equal(f.ai.snapshot().inspectionAttempts, 4);
-  assert.equal(f.seen.responses.length, 11);
+  assert.equal(f.seen.responses.length, 12);
   assert.equal(f.seen.edits.length, 4);
   assert.equal(f.seen.images.length, 0);
 });

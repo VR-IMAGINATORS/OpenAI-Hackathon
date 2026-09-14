@@ -334,7 +334,7 @@ export class GameRuntime {
           }
         : {}),
       situation: this.game.situation,
-      actionsRemaining: this.game.scenario.rules.maxActions - this.game.actionsUsed,
+      photoSendsRemaining: this.game.scenario.rules.maxPhotoSends - this.game.photoSendsUsed,
       lastResult: this.game.lastResult,
       recognizedItems: this.game.proposal?.items.map(({ name }) => name) ?? [],
       inventory: this.game.inventory.map(({ name, status }) => ({ name, status })),
@@ -652,14 +652,14 @@ export class GameRuntime {
       return prior.promise;
     }
     if (this.photoRequests.size >= 100) throw new GameError(429, '写真送信の試行上限です。');
-    const ticket = this.game.beginPhotos();
+    const ticket = this.game.beginPhotos(images.length > 0);
     this.openingMessageId = undefined;
     this.syncCore(true);
     const epoch = this.epoch;
     const promise = (async () => {
       try {
         const photos = await this.queue.run(
-          () => decodePhotos(images, this.game.scenario.rules.maxPhotosPerAction),
+          () => decodePhotos(images, this.game.scenario.rules.maxPhotosPerSend),
           () => this.valid(epoch),
           signal,
         );

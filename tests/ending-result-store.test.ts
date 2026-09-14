@@ -21,6 +21,7 @@ const view = (playId: string): EndingView => ({
   retainUntil: null,
   videoPath: null,
   story: null,
+  storyStatus: 'queued',
 });
 const error = (status: number, code: string) => (value: unknown) =>
   value instanceof ResultStoreError && value.status === status && value.code === code;

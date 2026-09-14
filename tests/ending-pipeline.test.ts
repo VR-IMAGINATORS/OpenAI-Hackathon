@@ -3,8 +3,10 @@ import test from 'node:test';
 import sharp from 'sharp';
 import {
   createEndingDesign,
+  createEndingText,
   endingClues,
   type EndingDesign,
+  type EndingNarrative,
   type EndingReference,
 } from '../apps/local-server/ending-ai.js';
 import type { EndingPacket } from '../apps/local-server/ending.js';
@@ -16,9 +18,16 @@ import type { EndingCallKind } from '../packages/server/ending-ai-request.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 
 const signal = () => new AbortController().signal;
-const response = (value: unknown) => ({
-  output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
-});
+const response = (value: unknown) => {
+  // Film API returns only film fields; the published narrative is supplied separately.
+  if (value && typeof value === 'object' && 'videoPrompt' in value) {
+    const { title, story, evaluation, tag, ...film } = value as EndingDesign & EndingNarrative;
+    value = film;
+  }
+  return {
+    output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+  };
+};
 interface RecordedCall {
   kind: EndingCallKind;
   body: any;
@@ -79,7 +88,7 @@ function packet(clue = 'The red mark was a signal left by the player.'): EndingP
     scenario: localizeScenario(snapshot.scenarioV2, 'en'),
     locale: 'en',
     outcome: 'normal',
-    endReason: 'action_limit',
+    endReason: 'time_limit',
     clearedIds: ['first', 'second'],
     remainingObstacles: [
       { id: 'last', title: 'Locked door', situation: 'UNPRESENTED_SECRET_SITUATION' },
@@ -121,9 +130,12 @@ function packet(clue = 'The red mark was a signal left by the player.'): EndingP
     recentActionScenes: [],
   };
 }
-function design(overrides: Partial<EndingDesign> = {}): EndingDesign {
+function design(
+  overrides: Partial<EndingDesign & EndingNarrative> = {},
+): EndingDesign & Omit<EndingNarrative, 'presentedEvidence'> {
   return {
     title: 'The unfinished signal',
+    tag: null,
     story: 'The damaged rope rests beneath the mark. The last door remains closed.',
     evaluation: 'Your rope loosened two restraints; the final lock remained.',
     usedEvidenceIds: ['early-clue'],
@@ -152,6 +164,15 @@ const before: EndingReference = {
   jpeg: Buffer.from('before-reference'),
 };
 const payloadOf = (call: RecordedCall) => JSON.parse(call.body.input[0].content[0].text);
+const textOutput = () => {
+  const { title, story, evaluation, tag, usedEvidenceIds } = design();
+  return { title, story, evaluation, tag, usedEvidenceIds };
+};
+const narrative = (p = packet(), patch: Partial<EndingNarrative> = {}): EndingNarrative => ({
+  ...textOutput(),
+  presentedEvidence: p.evidence.records,
+  ...patch,
+});
 
 test('ending writer receives early clues and every confirmed action, distinct per play without secret situations', async () => {
   const first = packet('The red mark meant a promise to return.');
@@ -159,14 +180,16 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   second.playId = 'second-play';
   second.actions[0].narrative = 'A different confirmed first action changed this play.';
   const f = fakeAi(() => response(design()));
-  await createEndingDesign(f.ai, 'job-first', first, final, before, signal());
-  await createEndingDesign(f.ai, 'job-second', second, final, before, signal());
+  await createEndingDesign(f.ai, 'job-first', first, final, before, signal(), narrative(first));
+  await createEndingDesign(f.ai, 'job-second', second, final, before, signal(), narrative(second));
   assert.deepEqual(
     f.calls.map((call) => call.kind),
-    ['story', 'story'],
+    ['direction', 'direction'],
   );
   const [a, b] = f.calls.map(payloadOf);
   assert.deepEqual(a.actions, first.actions);
+  assert.equal(a.tagCatalog, undefined, 'film cannot choose tags again');
+  assert.equal(a.establishedEnding.text, narrative().story);
   assert.deepEqual(a.recentActionIds, ['action-3', 'action-4']);
   assert.equal(a.presentedEvidence[0].text, first.evidence.records[0].text);
   assert.equal(b.presentedEvidence[0].text, second.evidence.records[0].text);
@@ -174,7 +197,7 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert(!JSON.stringify(a).includes(second.evidence.records[0].text));
   assert(!JSON.stringify(b).includes(first.evidence.records[0].text));
   assert(!JSON.stringify(a).includes('UNPRESENTED_SECRET_SITUATION'));
-  assert.deepEqual(a.endingTitle, { text: 'to be continued...', position: 'lower right' });
+  assert.deepEqual(a.endingTitle, { text: 'to be continued', position: 'lower right' });
   assert.equal(a.outcome, 'normal');
   assert.deepEqual(a.facts, first.facts);
   assert.equal(f.calls[0].body.max_output_tokens, 4096);
@@ -182,6 +205,54 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.match(f.calls[0].body.instructions, /confirmed outcome and facts override/);
   assert.match(f.calls[0].body.instructions, /Normal\/bad means not escaped/);
   assert.match(f.calls[0].body.instructions, /No speech, narration, singing or music/);
+});
+
+test('tag evidence can use an early action outside the two film actions and text-only uses the same catalog', async () => {
+  const chosen = {
+    id: 'unexpected_use' as const,
+    evidenceActionIds: ['action-1'],
+    reason: 'An early improvised use.',
+  };
+  const f = fakeAi(() => response(design({ tag: chosen })));
+  const result = await createEndingDesign(
+    f.ai,
+    'job',
+    packet(),
+    final,
+    before,
+    signal(),
+    narrative(packet(), { tag: chosen }),
+  );
+  assert.equal('tag' in result, false, 'film output cannot replace the published tag');
+  const textAi = fakeAi(() =>
+    response({
+      title: narrative().title,
+      story: narrative().story,
+      evaluation: narrative().evaluation,
+      usedEvidenceIds: result.usedEvidenceIds,
+      tag: chosen,
+    }),
+  );
+  const textResult = await createEndingText(textAi.ai, 'text-job', packet(), signal());
+  assert.deepEqual(textResult.tag, chosen);
+  assert.equal(textAi.calls.length, 1);
+  assert.equal(textAi.calls[0].body.input[0].content.length, 1);
+  assert.deepEqual(payloadOf(textAi.calls[0]).actions, packet().actions);
+  assert.equal(payloadOf(textAi.calls[0]).tagCatalog.length, 40);
+  assert.equal(payloadOf(f.calls[0]).establishedEnding.tag.id, chosen.id);
+});
+
+test('writer rejects unknown tags, invented or duplicate tag evidence and overlong summaries', async () => {
+  for (const patch of [
+    { tag: { id: 'invented', evidenceActionIds: ['action-1'], reason: 'unknown' } },
+    { tag: { id: 'tools', evidenceActionIds: ['missing'], reason: 'unknown' } },
+    { tag: { id: 'tools', evidenceActionIds: ['action-1', 'action-1'], reason: 'duplicate' } },
+    { story: 'x'.repeat(241) },
+  ]) {
+    const f = fakeAi(() => response({ ...textOutput(), ...patch }));
+    await assert.rejects(createEndingText(f.ai, 'job', packet(), signal()));
+    assert.equal(f.calls.length, 1);
+  }
 });
 
 test('ending writer rejects invented sources and non-recent, duplicate or reversed action selections', async () => {
@@ -193,7 +264,9 @@ test('ending writer rejects invented sources and non-recent, duplicate or revers
     { usedActionIds: ['action-2', 'action-3', 'action-4'] },
   ]) {
     const f = fakeAi(() => response(design(invalid)));
-    await assert.rejects(createEndingDesign(f.ai, 'job', packet(), final, before, signal()));
+    await assert.rejects(
+      createEndingDesign(f.ai, 'job', packet(), final, before, signal(), narrative()),
+    );
     assert.equal(f.calls.length, 1);
   }
 });
@@ -201,11 +274,19 @@ test('ending writer rejects invented sources and non-recent, duplicate or revers
 test('missing or wrong before-action references force aftermath; no-action endings invent no attempt', async () => {
   const f = fakeAi(() => response(design()));
   await assert.rejects(
-    createEndingDesign(f.ai, 'job', packet(), final, undefined, signal()),
+    createEndingDesign(f.ai, 'job', packet(), final, undefined, signal(), narrative()),
     /ENDING_INVALID_CONTINUITY/,
   );
   await assert.rejects(
-    createEndingDesign(f.ai, 'job', packet(), final, { ...before, gameVersion: 1 }, signal()),
+    createEndingDesign(
+      f.ai,
+      'job',
+      packet(),
+      final,
+      { ...before, gameVersion: 1 },
+      signal(),
+      narrative(),
+    ),
     /ENDING_INVALID_CONTINUITY/,
   );
   const aftermath = fakeAi(() => response(design({ mode: 'aftermath', usedActionIds: [] })));
@@ -214,7 +295,15 @@ test('missing or wrong before-action references force aftermath; no-action endin
   empty.outcome = 'bad';
   empty.clearedIds = [];
   empty.endReason = 'time_limit';
-  const result = await createEndingDesign(aftermath.ai, 'job', empty, final, undefined, signal());
+  const result = await createEndingDesign(
+    aftermath.ai,
+    'job',
+    empty,
+    final,
+    undefined,
+    signal(),
+    narrative(empty),
+  );
   assert.equal(result.mode, 'aftermath');
   const input = payloadOf(aftermath.calls[0]);
   assert.deepEqual(input.actions, []);
@@ -318,13 +407,58 @@ test('frames retry only an explicit rejection once per frame and pass the accept
   assert.deepEqual(generations[0].body.images, [before.jpeg]);
   assert.deepEqual(generations[2].body.images, [final.jpeg, frames.start]);
   assert.match(generations[1].body.prompt, /Correct the rope contact/);
-  assert.match(generations[2].body.prompt, /to be continued\.\.\./);
+  assert.match(generations[2].body.prompt, /arrow artwork will be composited separately/);
   const endInspection = f.calls.filter((call) => call.kind === 'inspection').at(-1)!;
+  assert.equal(
+    endInspection.body.input[0].content[1].image_url,
+    'data:image/jpeg;base64,' + frames.end.toString('base64'),
+  );
+  assert.notDeepEqual(frames.end, frames.start, 'the actual arrow is composited before inspection');
   assert.equal(
     endInspection.body.input[0].content[2].image_url,
     'data:image/jpeg;base64,' + frames.start.toString('base64'),
   );
   assert.deepEqual(payloadOf(endInspection).target, packet().facts);
+});
+
+test('normal and bad endings use the arrow while happy endings keep their generated SUCCESS title', async () => {
+  const jpeg = await generatedJpeg();
+  for (const outcome of ['normal', 'bad', 'happy'] as const) {
+    const ending = packet();
+    ending.outcome = outcome;
+    const f = fakeAi((call) =>
+      call.kind === 'frame' ? imageResponse(jpeg) : response({ verdict: 'pass', problems: [] }),
+    );
+    const frames = await createEndingFrames(f.ai, 'job', ending, design(), final, before, signal());
+    const endPrompt = f.calls.filter((call) => call.kind === 'frame').at(-1)!.body.prompt;
+    const endInspection = f.calls.filter((call) => call.kind === 'inspection').at(-1)!;
+    assert.equal(payloadOf(endInspection).slot, 'end');
+    assert.equal(
+      payloadOf(endInspection).title.text,
+      outcome === 'happy' ? 'SUCCESS!!' : 'to be continued',
+    );
+    assert.equal(
+      endInspection.body.input[0].content[1].image_url,
+      'data:image/jpeg;base64,' + frames.end.toString('base64'),
+    );
+    assert.match(endInspection.body.instructions, /FIRST image is the finished frame/);
+    assert.match(endInspection.body.instructions, /apply only BEFORE that compositing step/);
+    assert.match(endInspection.body.instructions, /Still reject a missing or incorrect title/);
+    if (outcome === 'happy') {
+      assert.deepEqual(frames.end, frames.start);
+      assert.match(endPrompt, /SUCCESS!!/);
+    } else {
+      assert.match(endPrompt, /Do not draw any title/);
+      const region = await sharp(frames.end)
+        .extract({ left: 382, top: 802, width: 560, height: 140 })
+        .stats();
+      assert(region.channels.every((channel) => channel.max > 240 && channel.min < 15));
+      const scene = await sharp(frames.end)
+        .extract({ left: 100, top: 100, width: 100, height: 100 })
+        .stats();
+      assert(Math.abs(scene.channels[0].mean - 136) < 5, 'the scene remains visible');
+    }
+  }
 });
 
 test('persistent frame rejection stops after two submissions without generating the other frame', async () => {

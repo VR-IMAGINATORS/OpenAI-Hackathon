@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { SCENE_ACTION_BUDGET } from '../../packages/server/ai-config.js';
 import type { AiService, MediaPermit } from '../../packages/server/ai-service.js';
 import {
   generateScene,
@@ -74,12 +75,7 @@ export class SceneJobs {
       return this.publicJob(job);
     }
     try {
-      job.permit = this.ai.registerMedia(
-        input.playId,
-        job.id,
-        job.deadline,
-        input.snapshot.scenarioV2.rules.maxActions,
-      );
+      job.permit = this.ai.registerMedia(input.playId, job.id, job.deadline, SCENE_ACTION_BUDGET);
     } catch {
       job.status = 'failed';
       callbacks.stage?.('failed');

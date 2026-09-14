@@ -10,8 +10,8 @@
     "en": "Help your future self one week from now with photos and your voice. Send a photo of an object nearby, discuss where and how to use it with Mei, then give an instruction. Talking or taking a photo alone does not spend an action."
   },
   "rules": {
-    "maxActions": 4,
-    "maxPhotosPerAction": 2,
+    "maxPhotoSends": 4,
+    "maxPhotosPerSend": 2,
     "totalTimeSeconds": 300
   },
   "story": {

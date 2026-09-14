@@ -6,7 +6,7 @@ import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 import type { CoreJudgment, GameAI } from '../apps/local-server/game-ai.js';
 
-function fixture(core: boolean, maxActions = 4, judgment?: GameAI['judge']) {
+function fixture(core: boolean, maxPhotoSends = 4, judgment?: GameAI['judge']) {
   let now = 0;
   let success = true;
   let calls = 0;
@@ -16,7 +16,7 @@ function fixture(core: boolean, maxActions = 4, judgment?: GameAI['judge']) {
       coreConfigPath: 'config/game-core.json',
     }).current('ja'),
   );
-  snapshot.scenarioV2.rules.maxActions = maxActions;
+  snapshot.scenarioV2.rules.maxPhotoSends = maxPhotoSends;
   const scenario = localizeScenario(snapshot.scenarioV2, 'ja');
   const endingStates: unknown[] = [];
   const game = new GameSession(
@@ -118,7 +118,7 @@ for (const core of [true, false]) {
       );
     });
   }
-  test(`${path}: last permitted action records second clearance before normal ending callback`, async () => {
+  test(`${path}: last send permits progress; later timeout preserves second clearance`, async () => {
     const f = fixture(core, 3);
     f.setSuccess(false);
     await f.act();
@@ -128,8 +128,11 @@ for (const core of [true, false]) {
     const result = await repeat();
     assert.deepEqual(await repeat(), result);
     assert.equal(f.calls(), 3);
+    assert.equal(f.game.state().status, 'playing');
+    assert.equal(f.game.state().photoSendsRemaining, 0);
+    f.advance(1_000_000);
     assert.equal(f.game.state().endingOutcome, 'normal');
-    assert.equal(f.game.endReason, 'action_limit');
+    assert.equal(f.game.endReason, 'time_limit');
     assert.equal(f.game.committedActions.length, 3);
     assert.equal(f.game.committedActions[2].cleared, true);
     assert.equal(f.game.committedActions[2].afterVersion, 3);
@@ -137,7 +140,7 @@ for (const core of [true, false]) {
     assert.equal((f.endingStates[0] as any).actions.length, 3);
     assert.equal((f.endingStates[0] as any).state.clearedCount, 2);
   });
-  test(`${path}: final obstacle wins even on the final permitted action`, async () => {
+  test(`${path}: final obstacle wins using the final sent photo`, async () => {
     const f = fixture(core, 3);
     await f.act();
     await f.act();
@@ -153,6 +156,7 @@ for (const core of [true, false]) {
     f.setSuccess(false);
     await f.act();
     await f.act();
+    f.advance(1_000_000);
     assert.equal(f.game.state().endingOutcome, 'bad');
     assert.equal(f.game.clearedIds.length, 1);
     assert.deepEqual(

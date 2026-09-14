@@ -1,6 +1,7 @@
 import { createHash, randomInt } from 'node:crypto';
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { SCENE_ACTION_BUDGET } from '../../packages/server/ai-config.js';
 import {
   difficultySchema,
   difficultyPresets,
@@ -97,7 +98,7 @@ export class ScenarioCatalog {
     this.coreConfigPath = resolve(options.coreConfigPath);
   }
   private validateBudgets(rules: ScenarioV2['rules']) {
-    const needed = 2 * (rules.maxActions + 2);
+    const needed = 2 * (SCENE_ACTION_BUDGET + 2);
     if (needed > (this.options.maxGenerationAttemptsPerPlay ?? 100))
       throw new Error('IMAGE_BUDGET');
     if (
@@ -157,7 +158,7 @@ export class ScenarioCatalog {
           rules: {
             ...scenarioV2.rules,
             totalTimeSeconds: preset.totalTimeSeconds,
-            maxActions: preset.maxActions,
+            maxPhotoSends: preset.maxPhotoSends,
           },
         });
         this.validateBudgets(scenarioV2.rules);

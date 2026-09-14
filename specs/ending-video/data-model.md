@@ -34,9 +34,9 @@ type GameEndReason = 'escaped' | 'time_limit' | 'action_limit' | 'interrupted';
 
 ## 生成内容
 
-`EndingDesign`は`title / story / evaluation`、採用した伏線sourceIdと行動ID、候補比較と選択理由、開始画像prompt、終了画像prompt、最終動画promptを持つ。表示文は選択言語、画像・動画promptは英語を使う。
+文章用AIは`title / story / evaluation`、主役tag（固定ID・根拠行動ID・理由、またはnull）、伏線sourceIdを生成する。storyは最大240文字。検証後すぐ保存し、動画の処理枠・脚本生成を待たず公開する。映像用AIは公開済み文章と証拠を任意の入力にし、伏線sourceId・行動ID、候補比較、画像・動画promptだけを生成する。`EndingDesign`は映像フィールドのみ。文章失敗時はestablishedEnding=nullとして確定状態・行動から動画を作り、文章を捏造・再生成しない。storyErrorCodeは動画用errorCodeと分けて保持する。表示文は選択言語、画像・動画promptは英語を使う。
 
-物語材料の選別は本文を上限付きのチャンクに分けて行い、出典ID付きの伏線を抽出する。最大6回の抽出と1回の脚本生成。抽出内容は照合可能な原文参照を必須とし、存在しないIDを拒否する。候補比較は脚本生成1回の構造化出力に含める。種別・文字列・成否はサーバーで固定し、生成結果で上書きしない。脚本生成失敗時に舞台別固定文へ切り替えない。
+物語材料の選別は本文を上限付きのチャンクに分けて行い、出典ID付きの伏線を抽出する。最大6回の抽出、story最大1回、動画有効時のみdirection最大1回。映像側は抽出済みの証拠を再利用する。抽出内容は照合可能な原文参照を必須とし、存在しないIDを拒否する。候補比較はdirectionの構造化出力に含める。種別・解除数・成否はサーバーで固定し、生成結果で上書きしない。映像脚本生成失敗でも公開済みのタグと短文を維持する。
 
 ## 公開する動画状態
 
@@ -46,11 +46,11 @@ type EndingVideoStatus =
   | 'generating' | 'ready' | 'failed' | 'expired';
 ```
 
-公開オブジェクトは`playId`、`outcome`、`clearedCount`、`status`、`errorCode`、`retainUntil`、`videoPath`（readyのみ）、`story`（完成済みの場合）を持つ。実APIキー、上流URL、上流応答本文、prompt、request IDを含めない。
+公開オブジェクトは`playId`、`outcome`、`clearedCount`、`status`、`errorCode`、`retainUntil`、`videoPath`（readyのみ）、`story`（完成済みの場合）、`storyStatus`を持つ。storyにはtagIdとtagCatalogVersionも含め、根拠行動ID・理由は含めない。実APIキー、上流URL、上流応答本文、prompt、request IDを含めない。
 
 内部ジョブには締切、キャンセル世代、試行数、submit開始済みフラグ、request ID、検証済みstatus/result/cancel URL、入力ハッシュを追加する。submit前のフラグ設定は同期的に行う。失敗・失効後に同じplayIdで新しいジョブを作らない。
 
-遷移はqueued→preparing→generating→ready。途中からfailed / expiredへ遷移でき、終端から自動的にqueuedへ戻らない。disabled / not_applicableはAPIを呼ばない。
+動画の遷移はqueued→preparing→generating→ready。途中からfailed / expiredへ遷移でき、終端から自動的にqueuedへ戻らない。動画disabledでもliveなら文章は生成する。storyStatusはqueued→generating→ready、途中からfailedへ遷移できる。mockはdisabled、中断はnot_applicable。文章readyは後続メディアの失敗で変えない。文章がqueued/generatingなら動画が終端状態でも状態取得を継続する。
 
 ## 保持と配信
 

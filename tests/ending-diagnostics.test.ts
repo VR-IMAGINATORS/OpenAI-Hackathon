@@ -4,10 +4,15 @@ import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { EndingJobs } from '../apps/server/ending-jobs.js';
-import { endingFailureCode } from '../apps/server/ending-failure.js';
+import { endingFailureCode, endingValidationFields } from '../apps/server/ending-failure.js';
+import { operationalLog } from '../apps/server/logging.js';
 import { ResultStore } from '../apps/server/result-store.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
-import { responseObject, type EndingDesign } from '../apps/local-server/ending-ai.js';
+import {
+  responseObject,
+  type EndingDesign,
+  type EndingNarrative,
+} from '../apps/local-server/ending-ai.js';
 import type { EndingPacket } from '../apps/local-server/ending.js';
 import { endingErrorText } from '../apps/web/src/ending-error.js';
 import { AiService, AiServiceError } from '../packages/server/ai-service.js';
@@ -24,6 +29,37 @@ import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
 
 const response = (value: unknown) => ({
   output: [{ content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+});
+
+test('text diagnostics retain numeric play context and schema fields without private validation values', () => {
+  const parsed = z
+    .object({ story: z.string().max(1), tag: z.object({ id: z.enum(['tools']) }) })
+    .safeParse({ story: 'PRIVATE_STORY', tag: { id: 'PRIVATE_TAG' } });
+  assert(!parsed.success);
+  const fields = endingValidationFields(parsed.error);
+  assert.equal(fields, 'story,tag');
+  let line = '';
+  operationalLog(
+    {
+      event: 'ending_failed_story',
+      correlationId: 'play-id',
+      errorCode: endingFailureCode(parsed.error, 'story'),
+      clearedCount: 0,
+      actionCount: 3,
+      failedActionCount: 3,
+      validationFields: fields,
+    },
+    (value) => {
+      line = value;
+    },
+  );
+  assert.equal(JSON.parse(line).clearedCount, 0);
+  assert.equal(JSON.parse(line).failedActionCount, 3);
+  assert.equal(JSON.parse(line).validationFields, 'story,tag');
+  assert.doesNotMatch(line, /PRIVATE/);
+  const unknown = z.object({ PRIVATE_FIELD: z.number() }).safeParse({ PRIVATE_FIELD: 'secret' });
+  assert(!unknown.success);
+  assert.equal(endingValidationFields(unknown.error), 'response');
 });
 
 test('failure categories identify the stage without disclosing upstream text, URLs, or validation inputs', () => {
@@ -116,6 +152,24 @@ for (const variant of [
   { name: 'only opening image at time limit', ready: [0], finalStatus: 'queued' },
   { name: 'images completing after cutoff', ready: [0], finalStatus: 'queued', late: true },
   { name: 'no completed scene at time limit', ready: [], finalStatus: 'queued', late: true },
+  {
+    name: 'direction API fails after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'network',
+  },
+  {
+    name: 'invalid film action after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'sources',
+  },
+  {
+    name: 'incomplete film response after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'incomplete',
+  },
 ] as const)
   test('default ending producer: ' + variant.name, async (t) => {
     const readyVersions: readonly number[] = variant.ready;
@@ -129,10 +183,16 @@ for (const variant of [
       .jpeg()
       .toBuffer();
     const edits: ImageEditRequest[] = [];
+    let inspectedStart: Buffer | undefined;
     const failures: string[] = [];
     let submits = 0;
-    const design: EndingDesign = {
+    const design: EndingDesign & Omit<EndingNarrative, 'presentedEvidence'> = {
       title: 'The last mark',
+      tag: {
+        id: 'bare_hands',
+        evidenceActionIds: ['first'],
+        reason: 'The glass was wiped without items.',
+      },
       story: 'The mark from the first conversation remained on the glass.',
       evaluation: 'Two restraints were removed.',
       usedEvidenceIds: ['early'],
@@ -158,9 +218,20 @@ for (const variant of [
         async createResponse(body) {
           const request = body as {
             text: { format: { name: string } };
-            input: { content: { text?: string }[] }[];
+            input: { content: { text?: string; image_url?: string }[] }[];
           };
+          if (request.text.format.name === 'ending_text') {
+            return response({
+              title: design.title,
+              story: design.story,
+              evaluation: design.evaluation,
+              tag: design.tag,
+              usedEvidenceIds: design.usedEvidenceIds,
+            });
+          }
           if (request.text.format.name === 'ending_design') {
+            assert.equal(results.ending('owner', playId).storyStatus, 'ready');
+            assert.equal(results.ending('owner', playId).story!.tagId, 'bare_hands');
             const input = JSON.parse(request.input[0].content[0].text!);
             assert.deepEqual(
               input.availableBeforeReferences.map((r: { gameVersion: number }) => r.gameVersion),
@@ -172,11 +243,34 @@ for (const variant of [
             assert.equal(input.actions.length, 2);
             assert.equal(input.outcome, 'normal');
             if (latestVersion! < 2) assert.match(input.references[0].role, /earlier/);
-            return response(design);
+            if ('directionFailure' in variant) {
+              if (variant.directionFailure === 'network')
+                throw new Error('simulated connection failure');
+              if (variant.directionFailure === 'incomplete')
+                return { status: 'incomplete', output: [] };
+            }
+            const { title, story, evaluation, tag, ...film } = design;
+            return response(
+              'directionFailure' in variant ? { ...film, usedActionIds: ['missing'] } : film,
+            );
+          }
+          if (request.text.format.name === 'ending_frame_inspection') {
+            const input = JSON.parse(request.input[0].content[0].text!);
+            if (input.slot === 'start')
+              inspectedStart = Buffer.from(
+                request.input[0].content[1].image_url!.split(',')[1],
+                'base64',
+              );
           }
           return response({ verdict: 'pass', problems: [] });
         },
         async createImageEdit(body) {
+          assert.equal(
+            results.ending('owner', playId).storyStatus,
+            'ready',
+            'text must be public before the first image call',
+          );
+          assert.equal(results.ending('owner', playId).story!.text, design.story);
           edits.push(body);
           return { data: [{ b64_json: source.toString('base64') }] };
         },
@@ -324,11 +418,24 @@ for (const variant of [
       i++
     )
       await new Promise((r) => setTimeout(r, 5));
+    if ('directionFailure' in variant) {
+      const view = results.ending('owner', playId);
+      assert.equal(view.status, 'failed');
+      assert.equal(view.storyStatus, 'ready');
+      assert.equal(view.story!.tagId, 'bare_hands');
+      assert.equal(view.story!.text, design.story);
+      assert.match(view.errorCode!, /^ENDING_DIRECTION_/);
+      assert.equal(submits, 0);
+      assert.equal(edits.length, 0);
+      return;
+    }
     if (latestVersion === undefined) {
       assert.equal(results.ending('owner', playId).status, 'failed');
       assert.deepEqual(failures, ['ENDING_REFERENCE_MISSING']);
       assert.equal(submits, 0);
       assert.equal(edits.length, 0);
+      assert.equal(results.ending('owner', playId).storyStatus, 'ready');
+      assert.equal(results.ending('owner', playId).story!.text, design.story);
       return;
     }
     assert.deepEqual(failures, []);
@@ -342,9 +449,18 @@ for (const variant of [
     );
     assert.deepEqual(
       edits[1].images[0],
-      results.sceneReference(playId, sceneIds[latestVersion], latestVersion)!.jpeg,
+      design.mode === 'aftermath'
+        ? inspectedStart
+        : results.sceneReference(playId, sceneIds[latestVersion], latestVersion)!.jpeg,
     );
+    assert.equal(edits[1].images.length, design.mode === 'aftermath' ? 1 : 2);
     assert.match(edits[1].prompt, /"targetGameVersion":2/);
-    assert.match(edits[1].prompt, new RegExp('"referenceGameVersion":' + latestVersion));
+    assert.match(
+      edits[1].prompt,
+      new RegExp(
+        '"referenceGameVersion":' +
+          (design.mode === 'aftermath' ? packet.gameVersion : latestVersion),
+      ),
+    );
     assert.match(edits[1].prompt, /"glass":"clear"/);
   });

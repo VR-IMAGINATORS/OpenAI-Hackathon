@@ -23,7 +23,7 @@ const scenario = {
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Normal 5 min · 4 actions' : 'ノーマル 5分 · 4回',
+        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -145,7 +145,8 @@ const scenario = {
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: scenario.obstacles[0].title.ja, index: 0, count: 3 },
       situation: scenario.obstacles[0].situationDisplay.ja,
-      actionsRemaining: 4,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
       paused: false,
@@ -283,6 +284,7 @@ const scenario = {
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
+        if (body.images.length) state.photoSendsRemaining--;
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -334,7 +336,7 @@ const scenario = {
           failAction = false;
           return route.abort('failed');
         }
-        state.actionsRemaining--;
+        state.actionsUsed++;
         state.obstacle.index++;
         state.proposal = null;
         state.photoCount = 0;
@@ -358,7 +360,7 @@ const scenario = {
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
-    await page.getByRole('button', { name: 'Normal 5 min · 4 actions', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
     assert.equal(
       await page.getByRole('combobox').inputValue(),
       'en',
@@ -366,13 +368,13 @@ const scenario = {
     );
     assert.equal(await page.locator('html').getAttribute('lang'), 'en');
     await page.getByRole('combobox').selectOption('ja');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信', exact: true }).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), 'ja');
     await page.getByRole('combobox').selectOption('en');
-    await page.getByRole('button', { name: 'Normal 5 min · 4 actions', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
     await enterCall();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));
@@ -401,7 +403,7 @@ const scenario = {
     await assertMessengerLayout();
     await page.getByText('現在の目標', { exact: true }).waitFor();
     await page.getByText('残り時間', { exact: true }).waitFor();
-    await page.getByText('残り行動回数', { exact: true }).waitFor();
+    await page.getByText('残り送信回数', { exact: true }).waitFor();
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '05:00');
     await page.screenshot({ path: 'artifacts/messenger-active-mobile.png', fullPage: true });
     await page.setViewportSize({ width: 320, height: 568 });
@@ -583,7 +585,8 @@ const scenario = {
       briefing: 'Your future self needs your help.',
       obstacle: { ...state.obstacle, title: scenario.obstacles[0].title.en },
       inputRevision: 0,
-      actionsRemaining: 4,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
     };
     await page.getByRole('combobox').selectOption('en');
     await enterCall(true);
@@ -618,7 +621,7 @@ const scenario = {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByText('Current objective', { exact: true }).waitFor();
     await page.getByText('Time left', { exact: true }).waitFor();
-    await page.getByText('Actions left', { exact: true }).waitFor();
+    await page.getByText('Photo sends left', { exact: true }).waitFor();
     const objective = page.locator('.messenger-objective strong');
     assert.equal(await objective.innerText(), scenario.obstacles[0].title.en);
     const hudMetrics = await page.evaluate(() => {
@@ -656,14 +659,14 @@ const scenario = {
       });
     });
     state.remainingMs = 60_001;
-    state.actionsRemaining = 3;
+    state.photoSendsRemaining = 3;
     await page.locator('.messenger-clock strong').getByText('01:01', { exact: true }).waitFor();
     assert.equal(
       await page.locator('.messenger-resource.is-urgent, .messenger-resource.is-caution').count(),
       0,
     );
     state.remainingMs = 60_000;
-    state.actionsRemaining = 2;
+    state.photoSendsRemaining = 2;
     await page.locator('.messenger-clock.is-urgent').waitFor();
     await page.locator('.messenger-action-count.is-caution').waitFor();
     await page.waitForFunction(() => window.__clockWarnings === 1);
@@ -682,14 +685,47 @@ const scenario = {
     await page
       .locator('.messenger-info')
       .screenshot({ path: 'artifacts/hud-header-warning-en.png' });
-    state.actionsRemaining = 1;
+    state.photoSendsRemaining = 1;
     await page.locator('.messenger-action-count.is-urgent').waitFor();
     assert.equal(await page.locator('.messenger-action-count strong').innerText(), '1');
+    state.photoSendsRemaining = 0;
+    await page.locator('.messenger-action-count strong').getByText('0', { exact: true }).waitFor();
+    await page
+      .getByText(
+        'No photo sends left. Keep giving voice instructions using the tools already sent.',
+        { exact: true },
+      )
+      .waitFor();
+    assert.equal(
+      await page.locator('.messenger-complete').count(),
+      0,
+      'zero sends does not end the game',
+    );
+    assert.equal(
+      await page.getByRole('button', { name: 'Camera', exact: true }).isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Choose from photo library / files', exact: true })
+        .isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page.getByRole('button', { name: 'Send photo', exact: true }).isDisabled(),
+      true,
+    );
+    state.actionsUsed++;
     state.obstacle = { ...state.obstacle, index: 1, title: scenario.obstacles[1].title.en };
     await objective.getByText(scenario.obstacles[1].title.en, { exact: true }).waitFor();
     assert.equal(await page.getByText(scenario.obstacles[0].title.en, { exact: true }).count(), 0);
     await page.reload();
     await page.locator('.messenger-clock.is-urgent').waitFor();
+    assert.equal(
+      await page.locator('.messenger-action-count strong').innerText(),
+      '0',
+      'zero sends survives restore',
+    );
     assert.equal(
       await page.locator('.clock-warning-pulse').count(),
       0,

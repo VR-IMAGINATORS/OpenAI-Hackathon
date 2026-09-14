@@ -28,6 +28,7 @@ export class GameError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
@@ -54,6 +55,7 @@ export class GameSession {
   status: PublicGameState['status'] = 'briefing';
   obstacleIndex = 0;
   actionsUsed = 0;
+  photoSendsUsed = 0;
   readonly clearedIds: string[] = [];
   readonly committedActions: CommittedEndingAction[] = [];
   endReason: GameEndReason | null = null;
@@ -121,11 +123,12 @@ export class GameSession {
         count: this.scenario.obstacles.length,
       },
       situation: this.situation,
-      actionsRemaining: this.scenario.rules.maxActions - this.actionsUsed,
+      photoSendsRemaining: this.scenario.rules.maxPhotoSends - this.photoSendsUsed,
+      actionsUsed: this.actionsUsed,
       remainingMs: this.clock.remainingMs,
       waitingRemainingMs: this.clock.waitingRemainingMs,
       paused: this.clock.paused,
-      maxPhotos: this.scenario.rules.maxPhotosPerAction,
+      maxPhotos: this.scenario.rules.maxPhotosPerSend,
       photoCount: this.photos.length,
       inventory: this.inventory,
       proposal: this.proposal,
@@ -161,13 +164,7 @@ export class GameSession {
     if (this.terminal) return;
     this.status = status;
     this.endReason =
-      status === 'expired'
-        ? 'interrupted'
-        : status === 'won'
-          ? 'escaped'
-          : reason === 'action_limit'
-            ? 'action_limit'
-            : 'time_limit';
+      status === 'expired' ? 'interrupted' : status === 'won' ? 'escaped' : 'time_limit';
     if (!this.coreSnapshot) this.generation++;
     this.invalidateCoreActions();
     for (const action of this.actions.values())
@@ -203,9 +200,15 @@ export class GameSession {
     this.clock.resume('judgment');
     this.invalidate();
   }
-  beginPhotos() {
+  beginPhotos(hasImages = true) {
     this.editable();
-    if (this.photoBusy) throw new GameError(409, '写真を処理中です。');
+    if (this.photoBusy || this.recognizing) throw new GameError(409, '写真を処理中です。');
+    if (hasImages && this.photoSendsUsed >= this.scenario.rules.maxPhotoSends)
+      throw new GameError(
+        409,
+        '写真の送信回数を使い切りました。手持ちの道具を使って続けてください。',
+        'PHOTO_SEND_LIMIT',
+      );
     this.photoBusy = true;
     this.invalidate();
     return { generation: this.generation, revision: this.inputRevision };
@@ -213,7 +216,17 @@ export class GameSession {
   async finishPhotos(photos: GamePhoto[], ticket: { generation: number; revision: number }) {
     if (this.terminal || ticket.generation !== this.generation)
       throw new GameError(410, 'プレイが失効しました。');
+    if (!this.photoBusy) throw new GameError(409, '写真の送信はすでに処理済みです。');
+    if (photos.length > this.scenario.rules.maxPhotosPerSend)
+      throw new GameError(400, '写真の枚数が上限を超えています。');
+    if (photos.length && this.photoSendsUsed >= this.scenario.rules.maxPhotoSends)
+      throw new GameError(
+        409,
+        '写真の送信回数を使い切りました。手持ちの道具を使って続けてください。',
+        'PHOTO_SEND_LIMIT',
+      );
     this.photoBusy = false;
+    if (photos.length) this.photoSendsUsed++;
     this.photos = photos;
     this.invalidate();
     await this.recognize(true);
@@ -340,7 +353,6 @@ export class GameSession {
       this.voiceState !== 'connected' ||
       this.photoBusy ||
       this.recognizing ||
-      this.actionsUsed >= this.scenario.rules.maxActions ||
       expectedContextVersion !== this.currentContextVersion ||
       expectedGameVersion !== this.gameVersion ||
       actionEpoch !== this.actionEpoch ||
@@ -523,7 +535,6 @@ export class GameSession {
       this.status = 'playing';
       if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
         this.end('won');
-      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost', 'action_limit');
       else if (judgment.success) {
         this.obstacleIndex++;
         this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
@@ -639,7 +650,6 @@ export class GameSession {
       this.status = 'playing';
       if (result.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
         this.end('won');
-      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost', 'action_limit');
       else if (result.success) {
         this.obstacleIndex++;
         this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;

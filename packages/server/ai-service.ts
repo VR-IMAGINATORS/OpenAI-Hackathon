@@ -32,7 +32,14 @@ export interface MediaPermit {
   busy: number;
   cancelled: boolean;
   controllers: Set<AbortController>;
-  ending?: { extraction: number; story: number; start: number; end: number; inspection: number };
+  ending?: {
+    extraction: number;
+    story: number;
+    direction: number;
+    start: number;
+    end: number;
+    inspection: number;
+  };
 }
 interface LiveReservation {
   providerId?: string;
@@ -98,21 +105,26 @@ export class AiService {
     });
   }
 
-  registerMedia(playId: string, jobId: string, expiresAt: number, maxActions: number): MediaPermit {
+  registerMedia(
+    playId: string,
+    jobId: string,
+    expiresAt: number,
+    sceneActionBudget: number,
+  ): MediaPermit {
     this.active(playId);
     if (
       this.media.has(jobId) ||
       !Number.isFinite(expiresAt) ||
       expiresAt <= this.now() ||
       expiresAt > this.now() + this.config.imageJobTimeoutMs ||
-      !Number.isInteger(maxActions) ||
-      maxActions < 1 ||
-      maxActions > 100
+      !Number.isInteger(sceneActionBudget) ||
+      sceneActionBudget < 1 ||
+      sceneActionBudget > 100
     )
       throw new AiServiceError(400, 'INVALID_MEDIA_PERMIT', 'Invalid media permit');
     this.mediaPlayLimits.set(
       playId,
-      Math.max(this.mediaPlayLimits.get(playId) ?? 0, 2 * (maxActions + 2)),
+      Math.max(this.mediaPlayLimits.get(playId) ?? 0, 2 * (sceneActionBudget + 2)),
     );
     const permit: MediaPermit = {
       jobId,
@@ -148,7 +160,7 @@ export class AiService {
       busy: 0,
       cancelled: false,
       controllers: new Set(),
-      ending: { extraction: 0, story: 0, start: 0, end: 0, inspection: 0 },
+      ending: { extraction: 0, story: 0, direction: 0, start: 0, end: 0, inspection: 0 },
     };
     this.media.set(jobId, permit);
     return permit;
@@ -202,7 +214,7 @@ export class AiService {
         )
           this.limit();
       } else if (
-        attempts[kind as 'story' | 'extraction'] >= (kind === 'story' ? 1 : 6) ||
+        attempts[kind as 'story' | 'direction' | 'extraction'] >= (kind === 'extraction' ? 6 : 1) ||
         this.responseAttempts >= this.config.globalResponseAttempts
       )
         this.limit();
@@ -223,7 +235,7 @@ export class AiService {
       this.inspectionAttempts++;
       this.inspectionBusy++;
     } else {
-      attempts[kind as 'story' | 'extraction']++;
+      attempts[kind as 'story' | 'direction' | 'extraction']++;
       this.responseAttempts++;
       this.responseBusy++;
     }
@@ -245,6 +257,11 @@ export class AiService {
       if (combined.aborted || permit.cancelled || this.now() >= permit.expiresAt)
         throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
       return value;
+    } catch (error) {
+      // Aborted fetches reject before returning a value, so the check above cannot classify them.
+      if (combined.aborted)
+        throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
+      throw error;
     } finally {
       clearTimeout(timer);
       permit.controllers.delete(controller);

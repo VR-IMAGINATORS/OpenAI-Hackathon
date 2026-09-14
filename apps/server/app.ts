@@ -119,9 +119,9 @@ export function createHostedApp(
     {
       ...options.ending,
       now,
-      onFailure: (playId, stage, errorCode) => {
-        log({ event: 'ending_failed_' + stage, correlationId: playId, errorCode });
-        options.ending?.onFailure?.(playId, stage, errorCode);
+      onFailure: (playId, stage, errorCode, context) => {
+        log({ event: 'ending_failed_' + stage, correlationId: playId, errorCode, ...context });
+        options.ending?.onFailure?.(playId, stage, errorCode, context);
       },
     },
   );
@@ -242,12 +242,16 @@ export function createHostedApp(
                         }
                       },
                       failed: fail,
-                      stage: (stage) =>
+                      stage: (stage) => {
+                        // Inspection passed, but ready() must finish storing the asset first.
+                        // Publish ready and its asset ID together in the callback above.
+                        if (stage === 'ready') return;
                         safeDisplay(() =>
                           results.updateMessage(id, input.messageId, {
                             imageSlot: { ...slot, status: stage },
                           }),
-                        ),
+                        );
+                      },
                     },
                   );
                 } catch {
@@ -763,13 +767,14 @@ export function createHostedApp(
     } else if (error instanceof GameError) {
       status = error.status;
       code =
-        status === 409
+        error.code ??
+        (status === 409
           ? 'PLAY_CONFLICT'
           : status === 410
             ? 'PLAY_EXPIRED'
             : status === 503
               ? 'PHOTO_BUSY'
-              : 'GAME_REQUEST_FAILED';
+              : 'GAME_REQUEST_FAILED');
     } else if (
       error instanceof Error &&
       ['CONVERSATION_LIMIT', 'DELEGATION_LIMIT'].includes(error.message)

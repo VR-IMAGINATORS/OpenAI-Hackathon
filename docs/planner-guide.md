@@ -10,8 +10,8 @@ Web版の既定は `scenarios/story-catalog.json`（version 3）。モック版�
 | -------------------------- | --------------------------------------------------------- |
 | `title` / `playerBriefing` | 開始前に公開する共通の概要（日英）                        |
 | `rules.totalTimeSeconds`   | 制限時間。既定300秒。難易度を調整するときの共通設定箇所   |
-| `rules.maxActions`         | 行動回数上限。3障害を解くため3以上が必要                  |
-| `rules.maxPhotosPerAction` | 1行動で使う新しい写真の上限。持ち越した道具も再利用できる |
+| `rules.maxPhotoSends`       | 写真を送れる回数。1以上。障害数より少なくても道具の再利用で続行できる |
+| `rules.maxPhotosPerSend`    | 1回の送信にまとめられる写真の上限。既定2枚 |
 | `story`                    | AIの名前、世界観、序盤・中盤・終盤の展開方針              |
 | `scenes`                   | 舞台、謎、最初の手掛かり、採用できるギミック順            |
 | `gimmicks`                 | 障害の仕組み、現在の状況、突破条件、段階ヒント            |
@@ -37,9 +37,13 @@ Web版の既定は `scenarios/story-catalog.json`（version 3）。モック版�
 
 ゲームの時間は `rules.totalTimeSeconds` で管理する。環境変数 `PLAY_TTL_SECONDS` は接続開始からのプレイ枠の寿命で、別の設定。接続待ち（`RECOVERY_GRACE_SECONDS`）、ゲーム待機枠60秒、終了処理12秒を含めて収まる必要がある。
 
-既定のプレイ枠600秒・接続待ち60秒では、ゲーム時間は最大468秒。例えば180秒や450秒に調整できる。枠に収まらない設定は起動時・新規開始時に拒否する。進行中の時計を途中で短縮しない。環境変数の変更にはサーバー再起動が必要。難易度選択UIはまだ提供しない。
+既定のプレイ枠600秒・接続待ち60秒では、ゲーム時間は最大468秒。枠に収まらない設定は起動時・新規開始時に拒否する。進行中の時計を途中で短縮しない。環境変数の変更にはサーバー再起動が必要。開始画面では Normal（300秒・4回送信）、Hard（240秒・3回送信）、HELL（180秒・2回送信）を選べる。難易度指定時は `packages/shared/difficulty.ts` のプリセットを適用し、未指定APIではシナリオ設定を使う。
+
+有効な写真をサーバーが受け取った送信1回につき1回分を使う。まとめて2枚送っても1回分。送信0回になっても終了せず、時間内は届いた道具を音声で使い回せる。使用済みで消失した道具の再利用は不可。撮影・プレビュー・相談・行動では送信数を減らさない。AI認識の失敗でも受信済み写真は1回分となり、声で再認識できる。同じ送信IDでの通信再試行は重複消費しない。
 
 ## 既存シナリオとの互換性
+
+旧 `rules.maxActions` を `rules.maxPhotoSends`、`rules.maxPhotosPerAction` を `rules.maxPhotosPerSend` に移行する。意味も行動上限から送信上限へ変わるため、旧キーは検証で拒否する。標準JSONは移行済み。公開状態も `actionsRemaining` から `photoSendsRemaining` へ変更し、確定行動数は `actionsUsed` として別に保持する。詳細は [写真送信回数の制限](../specs/photo-send-limit/spec.md)。
 
 旧Web版は `.env.local` の `SCENARIO_PATH=scenarios/mobile-playtest.json` で明示的に選べる（version 2）。設定を省略すると6舞台になる。`npm run play:mobile` もこの指定に従う。`scenarios/default.json`（version 1）は構成の参考資料で、統合サーバーの実行対象ではない。
 

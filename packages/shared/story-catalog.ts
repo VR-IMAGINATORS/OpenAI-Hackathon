@@ -95,8 +95,6 @@ export const storyCatalogSchema = z
         catalog[key].map((entry) => entry.id),
         [key],
       );
-    if (catalog.rules.maxActions < 3)
-      issue(['rules', 'maxActions'], 'Too few actions for three obstacles');
     const gimmicks = new Map(catalog.gimmicks.map((gimmick) => [gimmick.id, gimmick]));
     const selected = new Set<string>();
     catalog.scenes.forEach((scene, sceneIndex) => {
@@ -129,7 +127,7 @@ export const storyCatalogSchema = z
         });
         if (
           solution.photoCount !== solution.itemIds.length ||
-          solution.photoCount > catalog.rules.maxPhotosPerAction
+          solution.photoCount > catalog.rules.maxPhotosPerSend
         )
           issue([...path, 'photoCount'], 'Reference photos must match items and game rules');
         const properties = new Set(

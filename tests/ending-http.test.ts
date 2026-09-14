@@ -13,7 +13,7 @@ import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
 
 const passphrase = 'test-only-ending-password';
 const video = syntheticEndingMp4();
-const prepared: PreparedEnding = {
+const prepared: PreparedEnding & { story: import('../packages/shared/ending.js').EndingStory } = {
   start: Buffer.from('injected-start-image'),
   end: Buffer.from('injected-end-image'),
   prompt: 'PRIVATE_ENDING_PROMPT',
@@ -21,6 +21,8 @@ const prepared: PreparedEnding = {
     title: '残った赤い印',
     text: '扉は開かなかったが、最初に見た印を残せた。',
     evaluation: '試した工夫と確定結果を残した。',
+    tagId: null,
+    tagCatalogVersion: 1,
   },
 };
 
@@ -51,8 +53,26 @@ async function setup(t: TestContext, holdPreparation = false) {
       async createLiveSession() {
         throw new Error('NO_LIVE_CALL_EXPECTED');
       },
-      async createResponse() {
-        throw new Error('NO_RESPONSE_CALL_EXPECTED');
+      async createResponse(body) {
+        assert.equal((body as any).text.format.name, 'ending_text');
+        return {
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    title: prepared.story.title,
+                    story: prepared.story.text,
+                    evaluation: prepared.story.evaluation,
+                    tag: null,
+                    usedEvidenceIds: [],
+                  }),
+                },
+              ],
+            },
+          ],
+        };
       },
       async createImage() {
         throw new Error('SCENE_IMAGE_DISABLED_IN_HTTP_TEST');
@@ -62,9 +82,10 @@ async function setup(t: TestContext, holdPreparation = false) {
     ending: {
       graceMs: 0,
       pollMs: 1,
-      async prepare(_jobId, packet, signal) {
+      async prepare(_jobId, packet, signal, publishedStory) {
         counts.prepare++;
         packets.push(packet);
+        assert.deepEqual(publishedStory, prepared.story);
         if (holdPreparation)
           await Promise.race([
             preparationGate,
@@ -228,7 +249,11 @@ test('game timeout queues one ending, keeps factual results visible, then comple
   assert.equal(initial.clearedCount, 0);
   const waiting = await f.request(f.statusPath(playId), { cookie });
   assert.equal(waiting.status, 200);
-  assert.equal((await waiting.json()).status, 'preparing');
+  const early = (await waiting.json()) as EndingView;
+  assert.equal(early.status, 'preparing');
+  assert.equal(early.storyStatus, 'ready');
+  assert.deepEqual(early.story, prepared.story);
+  assert.equal(f.counts.submit, 0, 'owner can read text before video submission');
   assert.equal((await f.request(f.videoPath(playId), { cookie })).status, 409);
   const state = await f.request('/api/play/state', { cookie, headers: { 'X-Play-Id': playId } });
   assert.equal(state.status, 200);

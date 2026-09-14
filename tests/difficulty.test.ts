@@ -13,7 +13,7 @@ import type { Difficulty } from '../packages/shared/difficulty.js';
 const cases = [
   ['normal', 300, 4],
   ['hard', 240, 3],
-  ['nightmare', 180, 3],
+  ['nightmare', 180, 2],
 ] as const;
 const catalog = () =>
   new ScenarioCatalog({
@@ -55,13 +55,13 @@ test('HTTP difficulty is validated, isolated, retained and part of request ident
         (await post('/api/plays', { ...body, difficulty: invalid }, cookie)).status,
         400,
       );
-    assert.equal((await post('/api/plays', { ...body, maxActions: 99 }, cookie)).status, 400);
+    assert.equal((await post('/api/plays', { ...body, maxPhotoSends: 99 }, cookie)).status, 400);
     const created = await post('/api/plays', body, cookie);
     assert.equal(created.status, 201);
     const value = await created.json();
     assert.equal(value.state.difficulty, difficulty);
     assert.equal(value.state.remainingMs, seconds * 1000);
-    assert.equal(value.state.actionsRemaining, actions);
+    assert.equal(value.state.photoSendsRemaining, actions);
     const repeated = await post('/api/plays', body, cookie);
     assert.equal(repeated.status, 200);
     assert.equal((await repeated.json()).playId, value.playId);
@@ -138,14 +138,15 @@ function gameFor(difficulty: Difficulty) {
     fail() {
       success = false;
     },
-    async act() {
+    async act(reuse = false) {
       const photoId = randomUUID();
-      await game.finishPhotos([{ id: photoId, jpeg: Buffer.from('test') }], game.beginPhotos());
+      if (!reuse)
+        await game.finishPhotos([{ id: photoId, jpeg: Buffer.from('test') }], game.beginPhotos());
       const ticket = game.reserveAction(
         {
           kind: 'execute',
           evidenceSeq: [game.actionsUsed + 1],
-          itemRefs: [{ photoId }],
+          itemRefs: reuse ? [{ inventoryId: game.inventory[0].id }] : [{ photoId }],
           usage: 'Use the tool',
           reason: 'Player instruction',
         },
@@ -166,21 +167,28 @@ for (const [difficulty, seconds, actions] of cases) {
     f.advance(1);
     assert.equal(f.game.state().endReason, 'time_limit');
   });
-  test(`${difficulty}: last failed action ends play and blocks further actions`, async () => {
+  test(`${difficulty}: send limit blocks new photos but permits further reuse until timeout`, async () => {
     const f = gameFor(difficulty);
     f.fail();
     for (let i = 0; i < actions; i++) await f.act();
-    assert.equal(f.game.state().actionsRemaining, 0);
-    assert.equal(f.game.endReason, 'action_limit');
+    assert.equal(f.game.state().photoSendsRemaining, 0);
+    assert.equal(f.game.endReason, null);
+    assert.equal(f.game.status, 'playing');
     await assert.rejects(f.act());
-    assert.equal(f.game.actionsUsed, actions);
+    await f.act(true);
+    await f.act(true);
+    assert.equal(f.game.actionsUsed, actions + 2);
+    assert.equal(f.game.state().photoSendsRemaining, 0);
+    assert.equal(f.game.state().status, 'playing');
+    f.advance(seconds * 1000);
+    assert.equal(f.game.state().endReason, 'time_limit');
   });
   test(`${difficulty}: three successful actions permit complete escape`, async () => {
     const f = gameFor(difficulty);
-    for (let i = 0; i < 3; i++) await f.act();
+    for (let i = 0; i < 3; i++) await f.act(i >= actions);
     assert.equal(f.game.state().status, 'won');
     assert.equal(f.game.state().endingOutcome, 'happy');
-    assert.equal(f.game.state().actionsRemaining, actions - 3);
+    assert.equal(f.game.state().photoSendsRemaining, Math.max(0, actions - 3));
   });
 }
 test('snapshot is immutable and selected limits are checked against deployment budgets', () => {
@@ -188,7 +196,7 @@ test('snapshot is immutable and selected limits are checked against deployment b
   const normal = c.current('en', 'normal');
   const hard = c.current('en', 'hard');
   assert.notEqual(normal.digest, hard.digest);
-  assert.equal(normal.scenarioV2.rules.maxActions, 4);
+  assert.equal(normal.scenarioV2.rules.maxPhotoSends, 4);
   assert.ok(Object.isFrozen(hard.scenarioV2.rules));
   assert.throws(() => c.current('en', 'invalid' as Difficulty));
   const limited = new ScenarioCatalog({

@@ -179,7 +179,7 @@ async function setup(
   };
 }
 
-test('opening speech updates its image bubble across pauses and retries, then user replies start a new turn', async (t) => {
+test('call check updates its image bubble across pauses and retries, then reply and introduction form separate turns', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'waiting' }));
   const opening = h.feed().upserts[0]!;
   assert.equal(opening.text, '');
@@ -198,7 +198,7 @@ test('opening speech updates its image bubble across pauses and retries, then us
   await h.runtime.event(h.generation, {
     ...first,
     event_id: randomUUID(),
-    delta: '写真を送って。',
+    delta: '聞こえたら返事をして。',
     start_ms: 5000,
     end_ms: 6000,
   });
@@ -207,21 +207,24 @@ test('opening speech updates its image bubble across pauses and retries, then us
   assert.equal(updated.id, opening.id);
   assert.equal(updated.createdOrder, opening.createdOrder);
   assert.deepEqual(updated.imageSlot, opening.imageSlot);
-  assert.equal(updated.text, '聞こえる？写真を送って。');
+  assert.equal(updated.text, '聞こえる？聞こえたら返事をして。');
   assert.ok(updated.updatedVersion > opening.updatedVersion);
-  await h.say('聞こえるよ');
+  await h.say('うん、聞こえるよ');
   await h.runtime.event(h.generation, {
     ...first,
     event_id: randomUUID(),
-    delta: 'ありがとう。',
+    delta: 'よかった、つながった。私は未来のあなたを助けるAI。',
     start_ms: 6100,
     end_ms: 6200,
   });
   const messages = h.feed().upserts;
   assert.equal(messages.length, 3);
   assert.equal(messages[0]!.text, updated.text);
-  assert.equal(messages[2]!.text, 'ありがとう。');
+  assert.equal(messages[1]!.text, 'うん、聞こえるよ');
+  assert.equal(messages[2]!.text, 'よかった、つながった。私は未来のあなたを助けるAI。');
   assert.equal(messages[2]!.kind, 'transcript');
+  assert.equal(h.runtime.state().photoSendsRemaining, 4);
+  assert.equal(h.calls.judge, 0);
 });
 
 test('reconnection keeps the original opening and puts new speech in a separate bubble', async (t) => {
@@ -269,12 +272,12 @@ test('runtime accepts correction while classification is pending and discards th
   );
   assert.equal(contexts.length, 2);
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().actionsRemaining, 4);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
 });
 
 test('runtime consult consumes no action and a subsequent directive executes once', async (t) => {
   const h = await setup(t, (context) =>
-    context.conversation.fragments.some((f: any) => f.delta === '切って')
+    context.conversation.fragments.some((f: any) => f.delta === '実行して')
       ? execute(context)
       : {
           kind: 'consult',
@@ -290,15 +293,15 @@ test('runtime consult consumes no action and a subsequent directive executes onc
     h.runtime.pollCommands(h.generation, 0).commands.some((c) => c.content === '切れるか相談中'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().actionsRemaining, 4);
-  await h.say('切って');
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  await h.say('実行して');
   const id = randomUUID();
   await h.delegate(id);
-  await until(() => h.runtime.state().actionsRemaining === 3);
+  await until(() => h.runtime.state().actionsUsed === 1);
   await h.delegate(id);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().actionsRemaining, 3);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
 });
 
 test('execution adds no server acknowledgement while judging and still delivers its result once', async (t) => {
@@ -332,7 +335,7 @@ test('execution adds no server acknowledgement while judging and still delivers 
   await h.delegate(delegationId);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().actionsRemaining, 3);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
   assert.deepEqual(
     newCommands()
       .filter((c) => c.type === 'session.commentary.append')
@@ -497,7 +500,7 @@ test('consult speaks answer rather than classification reason and action speaks 
   );
   await h.say('切って');
   await h.delegate();
-  await until(() => h.calls.judge === 1 && h.runtime.state().actionsRemaining === 3);
+  await until(() => h.calls.judge === 1 && h.runtime.state().actionsUsed === 1);
   assert.ok(
     h.runtime
       .pollCommands(h.generation, 0)
@@ -523,7 +526,7 @@ test('runtime missing delegation requests recovery but never judges, then announ
       .commands.some((c) => c.type === 'session.instructions.append'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().actionsRemaining, 4);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
   h.setNow(24002);
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
