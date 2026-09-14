@@ -7,6 +7,7 @@ import type { PublicGameState, PlayUpdate } from '../../../packages/shared/game.
 import { LiveConnection, type VoiceState } from './live.js';
 import { preparePhoto, type PreparedPhoto } from './photo.js';
 import { PlayApiError, playRequest, clientId, controlHeaders, setApiLocale } from './play-api.js';
+import GameStatusSummary from './GameStatusSummary.js';
 
 const voiceLabels: Record<VoiceState, string> = {
   connecting: '回線を接続中',
@@ -652,25 +653,20 @@ export default function PlayScreen({
           )}
         </section>
         <details className="messenger-info">
-          <summary>
-            <span>
-              {ended
+          <GameStatusSummary
+            key={playId}
+            title={
+              ended
                 ? state.status === 'won'
                   ? t('脱出できた！', 'You escaped!')
                   : t('接続を終了しました', 'Call ended')
-                : state.obstacle.title}
-            </span>
-            {!ended && (
-              <span className="messenger-counters">
-                <span aria-label={t('残り時間', 'Time left')}>{time(state.remainingMs)}</span>
-                <span>
-                  {state.actionsRemaining}
-                  {t(' 回', ' actions')}
-                </span>
-              </span>
-            )}
-            <span aria-hidden="true">⌄</span>
-          </summary>
+                : state.obstacle.title
+            }
+            ended={ended}
+            remainingMs={state.remainingMs}
+            actionsRemaining={state.actionsRemaining}
+            locale={locale}
+          />
           <div className="messenger-info-body">
             {state.diagnosticsAvailable && !ended && (
               <button onClick={() => void downloadDiagnostics()}>

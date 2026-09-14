@@ -155,3 +155,12 @@ npm run buildと対象Prettier check成功。Chromeのopening-smoke/core-smoke/m
 - Chrome core-smoke / opening-smoke / mobile-smoke 成功。日本語ブラウザで英語が初期選択されること、日英の往復切り替え、選択言語のプレイ作成APIへの送信、日英それぞれの再読み込み、英語390px/1280pxの横はみ出しなしを確認。
 - core-smoke / mobile-smoke の模擬APIに、作業開始時から存在したエンディング取得APIの404応答を追加し、言語検証が継続できるようにした。
 - API・音声・マイクは模擬。実AI音声の日英応答、実機、公開環境へのデプロイは未確認。
+
+## 2026-09-14 本編の目標・残り資源の視認性
+
+- 目標を上段、時間・行動回数を下段に配置。日英ラベル、20pxの目標、24pxの数字、分:秒表示に変更。標準シナリオ3障害の表示タイトルを達成目標の文に更新した。設定は新しいプレイから反映する。
+- 残り時間1分以下は赤＋警告アイコン。閾値を越えた際のみ900msの拡大・発光を一度再生。残り2行動はオレンジ、1行動以下は赤。動きを減らす設定ではアニメーションなし。再読み込みで警告演出を再生せず、終了時は残り資源を非表示にする。
+- `npm run build`（型・シナリオ/設定検証・UI/サーバービルド）成功。`npm test`: 280件成功、失敗0。変更ファイルのPrettier検査と`git diff --check`を実施。
+- Chrome `core-smoke.cjs`で日英ラベル、320×568/390×844/1280×900のレイアウト、長い目標の折り返し、詳細のクリック/キーボード開閉、60,001ms→60,000msの警告境界、演出の重複防止、行動3→2→1、再読み込み、動きを減らす設定、終了表示を確認。
+- 表示例: `artifacts/hud-header-normal-en.png`、`artifacts/hud-header-warning-en.png`。全画面例は`artifacts/hud-normal-en-mobile.png`、`artifacts/hud-small-en-mobile.png`、`artifacts/hud-warning-en-mobile.png`。ブラウザの幅を変更して目視確認した。
+- API・音声・マイクは模擬。実AI、物理スマホ、スクリーンリーダーの実読み上げ、公開環境での検証は未実施。
