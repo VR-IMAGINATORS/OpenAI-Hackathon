@@ -64,11 +64,15 @@ GitHubのSecretは手元のPCへ自動配布されない。既存の`.env.local`
 ```dotenv
 FAL_KEY=ここを手元で実際のキーに置き換える
 ENDING_VIDEO_ENABLED=true
-AI_GLOBAL_VIDEO_ATTEMPTS=1
+AI_GLOBAL_VIDEO_ATTEMPTS=100
 RESULT_TTL_SECONDS=600
 ```
 
-この例の1は1回の試遊用。コードへ実値を転記せず、`.env.local`をGitへ追加しない。設定変更後はローカルサーバーを再起動する。mockモードは実fal・実OpenAIを呼ばず、実動画の成功確認には使わない。
+今回の試遊では100回を使用する。コードへ実値を転記せず、`.env.local`をGitへ追加しない。設定変更後はローカルサーバーを再起動する。mockモードは実fal・実OpenAIを呼ばず、実動画の成功確認には使わない。
+
+`npm.cmd run play:mobile`もこのPCの`.env.local`を使用する。GitHubで100回にしても、ローカルが1回のままならローカル試遊は1回で上限に達する。起動時の「エンディング動画: 有効（…100回まで）」を確認する。
+
+失敗した場合は、画面の理由と「不具合報告用の情報」のコードを確認する。例えば`ENDING_BUDGET_EXHAUSTED`は動画回数上限、`ENDING_STORY_...`は物語・演出、`ENDING_START_FRAME_...`は開始画像、`ENDING_END_INSPECTION_...`は終了画像の内容検査、`ENDING_VIDEO_SUBMIT_...`はfalへの依頼を示す。PCのターミナルにも`ending_failed_...`として同じコードを出す。キー・画像・会話・上流応答本文はこのログに含めない。失敗した既存プレイの動画を再送する機能はないため、変更を確認するには再起動後に新しいプレイを行う。
 
 ## 費用と表示の制約
 

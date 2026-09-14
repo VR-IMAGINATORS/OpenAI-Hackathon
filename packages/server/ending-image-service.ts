@@ -27,6 +27,7 @@ export async function createEndingFrames(
   final: EndingReference,
   before: EndingReference | undefined,
   signal: AbortSignal,
+  onStage?: (stage: 'start_frame' | 'start_inspection' | 'end_frame' | 'end_inspection') => void,
 ) {
   const title = endingTitle(packet);
   const firstAction = packet.actions.find((a) => a.actionId === design.usedActionIds[0]);
@@ -63,6 +64,7 @@ export async function createEndingFrames(
           ? [design.mode === 'actions' && before ? before.jpeg : final.jpeg]
           : [final.jpeg, start!];
       // A transport failure is ambiguous: only a completed explicit inspection rejection can retry.
+      onStage?.(slot === 'start' ? 'start_frame' : 'end_frame');
       const normalized = await normalizeGeneratedImage(
         await endingCall(
           ai,
@@ -83,6 +85,7 @@ export async function createEndingFrames(
       );
       const meta = await sharp(normalized.inspection).metadata();
       if (meta.width !== 1024 || meta.height !== 1024) throw new Error('ENDING_FRAME_DIMENSIONS');
+      onStage?.(slot === 'start' ? 'start_inspection' : 'end_inspection');
       const check = responseObject(
         await endingCall(
           ai,

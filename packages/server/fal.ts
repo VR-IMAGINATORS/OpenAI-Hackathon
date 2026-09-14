@@ -43,6 +43,7 @@ export class FalSubmitError extends FalTransportError {
   constructor(
     public readonly acceptance: 'rejected' | 'unknown',
     public readonly requestHandle?: FalRequestHandle,
+    public readonly httpStatus?: number,
   ) {
     super('FAL_SUBMIT_FAILED', acceptance === 'rejected');
     this.name = 'FalSubmitError';
@@ -249,7 +250,11 @@ export function createFalTransport(apiKey: string, request: typeof fetch = fetch
               const rejected = [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(
                 response.status,
               );
-              throw new FalSubmitError(rejected ? 'rejected' : 'unknown');
+              throw new FalSubmitError(
+                rejected ? 'rejected' : 'unknown',
+                undefined,
+                response.status,
+              );
             }
             const payload = await json(response, currentSignal, SUBMIT_RESPONSE_BYTES);
             recovery = canonicalHandle(payload.request_id);

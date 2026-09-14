@@ -93,6 +93,7 @@ function setup(
   let submits = 0,
     prepares = 0,
     seals = 0;
+  const failures: { stage: string; code: string }[] = [];
   const fal: FalTransport = {
     async submit() {
       submits++;
@@ -134,6 +135,7 @@ function setup(
       fal,
       graceMs: options.graceMs ?? 0,
       pollMs: 1,
+      onFailure: (_id, stage, code) => failures.push({ stage, code }),
       prepare: async (...args) => {
         prepares++;
         return options.prepare ? options.prepare(...args) : prepared;
@@ -168,6 +170,7 @@ function setup(
       now = n;
     },
     counts: () => ({ submits, prepares, seals }),
+    failures,
   };
 }
 
@@ -186,6 +189,22 @@ test('ending survives Live retirement, seals once, stores validated movie and re
   assert.doesNotMatch(JSON.stringify(p.view()), /private-provider|private prompt|private-status/);
   assert.deepEqual(f.results.endingVideo('owner', p.id), syntheticEndingMp4());
   assert.deepEqual(p.view().story, prepared.story);
+});
+
+test('rejected submission reports the failed stage and safe status code without altering the outcome', async (t) => {
+  const f = setup(t, {
+    fal: {
+      async submit() {
+        throw new FalSubmitError('rejected', undefined, 401);
+      },
+    },
+  });
+  const p = f.add();
+  await until(() => p.view().status === 'failed');
+  assert.equal(p.view().errorCode, 'ENDING_VIDEO_SUBMIT_HTTP_401');
+  assert.equal(p.view().outcome, 'normal');
+  assert.deepEqual(f.failures, [{ stage: 'video_submit', code: 'ENDING_VIDEO_SUBMIT_HTTP_401' }]);
+  assert.equal(f.jobs.snapshot().unconfirmed, 0);
 });
 test('mock, disabled and interrupted endings never run paid preparation or fal', async (t) => {
   for (const settings of [{ mode: 'mock' as const }, { enabled: false }, {}]) {

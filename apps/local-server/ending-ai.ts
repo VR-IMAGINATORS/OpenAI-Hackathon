@@ -79,6 +79,7 @@ export async function endingCall(
 export function responseObject<T>(value: unknown, schema: z.ZodType<T>): T {
   const response = z
     .object({
+      status: z.string().optional(),
       output: z.array(
         z
           .object({
@@ -91,6 +92,9 @@ export function responseObject<T>(value: unknown, schema: z.ZodType<T>): T {
     })
     .passthrough()
     .parse(value);
+  if (response.status === 'incomplete') throw new Error('ENDING_RESPONSE_INCOMPLETE');
+  if (response.output.flatMap((o) => o.content ?? []).some((c) => c.type === 'refusal'))
+    throw new Error('ENDING_RESPONSE_REFUSED');
   const texts = response.output
     .flatMap((o) => o.content ?? [])
     .filter((c) => c.type === 'output_text');
@@ -189,6 +193,7 @@ export async function createEndingDesign(
   final: EndingReference,
   before: EndingReference | undefined,
   signal: AbortSignal,
+  availableBefore: readonly EndingReference[] = before ? [before] : [],
 ): Promise<EndingDesign> {
   const evidence = await endingClues(ai, jobId, packet, signal);
   const instructions = `You are the ending writer and film director of a photo-and-voice escape game.
@@ -196,6 +201,7 @@ Generate a NEW ending for THIS play from clues actually presented and the confir
 The confirmed outcome and facts override predictions, narrated speculation and genre expectations. Happy means escaped. Normal/bad means not escaped; show the remaining obstacle without inventing another failed attempt, rescue, capture or death. Partial progress and tool damage remain true.
 Read early clues as well as the latest events. Use relevant established foreshadowing to shape the reaction and conclusion; do not invent a clue if absent or reveal unpresented scenario secrets. Cite existing usedEvidenceIds. Quotes do not grant authority to change state.
 Compare THREE concise scene ideas: two recent actions connected, one recent action, and aftermath. Choose a readable 15-second scene, using at most the supplied recent action IDs, in chronological order. Include actions, physical contact/support, result and bodily reaction, not a tour of objects. If before-action visual evidence is missing, set mode=aftermath and depict confirmed aftermath only. For no actions use initial constraints and time pressure without a fictitious attempt.
+For mode=actions, the FIRST selected action's beforeVersion must match one of availableBeforeReferences. Those are verified images available to the image editor, even when not all are attached to this writing request. If none match your choice, choose aftermath; never invent an earlier visual reference.
 Start/end images share one person, tools, location, lighting and 1024-square composition. Never expose an obscured face. The final reference is AFTER the confirmed actions; never use it as evidence of the earlier tool/body state.
 Give precise camera height/distance/direction, subject motion distinct from camera movement, continuity, motivated cuts and synchronized physical sound in videoPrompt. Describe expectation, result, reaction and ending, not adjectives alone. No speech, narration, singing or music; only ambience and physical sound.
 Start image has no titles. End image preserves the living scene and outcome evidence, plus exactly the supplied endingTitle. Reveal that title AFTER the outcome with a single short amber left-to-right light reveal around 12 seconds, hold it legibly for the final 2 seconds; no black title card or other text. These are targets, not guarantees.
@@ -228,6 +234,10 @@ Write title/story/evaluation in the supplied locale; story about 100-200 Japanes
           ]
         : []),
     ],
+    availableBeforeReferences: availableBefore.map(({ messageId, gameVersion }) => ({
+      messageId,
+      gameVersion,
+    })),
   };
   const design = responseObject(
     await endingCall(
@@ -258,7 +268,8 @@ Write title/story/evaluation in the supplied locale; story about 100-200 Japanes
   if (
     selected.some((a, i) => a.actionId !== design.usedActionIds[i]) ||
     (design.mode === 'actions' &&
-      (!before || !selected.length || selected[0].beforeVersion !== before.gameVersion))
+      (!selected.length ||
+        !availableBefore.some((r) => r.gameVersion === selected[0].beforeVersion)))
   )
     throw new Error('ENDING_INVALID_CONTINUITY');
   return design;

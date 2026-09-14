@@ -11,6 +11,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    let errorCode = null;
     let status = 'generating',
       gets = 0,
       responseCode = 200;
@@ -28,7 +29,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
           outcome: 'normal',
           clearedCount: 2,
           status,
-          errorCode: null,
+          errorCode,
           retainUntil,
           videoPath: status === 'ready' ? '/api/play/ending/video?playId=' + id : null,
           story:
@@ -69,11 +70,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByRole('heading', { name: '赤い印の約束' }).waitFor();
     await page.screenshot({ path: 'artifacts/ending-mobile.png', fullPage: true });
     status = 'failed';
+    errorCode = 'ENDING_START_FRAME_HTTP_401';
     await page.evaluate((id) => window.renderEnding(id, 'en'), second);
     await page.getByRole('heading', { name: 'Normal ending', exact: true }).waitFor();
     await page
       .getByText('The video could not be generated. Your game result is final.', { exact: true })
       .waitFor();
+    await page
+      .getByText('The generation service could not authorize the request.', { exact: true })
+      .waitFor();
+    await page.getByText('Information for reporting this issue', { exact: true }).click();
+    await page.getByText('ENDING_START_FRAME_HTTP_401', { exact: true }).waitFor();
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.getByRole('heading', { name: '赤い印の約束' }).count(), 0);
     const failedGets = gets;

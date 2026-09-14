@@ -94,7 +94,10 @@ export interface ImageEditRequest {
   output_format: 'jpeg';
 }
 export class UpstreamError extends Error {
-  constructor(public readonly status: number) {
+  constructor(
+    public readonly status: number,
+    public readonly upstreamStatus?: number,
+  ) {
     super('Upstream request failed');
   }
 }
@@ -124,7 +127,7 @@ export function createOpenAITransport(
       });
       if (!result.ok) {
         await result.body?.cancel();
-        throw new UpstreamError(result.status === 429 ? 429 : 502);
+        throw new UpstreamError(result.status === 429 ? 429 : 502, result.status);
       }
       if (empty) {
         await result.body?.cancel();

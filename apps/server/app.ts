@@ -110,7 +110,14 @@ export function createHostedApp(
       concurrent: 2,
     },
     results,
-    { ...options.ending, now },
+    {
+      ...options.ending,
+      now,
+      onFailure: (playId, stage, errorCode) => {
+        log({ event: 'ending_failed_' + stage, correlationId: playId, errorCode });
+        options.ending?.onFailure?.(playId, stage, errorCode);
+      },
+    },
   );
   function safeDisplay(fn: () => void) {
     try {

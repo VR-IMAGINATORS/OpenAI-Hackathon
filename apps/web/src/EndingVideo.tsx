@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { EndingOutcome, EndingView } from '../../../packages/shared/ending.js';
 import type { Locale } from './ChatFeed.js';
 import { endingVideoPath, getEnding, PlayApiError } from './play-api.js';
+import { endingErrorText } from './ending-error.js';
 
 type Unavailable = 'auth' | 'expired' | 'missing' | 'network' | null;
 const pending = new Set<EndingView['status']>(['queued', 'preparing', 'generating']);
@@ -89,6 +90,7 @@ export default function EndingVideo({
   const finalOutcome = view?.outcome ?? outcome;
   const count = view?.clearedCount ?? clearedCount;
   const ready = view?.status === 'ready' && !unavailable;
+  const failureText = view?.status === 'failed' ? endingErrorText(view.errorCode, locale) : null;
   let statusText = t('エンディングを確認しています…', 'Checking your ending…');
   if (unavailable) {
     statusText = {
@@ -179,6 +181,16 @@ export default function EndingVideo({
             )}
           </p>
         )}
+        {failureText && !unavailable && <p>{failureText}</p>}
+        {view?.status === 'failed' &&
+          view.errorCode &&
+          /^ENDING_[A-Z0-9_]{1,80}$/.test(view.errorCode) &&
+          !unavailable && (
+            <details className="ending-note">
+              <summary>{t('不具合報告用の情報', 'Information for reporting this issue')}</summary>
+              <code>{view.errorCode}</code>
+            </details>
+          )}
         {ready && !mediaFailed && (
           <video
             ref={videoRef}

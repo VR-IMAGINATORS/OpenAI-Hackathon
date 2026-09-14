@@ -6,6 +6,7 @@ import { createHostedApp } from '../apps/server/app.js';
 
 import { loadHostedConfig } from '../apps/server/config.js';
 import { readEnvironment } from '../packages/server/config.js';
+import { endingStartupSummary } from '../packages/server/ending-config.js';
 import { publicOrigin, startTunnel, stopTunnel } from './tunnel.js';
 import { waitForMobileHealth, type HealthFailure } from './mobile-readiness.js';
 
@@ -57,6 +58,11 @@ async function main() {
   readFileSync(config.webRoot + '/index.html');
 
   runtime = createHostedApp(config);
+  if (config.ending) console.log(endingStartupSummary(config.ending, config.ai.mode));
+  if (!mock)
+    console.log(
+      'この試遊はPCの .env.local を使用します。GitHubのSecret・Variablesは自動反映されません。',
+    );
 
   await listen(runtime.app.listen(config.port, '127.0.0.1'));
 

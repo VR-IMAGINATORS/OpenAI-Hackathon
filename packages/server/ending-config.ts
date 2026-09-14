@@ -30,3 +30,11 @@ export function loadEndingConfig(values: NodeJS.ProcessEnv): EndingConfig {
     concurrent,
   };
 }
+
+/** Local startup information only; intentionally excludes every credential. */
+export function endingStartupSummary(config: EndingConfig, mode: 'mock' | 'live'): string {
+  if (mode === 'mock') return 'エンディング動画: 無効（mockモードでは実生成しません）';
+  if (!config.enabled)
+    return 'エンディング動画: 無効（有効化する場合は .env.local の設定を確認してください）';
+  return `エンディング動画: 有効（このサーバー起動後、全プレイヤー合計 ${config.globalAttempts} 回まで）`;
+}
