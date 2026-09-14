@@ -23,7 +23,7 @@ const scenario = {
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Start game' : 'ゲームを始める',
+        name: english ? 'Normal 5 min · 4 actions Start' : 'ノーマル 5分 · 4回 開始',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -31,10 +31,12 @@ const scenario = {
         exact: true,
       });
       const skip = page.getByRole('button', { name: 'Skip', exact: true });
-      await begin.or(answer).or(skip).first().waitFor();
-      if (await begin.isVisible()) {
+      const ready = begin.and(page.locator(':enabled'));
+      await ready.or(answer).or(skip).first().waitFor();
+      if (await ready.isVisible()) {
         await begin.click();
       }
+      await skip.or(answer).first().waitFor();
       if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
@@ -356,7 +358,9 @@ const scenario = {
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
-    await page.getByRole('button', { name: 'Start game', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Normal 5 min · 4 actions Start', exact: true })
+      .waitFor();
     assert.equal(
       await page.getByRole('combobox').inputValue(),
       'en',
@@ -364,13 +368,15 @@ const scenario = {
     );
     assert.equal(await page.locator('html').getAttribute('lang'), 'en');
     await page.getByRole('combobox').selectOption('ja');
-    await page.getByRole('button', { name: 'ゲームを始める', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始', exact: true }).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), 'ja');
     await page.getByRole('combobox').selectOption('en');
-    await page.getByRole('button', { name: 'Start game', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Normal 5 min · 4 actions Start', exact: true })
+      .waitFor();
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: 'ゲームを始める' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始' }).click();
     await enterCall();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));

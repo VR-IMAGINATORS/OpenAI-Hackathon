@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
@@ -14,7 +15,7 @@ const fs = require('node:fs');
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Start game' : 'ゲームを始める',
+        name: english ? 'Normal 5 min · 4 actions Start' : 'ノーマル 5分 · 4回 開始',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -22,10 +23,12 @@ const fs = require('node:fs');
         exact: true,
       });
       const skip = page.getByRole('button', { name: 'Skip', exact: true });
-      await begin.or(answer).or(skip).first().waitFor();
-      if (await begin.isVisible()) {
+      const ready = begin.and(page.locator(':enabled'));
+      await ready.or(answer).or(skip).first().waitFor();
+      if (await ready.isVisible()) {
         await begin.click();
       }
+      await skip.or(answer).first().waitFor();
       if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
@@ -199,7 +202,7 @@ const fs = require('node:fs');
             409,
           );
         assert.ok(['ja', 'en'].includes(body.locale));
-        assert.equal(body.difficulty, 'nightmare');
+        assert.equal(body.difficulty, selectedDifficulty);
         state.locale = body.locale;
         createIds.push(body.requestId);
         if (createFailure) {
@@ -355,7 +358,9 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
-    await page.getByRole('button', { name: 'Start game', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Normal 5 min · 4 actions Start', exact: true })
+      .waitFor();
     fs.mkdirSync('artifacts', { recursive: true });
     for (const locale of ['en', 'ja']) {
       await page.getByRole('combobox').selectOption(locale);
@@ -366,11 +371,17 @@ const fs = require('node:fs');
         { width: 1280, height: 900 },
       ]) {
         await page.setViewportSize(size);
-        const bounds = await page.locator('.join-shell .primary-button').boundingBox();
-        assert.ok(
-          bounds.y >= 0 && bounds.y + bounds.height <= size.height,
-          `${locale} start button fits ${size.width}x${size.height}: ${JSON.stringify(bounds)}`,
-        );
+        const buttons = page.locator('.difficulty-card');
+        assert.equal(await buttons.count(), 3);
+        assert.equal(await page.getByRole('radio').count(), 0);
+        assert.equal(await page.locator('.join-shell .primary-button').count(), 0);
+        for (const button of await buttons.all()) {
+          const bounds = await button.boundingBox();
+          assert.ok(
+            bounds.y >= 0 && bounds.y + bounds.height <= size.height,
+            `${locale} start button fits ${size.width}x${size.height}: ${JSON.stringify(bounds)}`,
+          );
+        }
         assert.equal(
           await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
           false,
@@ -378,32 +389,33 @@ const fs = require('node:fs');
       }
       await page.setViewportSize({ width: 390, height: 664 });
       await page.screenshot({ path: `artifacts/join-difficulty-${locale}.png`, fullPage: true });
-      const popup = page.waitForEvent('dialog');
-      const click = page.locator('.join-shell .primary-button').click();
-      const dialog = await popup;
-      assert.equal(
-        dialog.message(),
-        locale === 'ja' ? '合言葉を入力してください。' : 'Please enter the passphrase.',
-      );
-      await dialog.accept();
-      await click;
-      assert.equal(
-        await page
-          .locator('input[type=password]')
-          .evaluate((input) => input === document.activeElement),
-        true,
-      );
-      assert.equal(owner, false);
-      assert.equal(createIds.length, 0);
+      for (const button of await page.locator('.difficulty-card').all()) {
+        const popup = page.waitForEvent('dialog');
+        const click = button.click();
+        const dialog = await popup;
+        assert.equal(
+          dialog.message(),
+          locale === 'ja' ? '合言葉を入力してください。' : 'Please enter the passphrase.',
+        );
+        await dialog.accept();
+        await click;
+        assert.equal(
+          await page
+            .locator('input[type=password]')
+            .evaluate((input) => input === document.activeElement),
+          true,
+        );
+        assert.equal(owner, false);
+        assert.equal(createIds.length, 0);
+      }
     }
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('wrong');
-    await page.getByRole('button', { name: 'ゲームを始める' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始' }).click();
     await page.getByRole('alert').filter({ hasText: '合言葉が違います' }).waitFor();
     assert.equal(await page.locator('video').count(), 0);
-    await page.getByRole('radio', { name: 'ナイトメア 3分 · 3回' }).check();
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: 'ゲームを始める' }).click();
+    await page.locator(`.difficulty-card[value="${selectedDifficulty}"]`).click();
     await page.waitForFunction(() => document.querySelector('video')?.readyState >= 1);
     const metadata = await page
       .locator('video')
@@ -434,7 +446,7 @@ const fs = require('node:fs');
     await page.reload();
     await page.getByRole('combobox').selectOption('ja');
     await page.evaluate(() => (window.__blockMedia = true));
-    await page.getByRole('button', { name: 'ゲームを始める', exact: true }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始', exact: true }).click();
     await page.getByRole('button', { name: '動画を再生', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.getByRole('button', { name: '着信音を再生', exact: true }).waitFor();

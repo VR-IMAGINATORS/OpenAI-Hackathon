@@ -1162,27 +1162,20 @@ h1 span {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
-.difficulty-option {
-  position: relative;
-  cursor: pointer;
-}
-.difficulty-option input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-}
 .difficulty-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  min-height: 64px;
-  padding: 8px 3px;
-  border: 1px solid #b7f6c930;
+  min-height: 88px;
+  padding: 12px 3px;
+  border: 1px solid #b7f6c970;
   border-radius: 10px;
-  background: #101916;
+  background: #b7f6c910;
+  color: var(--mint);
+  cursor: pointer;
+  font: inherit;
 }
 .difficulty-card strong {
   font-size: 12px;
@@ -1191,14 +1184,19 @@ h1 span {
   font-size: 10px;
   color: #aac1b2;
 }
-.difficulty-option input:checked + .difficulty-card {
+.difficulty-card:not(:disabled):hover {
   border-color: var(--mint);
   background: #b7f6c917;
   color: var(--mint);
 }
-.difficulty-option input:focus-visible + .difficulty-card {
+.difficulty-card:focus-visible {
   outline: 2px solid var(--mint);
   outline-offset: 3px;
+}
+.difficulty-start {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
 }
 .difficulty-choice:disabled {
   opacity: 0.55;

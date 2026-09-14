@@ -59,7 +59,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       })
       .finally(() => setLoading(false));
   }, []);
-  async function authenticate() {
+  async function begin(selectedDifficulty: Difficulty) {
     if (locked.current) return;
     if (!authenticated && !passphrase.trim()) {
       window.alert(t('合言葉を入力してください。', 'Please enter the passphrase.'));
@@ -67,6 +67,8 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       return;
     }
     locked.current = true;
+    setDifficulty(selectedDifficulty);
+    createId.current = null;
     setLoading(true);
     setError('');
     try {
@@ -186,7 +188,10 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void authenticate();
+          const submitter = (e.nativeEvent as SubmitEvent).submitter;
+          if (!(submitter instanceof HTMLButtonElement)) return;
+          const selected = difficultySchema.safeParse(submitter.value);
+          if (selected.success) void begin(selected.data);
         }}
       >
         {!authenticated && (
@@ -204,39 +209,32 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           </label>
         )}
         <fieldset className="difficulty-choice" disabled={loading}>
-          <legend>{t('ゲーム難易度', 'Difficulty')}</legend>
+          <legend>{t('難易度を選んで開始', 'Choose a difficulty to start')}</legend>
           <div className="difficulty-options">
             {difficultySchema.options.map((value) => {
               const preset = difficultyPresets[value];
               return (
-                <label className="difficulty-option" key={value}>
-                  <input
-                    type="radio"
-                    name="difficulty"
-                    value={value}
-                    checked={difficulty === value}
-                    onChange={() => {
-                      setDifficulty(value);
-                      createId.current = null;
-                    }}
-                  />
-                  <span className="difficulty-card">
-                    <strong>{preset.label[locale]}</strong>
-                    <small>
-                      {preset.totalTimeSeconds / 60}
-                      {t('分', ' min')} · {preset.maxActions}
-                      {t('回', ' actions')}
-                    </small>
+                <button
+                  className="difficulty-card"
+                  key={value}
+                  type="submit"
+                  name="difficulty"
+                  value={value}
+                >
+                  <strong>{preset.label[locale]}</strong>
+                  <small>
+                    {preset.totalTimeSeconds / 60}
+                    {t('分', ' min')} · {preset.maxActions}
+                    {t('回', ' actions')}
+                  </small>
+                  <span className="difficulty-start">
+                    {t('開始', 'Start')} <span aria-hidden="true">↗</span>
                   </span>
-                </label>
+                </button>
               );
             })}
           </div>
         </fieldset>
-        <button className="primary-button" disabled={loading}>
-          {loading ? t('準備中…', 'Preparing…') : t('ゲームを始める', 'Start game')}
-          <span aria-hidden="true">↗</span>
-        </button>
       </form>
       <p className="play-footnote">
         {t('カメラとマイクを使用します。', 'Camera and microphone access is required.')}

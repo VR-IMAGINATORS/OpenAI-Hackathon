@@ -14,7 +14,7 @@ const fs = require('node:fs');
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Start game' : 'ゲームを始める',
+        name: english ? 'Normal 5 min · 4 actions Start' : 'ノーマル 5分 · 4回 開始',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -22,10 +22,12 @@ const fs = require('node:fs');
         exact: true,
       });
       const skip = page.getByRole('button', { name: 'Skip', exact: true });
-      await begin.or(answer).or(skip).first().waitFor();
-      if (await begin.isVisible()) {
+      const ready = begin.and(page.locator(':enabled'));
+      await ready.or(answer).or(skip).first().waitFor();
+      if (await ready.isVisible()) {
         await begin.click();
       }
+      await skip.or(answer).first().waitFor();
       if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
@@ -275,7 +277,7 @@ const fs = require('node:fs');
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: 'ゲームを始める' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回 開始' }).click();
     await page.evaluate(() => (window.__denyMic = true));
     await enterCall();
     await page.getByRole('alert').filter({ hasText: 'マイクを許可' }).waitFor();
@@ -415,7 +417,9 @@ const fs = require('node:fs');
     await page.getByRole('button', { name: 'もう一度プレイ' }).waitFor();
     owner = false;
     await page.reload();
-    await page.getByRole('button', { name: 'Start game', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Normal 5 min · 4 actions Start', exact: true })
+      .waitFor();
     assert.deepEqual(pageErrors, []);
     console.log(
       'PASS: fake Live connect/reconnect/reload, passphrase authentication, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',
