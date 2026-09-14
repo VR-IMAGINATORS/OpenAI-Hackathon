@@ -13,7 +13,7 @@ import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
 
 const passphrase = 'test-only-ending-password';
 const video = syntheticEndingMp4();
-const prepared: PreparedEnding = {
+const prepared: PreparedEnding & { story: import('../packages/shared/ending.js').EndingStory } = {
   start: Buffer.from('injected-start-image'),
   end: Buffer.from('injected-end-image'),
   prompt: 'PRIVATE_ENDING_PROMPT',

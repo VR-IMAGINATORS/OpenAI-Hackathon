@@ -21,7 +21,7 @@ const signal = () => new AbortController().signal;
 const response = (value: unknown) => {
   // Film API returns only film fields; the published narrative is supplied separately.
   if (value && typeof value === 'object' && 'videoPrompt' in value) {
-    const { title, story, evaluation, tag, ...film } = value as EndingDesign;
+    const { title, story, evaluation, tag, ...film } = value as EndingDesign & EndingNarrative;
     value = film;
   }
   return {
@@ -130,7 +130,9 @@ function packet(clue = 'The red mark was a signal left by the player.'): EndingP
     recentActionScenes: [],
   };
 }
-function design(overrides: Partial<EndingDesign> = {}): EndingDesign {
+function design(
+  overrides: Partial<EndingDesign & EndingNarrative> = {},
+): EndingDesign & Omit<EndingNarrative, 'presentedEvidence'> {
   return {
     title: 'The unfinished signal',
     tag: null,
@@ -221,12 +223,12 @@ test('tag evidence can use an early action outside the two film actions and text
     signal(),
     narrative(packet(), { tag: chosen }),
   );
-  assert.deepEqual(result.tag, chosen);
+  assert.equal('tag' in result, false, 'film output cannot replace the published tag');
   const textAi = fakeAi(() =>
     response({
-      title: result.title,
-      story: result.story,
-      evaluation: result.evaluation,
+      title: narrative().title,
+      story: narrative().story,
+      evaluation: narrative().evaluation,
       usedEvidenceIds: result.usedEvidenceIds,
       tag: chosen,
     }),

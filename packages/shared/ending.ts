@@ -27,6 +27,8 @@ export interface EndingView {
   clearedCount: number;
   status: EndingVideoStatus;
   errorCode: string | null;
+  /** Independent text failure; retained even if the video completes. */
+  storyErrorCode?: string | null;
   retainUntil: string | null;
   videoPath: string | null;
   story: EndingStory | null;

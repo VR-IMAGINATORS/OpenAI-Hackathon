@@ -13,6 +13,7 @@ import type { EndingCallKind } from '../packages/server/ending-ai-request.js';
 import type { ImageEditRequest } from '../packages/server/openai.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
+import type { EndingFailureContext } from '../apps/server/ending-failure.js';
 
 const response = (value: unknown) => ({
   output: [{ content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
@@ -129,6 +130,48 @@ function narrative(p: EndingPacket): EndingNarrative {
 
 for (const variant of [
   { name: 'no action, only opening', action: 'none', ready: 'opening' },
+  {
+    name: 'no action and text API failure still produces video',
+    action: 'none',
+    ready: 'opening',
+    textFailure: 'network',
+  },
+  {
+    name: 'all attempts failed and text API failure still produces video',
+    action: 'failed',
+    ready: 'opening',
+    textFailure: 'network',
+  },
+  {
+    name: 'zero clears and invalid tag still produces video',
+    action: 'failed',
+    ready: 'opening',
+    textFailure: 'tag',
+  },
+  {
+    name: 'zero clears and invalid text shape still produces video',
+    action: 'failed',
+    ready: 'opening',
+    textFailure: 'schema',
+  },
+  {
+    name: 'zero clears and incomplete text still produces video',
+    action: 'failed',
+    ready: 'opening',
+    textFailure: 'incomplete',
+  },
+  {
+    name: 'evidence extraction failure still produces video',
+    action: 'failed',
+    ready: 'opening',
+    textFailure: 'evidence',
+  },
+  {
+    name: 'zero clears can earn a tag for a failed attempt',
+    action: 'failed',
+    ready: 'opening',
+    tag: true,
+  },
   { name: 'failed action, only opening', action: 'failed', ready: 'opening' },
   { name: 'successful action, only opening', action: 'successful', ready: 'opening' },
   { name: 'failed action with result image can replay', action: 'failed', ready: 'result' },
@@ -148,10 +191,19 @@ for (const variant of [
 ] as const) {
   test('aftermath pipeline: ' + variant.name, async (t) => {
     const p = packet(variant.action);
+    const textFailure = 'textFailure' in variant ? variant.textFailure : null;
+    if (textFailure === 'evidence') p.evidence.records[0].text = 'x'.repeat(100 * 1024);
     const text = narrative(p);
+    if ('tag' in variant)
+      text.tag = {
+        id: 'brute_force',
+        evidenceActionIds: ['attempt'],
+        reason: 'Pulled the chain by force; it remained locked.',
+      };
     const replay = variant.ready === 'result';
     const edits: ImageEditRequest[] = [];
     const inspections: any[] = [];
+    const failures: { code: string; context?: EndingFailureContext }[] = [];
     let directions = 0,
       submits = 0;
     const source = await sharp({
@@ -204,22 +256,43 @@ for (const variant of [
             assert.deepEqual(input.presentedEvidence, p.evidence.records);
             assert.doesNotMatch(JSON.stringify(input), /UNPRESENTED_SECRET/);
             const { presentedEvidence, ...published } = text;
+            assert.match(
+              request.instructions,
+              /Zero cleared obstacles and all-failed attempts are valid endings/,
+            );
+            if (textFailure === 'network') throw new Error('PRIVATE_NETWORK_ERROR');
+            if (textFailure === 'incomplete') return { status: 'incomplete', output: [] };
+            if (textFailure === 'schema') return response({ ...published, story: '' });
+            if (textFailure === 'tag')
+              return response({
+                ...published,
+                tag: { id: 'learning', evidenceActionIds: ['attempt'], reason: 'PRIVATE_REASON' },
+              });
             return response(published);
           }
           if (request.text.format.name === 'ending_design') {
             directions++;
-            assert.equal(results.ending('owner', p.playId).storyStatus, 'ready');
-            assert.equal(input.establishedEnding.text, text.story);
+            assert.equal(
+              results.ending('owner', p.playId).storyStatus,
+              textFailure ? 'failed' : 'ready',
+            );
+            if (textFailure) {
+              assert.equal(input.establishedEnding, null);
+              assert.equal(input.evidenceIncomplete, true);
+              assert.equal(input.clearedIds.length, 0);
+              assert.doesNotMatch(JSON.stringify(input), /PRIVATE_/);
+            } else assert.equal(input.establishedEnding.text, text.story);
             assert.deepEqual(input.allowedModes, replay ? ['actions', 'aftermath'] : ['aftermath']);
             assert.deepEqual(input.actions, p.actions);
             assert.deepEqual(input.facts, p.facts);
-            assert.deepEqual(input.presentedEvidence, p.evidence.records);
+            assert.deepEqual(input.presentedEvidence, textFailure ? [] : p.evidence.records);
             if (!replay) {
               assert.equal(request.text.format.schema.properties.mode.const, 'aftermath');
               assert.equal(request.text.format.schema.properties.usedActionIds.maxItems, 0);
             }
             return response({
               ...film,
+              usedEvidenceIds: textFailure ? [] : film.usedEvidenceIds,
               mode: replay ? 'actions' : 'aftermath',
               usedActionIds: replay ? ['attempt'] : [],
             });
@@ -269,6 +342,7 @@ for (const variant of [
       {
         now: () => 0,
         graceMs: 0,
+        onFailure: (_id, _stage, code, context) => failures.push({ code, context }),
         fal: {
           async submit() {
             submits++;
@@ -303,8 +377,28 @@ for (const variant of [
     )
       await new Promise((resolve) => setTimeout(resolve, 5));
     const view = results.ending('owner', p.playId);
-    assert.equal(view.storyStatus, 'ready');
-    assert.equal(view.story!.text, text.story);
+    assert.equal(view.storyStatus, textFailure ? 'failed' : 'ready');
+    if (textFailure) {
+      assert.equal(view.story, null);
+      const causes = {
+        network: 'FAILED',
+        tag: 'INVALID_TAG_EVIDENCE',
+        schema: 'INVALID_RESPONSE',
+        incomplete: 'RESPONSE_INCOMPLETE',
+        evidence: 'EVIDENCE_TOO_LARGE',
+      };
+      assert.equal(view.storyErrorCode, 'ENDING_STORY_' + causes[textFailure]);
+      assert.equal(failures[0].code, view.storyErrorCode);
+      assert.equal(failures[0].context!.clearedCount, 0);
+      assert.equal(failures[0].context!.actionCount, p.actions.length);
+      assert.equal(failures[0].context!.failedActionCount, p.actions.length);
+      if (textFailure === 'schema') assert.equal(failures[0].context!.validationFields, 'story');
+      assert.equal(view.errorCode, null, 'text error must not become the video error');
+      assert.equal(view.clearedCount, 0);
+      assert.equal(jobs.snapshot().remaining, 0);
+      assert.equal(jobs.snapshot().reserved, 0);
+    } else assert.equal(view.story!.text, text.story);
+    if ('tag' in variant) assert.equal(view.story!.tagId, 'brute_force');
     if (variant.ready === 'none') {
       assert.equal(view.errorCode, 'ENDING_REFERENCE_MISSING');
       assert.equal(directions, 0);

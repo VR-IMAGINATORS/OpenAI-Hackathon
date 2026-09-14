@@ -4,10 +4,15 @@ import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { z } from 'zod';
 import { EndingJobs } from '../apps/server/ending-jobs.js';
-import { endingFailureCode } from '../apps/server/ending-failure.js';
+import { endingFailureCode, endingValidationFields } from '../apps/server/ending-failure.js';
+import { operationalLog } from '../apps/server/logging.js';
 import { ResultStore } from '../apps/server/result-store.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
-import { responseObject, type EndingDesign } from '../apps/local-server/ending-ai.js';
+import {
+  responseObject,
+  type EndingDesign,
+  type EndingNarrative,
+} from '../apps/local-server/ending-ai.js';
 import type { EndingPacket } from '../apps/local-server/ending.js';
 import { endingErrorText } from '../apps/web/src/ending-error.js';
 import { AiService, AiServiceError } from '../packages/server/ai-service.js';
@@ -24,6 +29,37 @@ import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
 
 const response = (value: unknown) => ({
   output: [{ content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+});
+
+test('text diagnostics retain numeric play context and schema fields without private validation values', () => {
+  const parsed = z
+    .object({ story: z.string().max(1), tag: z.object({ id: z.enum(['tools']) }) })
+    .safeParse({ story: 'PRIVATE_STORY', tag: { id: 'PRIVATE_TAG' } });
+  assert(!parsed.success);
+  const fields = endingValidationFields(parsed.error);
+  assert.equal(fields, 'story,tag');
+  let line = '';
+  operationalLog(
+    {
+      event: 'ending_failed_story',
+      correlationId: 'play-id',
+      errorCode: endingFailureCode(parsed.error, 'story'),
+      clearedCount: 0,
+      actionCount: 3,
+      failedActionCount: 3,
+      validationFields: fields,
+    },
+    (value) => {
+      line = value;
+    },
+  );
+  assert.equal(JSON.parse(line).clearedCount, 0);
+  assert.equal(JSON.parse(line).failedActionCount, 3);
+  assert.equal(JSON.parse(line).validationFields, 'story,tag');
+  assert.doesNotMatch(line, /PRIVATE/);
+  const unknown = z.object({ PRIVATE_FIELD: z.number() }).safeParse({ PRIVATE_FIELD: 'secret' });
+  assert(!unknown.success);
+  assert.equal(endingValidationFields(unknown.error), 'response');
 });
 
 test('failure categories identify the stage without disclosing upstream text, URLs, or validation inputs', () => {
@@ -149,7 +185,7 @@ for (const variant of [
     const edits: ImageEditRequest[] = [];
     const failures: string[] = [];
     let submits = 0;
-    const design: EndingDesign = {
+    const design: EndingDesign & Omit<EndingNarrative, 'presentedEvidence'> = {
       title: 'The last mark',
       tag: {
         id: 'bare_hands',

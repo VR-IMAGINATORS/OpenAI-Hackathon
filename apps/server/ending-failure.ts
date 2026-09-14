@@ -19,6 +19,44 @@ export type EndingStage =
   | 'video_validation'
   | 'storage';
 
+export interface EndingFailureContext {
+  clearedCount: number;
+  actionCount: number;
+  failedActionCount: number;
+  validationFields?: string;
+}
+
+/** Only schema-owned field names; never include issues, inputs or upstream text. */
+export function endingValidationFields(error: unknown): string | undefined {
+  if (!(error instanceof ZodError)) return undefined;
+  const allowed = new Set([
+    'title',
+    'story',
+    'evaluation',
+    'tag',
+    'usedEvidenceIds',
+    'clues',
+    'usedActionIds',
+    'candidates',
+    'selectionReason',
+    'mode',
+    'startPrompt',
+    'endPrompt',
+    'videoPrompt',
+  ]);
+  return [
+    ...new Set(
+      error.issues.map((issue) =>
+        typeof issue.path[0] === 'string' && allowed.has(issue.path[0])
+          ? issue.path[0]
+          : 'response',
+      ),
+    ),
+  ]
+    .sort()
+    .join(',');
+}
+
 /** Only fixed categories and HTTP status codes are public; never stringify an upstream error. */
 export function endingFailureCode(error: unknown, stage: EndingStage): string {
   const prefix = 'ENDING_' + stage.toUpperCase() + '_';

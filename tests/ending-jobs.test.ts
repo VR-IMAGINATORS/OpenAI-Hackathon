@@ -14,6 +14,7 @@ import { loadAiConfig } from '../packages/server/ai-config.js';
 import { AiService } from '../packages/server/ai-service.js';
 import { FalSubmitError, type FalTransport } from '../packages/server/fal.js';
 import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
+import type { EndingStory } from '../packages/shared/ending.js';
 
 const handle = {
   requestId: 'one',
@@ -21,7 +22,7 @@ const handle = {
   resultUrl: 'private-result',
   cancelUrl: 'private-cancel',
 };
-const prepared: PreparedEnding = {
+const prepared: PreparedEnding & { story: EndingStory } = {
   start: Buffer.from('start'),
   end: Buffer.from('end'),
   prompt: 'private prompt',
@@ -77,8 +78,9 @@ function setup(
     budget?: number;
     concurrent?: number;
     graceMs?: number;
+    storyTimeoutMs?: number;
     prepare?: EndingJobsOptions['prepare'];
-    response?: () => unknown | Promise<unknown>;
+    response?: (signal?: AbortSignal) => unknown | Promise<unknown>;
   } = {},
 ) {
   let now = 0;
@@ -90,9 +92,9 @@ function setup(
       async createLiveSession() {
         throw Error('not used');
       },
-      async createResponse() {
+      async createResponse(_body, signal) {
         const value = options.response
-          ? await options.response()
+          ? await options.response(signal)
           : {
               title: prepared.story.title,
               story: prepared.story.text,
@@ -150,6 +152,7 @@ function setup(
       now: () => now,
       fal,
       graceMs: options.graceMs ?? 0,
+      storyTimeoutMs: options.storyTimeoutMs,
       pollMs: 1,
       onFailure: (_id, stage, code) => failures.push({ stage, code }),
       prepare: async (...args) => {
@@ -324,6 +327,8 @@ test('text-only failure and cancellation finish polling without changing disable
   await until(() => p.view().storyStatus === 'failed');
   assert.equal(p.view().status, 'disabled');
   assert.equal(p.view().story, null);
+  assert.equal(p.view().storyErrorCode, 'ENDING_STORY_FAILED');
+  assert.equal(p.view().errorCode, null);
   const gate = deferred<unknown>();
   const cancelled = setup(t, { enabled: false, response: () => gate.promise });
   const q = cancelled.add();
@@ -334,6 +339,58 @@ test('text-only failure and cancellation finish polling without changing disable
   assert.equal(q.view().storyStatus, 'failed');
   assert.equal(q.view().status, 'disabled');
   assert.equal(cancelled.jobs.snapshot().reserved, 0);
+});
+
+test('text timeout aborts only text and video still completes', async (t) => {
+  const f = setup(t, {
+    storyTimeoutMs: 5,
+    response: (signal) =>
+      new Promise((_resolve, reject) => {
+        signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
+      }),
+    prepare: async (_id, p, signal, story) => {
+      assert.equal(story, null);
+      assert.equal(signal.aborted, false);
+      assert.equal(p.clearedIds.length, 0);
+      return prepared;
+    },
+  });
+  const p = f.add({ outcome: 'bad', clearedIds: [] });
+  await until(() => p.view().status === 'ready');
+  assert.equal(p.view().storyStatus, 'failed');
+  assert.equal(p.view().storyErrorCode, 'ENDING_STORY_TIMEOUT');
+  assert.equal(p.view().errorCode, null);
+  assert.equal(f.counts().submits, 1);
+});
+
+test('independent text and video errors are both retained', async (t) => {
+  const f = setup(t, {
+    response: () => {
+      throw new Error('network');
+    },
+    prepare: async () => {
+      throw new Error('ENDING_FRAME_REJECTED');
+    },
+  });
+  const p = f.add({ outcome: 'bad', clearedIds: [] });
+  await until(() => p.view().status === 'failed');
+  assert.equal(p.view().storyErrorCode, 'ENDING_STORY_FAILED');
+  assert.equal(p.view().errorCode, 'ENDING_DIRECTION_REJECTED');
+  assert.equal(f.counts().prepares, 1);
+  assert.equal(f.counts().submits, 0);
+});
+
+test('whole-play cancellation during text still prevents video submission', async (t) => {
+  const gate = deferred<unknown>();
+  const f = setup(t, { response: () => gate.promise });
+  const p = f.add({ clearedIds: [] });
+  await until(() => p.view().storyStatus === 'generating');
+  f.jobs.cancelPlay(p.id);
+  gate.resolve({});
+  await until(() => f.jobs.snapshot().remaining === 0);
+  assert.equal(f.counts().prepares, 0);
+  assert.equal(f.counts().submits, 0);
+  assert.equal(f.jobs.snapshot().reserved, 0);
 });
 test('finite queue reserves budget before preparation and refunds only unsubmitted work', async (t) => {
   const gate = deferred<PreparedEnding>();

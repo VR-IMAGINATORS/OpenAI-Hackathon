@@ -21,13 +21,17 @@ import type { EndingPacket } from '../local-server/ending.js';
 import { publicEndingStory } from '../local-server/ending-tags.js';
 import type { EndingStory, EndingVideoStatus } from '../../packages/shared/ending.js';
 import { ResultStore } from './result-store.js';
-import { endingFailureCode, type EndingStage } from './ending-failure.js';
+import {
+  endingFailureCode,
+  endingValidationFields,
+  type EndingFailureContext,
+  type EndingStage,
+} from './ending-failure.js';
 
 export interface PreparedEnding {
   start: Buffer;
   end: Buffer;
   prompt: string;
-  story: EndingStory;
 }
 interface Job {
   id: string;
@@ -60,13 +64,19 @@ export interface EndingJobsOptions {
   fal?: FalTransport;
   graceMs?: number;
   pollMs?: number;
+  storyTimeoutMs?: number;
   prepare?: (
     jobId: string,
     packet: EndingPacket,
     signal: AbortSignal,
-    publishedStory: EndingStory,
+    publishedStory: EndingStory | null,
   ) => Promise<PreparedEnding>;
-  onFailure?: (playId: string, stage: EndingStage | 'admission', errorCode: string) => void;
+  onFailure?: (
+    playId: string,
+    stage: EndingStage | 'admission',
+    errorCode: string,
+    context?: EndingFailureContext,
+  ) => void;
 }
 
 /** One job per retained result. Unconfirmed submissions retain capacity after local cancellation. */
@@ -98,9 +108,28 @@ export class EndingJobs {
       /* Result eviction cancels separately. */
     }
   }
-  private reportFailure(playId: string, stage: EndingStage | 'admission', errorCode: string) {
+  private reportFailure(
+    playId: string,
+    stage: EndingStage | 'admission',
+    errorCode: string,
+    error?: unknown,
+  ) {
     try {
-      this.options.onFailure?.(playId, stage, errorCode);
+      const job = this.jobs.get(playId);
+      const packet = job?.sealedPacket ?? job?.packet;
+      this.options.onFailure?.(
+        playId,
+        stage,
+        errorCode,
+        packet
+          ? {
+              clearedCount: packet.clearedIds.length,
+              actionCount: packet.actions.length,
+              failedActionCount: packet.actions.filter((action) => !action.success).length,
+              validationFields: endingValidationFields(error),
+            }
+          : undefined,
+      );
     } catch {
       /* Diagnostics cannot interrupt cleanup. */
     }
@@ -117,6 +146,7 @@ export class EndingJobs {
         clearedCount: packet.clearedIds.length,
         status,
         errorCode: null,
+        storyErrorCode: null,
         retainUntil: null,
         videoPath: null,
         story: null,
@@ -130,6 +160,7 @@ export class EndingJobs {
       this.update(packet.playId, {
         status: enabled ? 'failed' : status,
         storyStatus: 'failed',
+        storyErrorCode: errorCode,
         errorCode,
       });
       this.reportFailure(packet.playId, 'admission', errorCode);
@@ -214,9 +245,15 @@ export class EndingJobs {
   }
   private async prepare(job: Job, packet: EndingPacket): Promise<PreparedEnding> {
     const signal = job.controller.signal;
-    const narrative = job.narrative!;
+    const narrative = job.narrative;
+    job.stage = 'direction';
     if (this.options.prepare && job.video)
-      return this.options.prepare(job.id, packet, signal, publicEndingStory(narrative));
+      return this.options.prepare(
+        job.id,
+        packet,
+        signal,
+        narrative ? publicEndingStory(narrative) : null,
+      );
     const scene = job.scene;
     if (!scene) {
       job.stage = 'reference';
@@ -234,7 +271,6 @@ export class EndingJobs {
       narrative,
       availableBefore,
     );
-    const story = publicEndingStory(design);
     const selected = packet.actions.find((action) => action.actionId === design.usedActionIds[0]);
     const before = availableBefore.find(
       (reference) => reference.gameVersion === selected?.beforeVersion,
@@ -254,7 +290,6 @@ export class EndingJobs {
     return {
       ...frames,
       prompt: design.videoPrompt,
-      story,
     };
   }
   private async runStory(job: Job): Promise<void> {
@@ -267,11 +302,29 @@ export class EndingJobs {
         await abortableDelay(graceUntil - this.now(), job.controller.signal);
       this.assertCurrent(job);
       const packet = job.seal();
-      const narrative = await createEndingText(this.ai, job.id, packet, job.controller.signal);
-      this.publishStory(job, publicEndingStory(narrative));
-      if (job.video) {
+      job.sealedPacket = packet;
+      // A text-only timeout must leave time and a live permit for video work.
+      const textDeadline = AbortSignal.timeout(this.options.storyTimeoutMs ?? 60_000);
+      try {
+        const narrative = await createEndingText(
+          this.ai,
+          job.id,
+          packet,
+          AbortSignal.any([job.controller.signal, textDeadline]),
+        );
+        textDeadline.throwIfAborted();
+        this.publishStory(job, publicEndingStory(narrative));
         job.narrative = narrative;
-        job.sealedPacket = packet;
+      } catch (error) {
+        this.assertCurrent(job);
+        const errorCode = textDeadline.aborted
+          ? 'ENDING_STORY_TIMEOUT'
+          : endingFailureCode(error, 'story');
+        this.update(job.playId, { storyStatus: 'failed', storyErrorCode: errorCode });
+        this.reportFailure(job.playId, 'story', errorCode, error);
+      }
+      this.assertCurrent(job);
+      if (job.video) {
         job.phase = 'video';
       }
     } catch (error) {
@@ -392,7 +445,7 @@ export class EndingJobs {
       errorCode,
       videoPath: null,
     });
-    this.reportFailure(job.playId, job.stage, errorCode);
+    this.reportFailure(job.playId, job.stage, errorCode, error);
   }
   private finish(job: Job): void {
     clearTimeout(job.timer);

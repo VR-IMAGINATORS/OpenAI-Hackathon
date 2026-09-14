@@ -12,6 +12,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     let errorCode = null;
+    let storyErrorCode = null;
     let storyReady = false;
     let status = 'generating',
       gets = 0,
@@ -30,7 +31,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
           outcome: 'normal',
           clearedCount: 2,
           status,
-          storyStatus: storyReady ? 'ready' : 'generating',
+          storyStatus: storyReady ? 'ready' : storyErrorCode ? 'failed' : 'generating',
+          storyErrorCode,
           errorCode,
           retainUntil,
           videoPath: status === 'ready' ? '/api/play/ending/video?playId=' + id : null,
@@ -127,6 +129,32 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('食器縛り', { exact: true }).waitFor();
     assert(gets > disabledGets, 'disabled video must still poll until text is ready');
     assert.equal(await page.locator('video').count(), 0);
+    // Text failure is independent: keep polling the video and retain diagnostics after completion.
+    storyReady = false;
+    storyErrorCode = 'ENDING_STORY_INVALID_TAG_EVIDENCE';
+    status = 'generating';
+    await page.reload();
+    await page.getByText(/動画の制作は続けています/).waitFor();
+    const textFailedGets = gets;
+    await page.getByText('不具合報告用の情報', { exact: true }).click();
+    await page.getByText(storyErrorCode, { exact: true }).waitFor();
+    await page.getByText(first, { exact: true }).waitFor();
+    status = 'ready';
+    await page.locator('video').waitFor();
+    assert(gets > textFailedGets, 'text failure must not stop video polling');
+    await page.getByText(storyErrorCode, { exact: true }).waitFor();
+    assert.equal(await page.locator('.ending-tag').count(), 0);
+    await page.reload();
+    await page.locator('video').waitFor();
+    await page.getByText('不具合報告用の情報', { exact: true }).click();
+    await page.getByText(storyErrorCode, { exact: true }).waitFor();
+    status = 'failed';
+    errorCode = 'ENDING_DIRECTION_INVALID_RESPONSE';
+    await page.reload();
+    await page.getByText('不具合報告用の情報', { exact: true }).click();
+    await page.getByText(storyErrorCode, { exact: true }).waitFor();
+    await page.getByText(errorCode, { exact: true }).waitFor();
+    storyErrorCode = null;
     responseCode = 401;
     await page.reload();
     await page.getByText('動画を閲覧する認証が失効しました。', { exact: true }).waitFor();

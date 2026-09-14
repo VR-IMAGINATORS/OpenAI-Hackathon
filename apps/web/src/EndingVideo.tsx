@@ -98,6 +98,9 @@ export default function EndingVideo({
   const tagLabel = endingTagLabel(story?.tagId, locale);
   const storyPending = view?.storyStatus === 'queued' || view?.storyStatus === 'generating';
   const failureText = view?.status === 'failed' ? endingErrorText(view.errorCode, locale) : null;
+  const diagnosticCodes = [...new Set([view?.storyErrorCode, view?.errorCode])].filter(
+    (code): code is string => !!code && /^ENDING_[A-Z0-9_]{1,80}$/.test(code),
+  );
   let statusText = t('エンディングを確認しています…', 'Checking your ending…');
   if (unavailable) {
     statusText = {
@@ -171,6 +174,9 @@ export default function EndingVideo({
               '結末の文章を生成できませんでした。プレイの結果は確定しています。',
               'The ending text could not be generated. Your game result is final.',
             )}
+            {view &&
+              pending.has(view.status) &&
+              t(' 動画の制作は続けています。', ' Video preparation is continuing.')}
           </p>
         ) : null}
         {!story && !storyPending && !unavailable && summary && (
@@ -213,15 +219,20 @@ export default function EndingVideo({
           </p>
         )}
         {failureText && !unavailable && <p>{failureText}</p>}
-        {view?.status === 'failed' &&
-          view.errorCode &&
-          /^ENDING_[A-Z0-9_]{1,80}$/.test(view.errorCode) &&
-          !unavailable && (
-            <details className="ending-note">
-              <summary>{t('不具合報告用の情報', 'Information for reporting this issue')}</summary>
-              <code>{view.errorCode}</code>
-            </details>
-          )}
+        {diagnosticCodes.length > 0 && !unavailable && (
+          <details className="ending-note">
+            <summary>{t('不具合報告用の情報', 'Information for reporting this issue')}</summary>
+            {diagnosticCodes.map((code) => (
+              <p key={code}>
+                <code>{code}</code>
+              </p>
+            ))}
+            <p>
+              Play ID: <code>{playId}</code>
+            </p>
+            <p>{t(`解除：${count ?? 0}個`, `Cleared: ${count ?? 0}`)}</p>
+          </details>
+        )}
         {ready && !mediaFailed && (
           <video
             ref={videoRef}
@@ -237,8 +248,8 @@ export default function EndingVideo({
         {ready && mediaFailed && (
           <p role="status">
             {t(
-              '動画を再生できません。結末の文章は上に表示されています。',
-              'The video could not be played. Your ending text is shown above.',
+              '動画を再生できません。プレイの結果は上に表示されています。',
+              'The video could not be played. Your game result is shown above.',
             )}
           </p>
         )}

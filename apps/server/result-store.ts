@@ -363,7 +363,10 @@ export class ResultStore {
   updateEnding(
     playId: string,
     patch: Partial<
-      Pick<EndingView, 'status' | 'errorCode' | 'story' | 'storyStatus' | 'videoPath'>
+      Pick<
+        EndingView,
+        'status' | 'errorCode' | 'storyErrorCode' | 'story' | 'storyStatus' | 'videoPath'
+      >
     >,
   ): void {
     const e = this.entry(playId);
