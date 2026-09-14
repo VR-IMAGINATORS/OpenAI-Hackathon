@@ -258,8 +258,8 @@ export default function EndingVideo({
         <img
           src="/images/to-be-continued.png"
           alt="to be continued"
-          width={1536}
-          height={1024}
+          width={1504}
+          height={352}
         />
       </div>
     </section>

@@ -116,10 +116,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       return {
         last: ending.lastElementChild === arrow,
         top: arrow.getBoundingClientRect().top,
+        width: arrow.getBoundingClientRect().width,
+        right: arrow.getBoundingClientRect().right,
+        contentRight: ending.querySelector('.ending-details').getBoundingClientRect().right,
         detailsBottom: ending.querySelector('.ending-details').getBoundingClientRect().bottom,
       };
     });
     assert(footer.last && footer.top >= footer.detailsBottom, 'arrow follows all result content');
+    assert(Math.abs(footer.width - 390 * 0.4) < 1, 'arrow is two fifths of the mobile viewport');
+    assert(Math.abs(footer.right - footer.contentRight) < 1, 'arrow aligns with the result right edge');
     await page.getByRole('button', { name: /閉じて会話を見返す/ }).click();
     assert(await arrow.isVisible(), 'collapsing video details keeps the result footer');
     status = 'failed';

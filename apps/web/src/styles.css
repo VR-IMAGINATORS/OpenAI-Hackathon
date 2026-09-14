@@ -2064,16 +2064,13 @@ h1 span {
   border-radius: 10px;
 }
 .ending-continued {
-  width: min(100%, 360px);
-  aspect-ratio: 4 / 1;
+  width: min(40vw, 240px, 100%);
   margin: 20px 0 4px auto;
-  overflow: hidden;
 }
 .ending-continued img {
   display: block;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
 }
 .ending-reveal {
   min-height: 44px;
