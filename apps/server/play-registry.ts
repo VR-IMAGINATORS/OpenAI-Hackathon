@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { assertController, claimController, SessionError, type Controller } from './control.js';
 import type { AuthSession } from './session-store.js';
+import type { Difficulty } from '../../packages/shared/difficulty.js';
 
 export type PlayLifecycle =
   | 'connecting'
@@ -32,7 +33,7 @@ export interface PlayRegistryOptions<T, R> {
     id: string,
     deadline: number,
     owner: AuthSession,
-    request: { locale?: 'ja' | 'en' },
+    request: { locale?: 'ja' | 'en'; difficulty?: Difficulty },
   ) => T;
   expire: (runtime: T) => void;
   close: (runtime: T) => Promise<boolean>;
@@ -78,12 +79,13 @@ export class PlayRegistry<T, R = unknown> {
 
   create(
     owner: AuthSession,
-    request: { requestId: string; clientId: string; locale?: 'ja' | 'en' },
+    request: { requestId: string; clientId: string; locale?: 'ja' | 'en'; difficulty?: Difficulty },
   ): { play: PlayRuntime<T, R>; reused: boolean } {
     if (owner.lastCreateRequestId === request.requestId) {
       if (
         owner.lastCreateClientId !== request.clientId ||
-        owner.lastCreateLocale !== request.locale
+        owner.lastCreateLocale !== request.locale ||
+        owner.lastCreateDifficulty !== request.difficulty
       )
         throw new SessionError('PLAY_CONFLICT', 409);
       const play = owner.lastCreatePlayId ? this.plays.get(owner.lastCreatePlayId) : undefined;
@@ -123,6 +125,7 @@ export class PlayRegistry<T, R = unknown> {
       throw error;
     }
     owner.lastCreateLocale = request.locale;
+    owner.lastCreateDifficulty = request.difficulty;
     owner.lastCreateRequestId = request.requestId;
     owner.lastCreateClientId = request.clientId;
     owner.lastCreatePlayId = play.id;

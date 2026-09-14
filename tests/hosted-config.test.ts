@@ -21,6 +21,10 @@ function fixture(t: TestContext) {
     resolve(directory, 'scenarios/mobile-playtest.json'),
     readFileSync('scenarios/mobile-playtest.json'),
   );
+  writeFileSync(
+    resolve(directory, 'scenarios/story-catalog.json'),
+    readFileSync('scenarios/story-catalog.json'),
+  );
   return directory;
 }
 const base = { APP_PASSPHRASE: 'test-only', AI_MODE: 'mock' };
@@ -91,9 +95,9 @@ test('hosted public URL and host/origin allowlists reject ambiguous and wildcard
 });
 test('hosted invalid scenario reports the planner field location', (t) => {
   const cwd = fixture(t),
-    path = resolve(cwd, 'scenarios/mobile-playtest.json');
+    path = resolve(cwd, 'scenarios/story-catalog.json');
   const scenario = JSON.parse(readFileSync(path, 'utf8'));
-  scenario.rules.maxActions = 0;
+  scenario.rules.maxPhotoSends = 0;
   writeFileSync(path, JSON.stringify(scenario));
-  assert.throws(() => loadHostedConfig(base, cwd), /"rules"[\s\S]*"maxActions"/);
+  assert.throws(() => loadHostedConfig(base, cwd), /"rules"[\s\S]*"maxPhotoSends"/);
 });

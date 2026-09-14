@@ -4,6 +4,14 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const catalog = JSON.parse(fs.readFileSync('scenarios/story-catalog.json', 'utf8'));
+// Use the default catalog's chair rope / fogged window route, which exposed the noun-only HUD bug.
+const scenario = {
+  obstacles: catalog.scenes[1].sequences[0].map((id) => {
+    const gimmick = catalog.gimmicks.find((entry) => entry.id === id);
+    return { title: gimmick.objective, situationDisplay: gimmick.observation };
+  }),
+};
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
@@ -11,21 +19,25 @@ const fs = require('node:fs');
       viewport: { width: 390, height: 844 },
       isMobile: true,
       hasTouch: true,
+      locale: 'ja-JP',
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Begin experience' : '体験を始める',
+        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
         exact: true,
       });
       const answer = page.getByRole('button', {
         name: english ? 'Answer' : '応答する',
         exact: true,
       });
-      await begin.or(answer).first().waitFor();
-      if (await begin.isVisible()) {
+      const skip = page.getByRole('button', { name: 'Skip', exact: true });
+      const ready = begin.and(page.locator(':enabled'));
+      await ready.or(answer).or(skip).first().waitFor();
+      if (await ready.isVisible()) {
         await begin.click();
-        await page.getByRole('button', { name: 'Skip', exact: true }).click();
       }
+      await skip.or(answer).first().waitFor();
+      if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
         .click();
@@ -131,9 +143,10 @@ const fs = require('node:fs');
       title: '閉ざされた研究室',
       briefing:
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
-      obstacle: { title: '動かない扉', index: 0, count: 3 },
-      situation: 'ドアノブが外れ、扉を引くことができない。代わりにつかめるものはないだろうか。',
-      actionsRemaining: 4,
+      obstacle: { title: scenario.obstacles[0].title.ja, index: 0, count: 3 },
+      situation: scenario.obstacles[0].situationDisplay.ja,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
       paused: false,
@@ -195,6 +208,10 @@ const fs = require('node:fs');
         hasPlay = true;
         controller = body.clientId;
         return respond(route, { ...envelope(), playId: 'play-one', controlEpoch: epoch }, 201);
+      }
+      if (url.pathname === '/api/play/ending') {
+        assert.equal(url.searchParams.get('playId'), 'play-one');
+        return respond(route, { error: { code: 'ENDING_NOT_FOUND' } }, 404);
       }
       assert.equal(route.request().headers()['x-play-id'], 'play-one');
       if (url.pathname === '/api/play/assets/scene-1') {
@@ -267,6 +284,7 @@ const fs = require('node:fs');
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
+        if (body.images.length) state.photoSendsRemaining--;
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -318,7 +336,7 @@ const fs = require('node:fs');
           failAction = false;
           return route.abort('failed');
         }
-        state.actionsRemaining--;
+        state.actionsUsed++;
         state.obstacle.index++;
         state.proposal = null;
         state.photoCount = 0;
@@ -342,11 +360,21 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole('combobox').inputValue(),
+      'en',
+      'English is the default even in a Japanese browser',
+    );
+    assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+    await page.getByRole('combobox').selectOption('ja');
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信', exact: true }).waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'), 'ja');
     await page.getByRole('combobox').selectOption('en');
-    await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: '合言葉で参加' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
     await enterCall();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));
@@ -373,6 +401,10 @@ const fs = require('node:fs');
       });
     }
     await assertMessengerLayout();
+    await page.getByText('現在の目標', { exact: true }).waitFor();
+    await page.getByText('残り時間', { exact: true }).waitFor();
+    await page.getByText('残り送信回数', { exact: true }).waitFor();
+    assert.equal(await page.locator('.messenger-clock strong').innerText(), '05:00');
     await page.screenshot({ path: 'artifacts/messenger-active-mobile.png', fullPage: true });
     await page.setViewportSize({ width: 320, height: 568 });
     await assertMessengerLayout();
@@ -542,15 +574,19 @@ const fs = require('node:fs');
     );
     fs.mkdirSync('artifacts', { recursive: true });
     await page.screenshot({ path: 'artifacts/core-p2-mobile.png', fullPage: true });
+    await page.reload();
+    await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'), 'ja', 'Japanese play restored');
     await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).click();
     state = {
       ...state,
       status: 'briefing',
       title: 'The locked laboratory',
       briefing: 'Your future self needs your help.',
-      obstacle: { ...state.obstacle, title: 'A stuck door' },
+      obstacle: { ...state.obstacle, title: scenario.obstacles[0].title.en },
       inputRevision: 0,
-      actionsRemaining: 4,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
     };
     await page.getByRole('combobox').selectOption('en');
     await enterCall(true);
@@ -580,8 +616,146 @@ const fs = require('node:fs');
       'English PC layout',
     );
     await page.screenshot({ path: 'artifacts/core-p3-en-restored.png', fullPage: true });
+
+    // Exercise the actual HUD across the warning boundary using authoritative mock state.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByText('Current objective', { exact: true }).waitFor();
+    await page.getByText('Time left', { exact: true }).waitFor();
+    await page.getByText('Photo sends left', { exact: true }).waitFor();
+    const objective = page.locator('.messenger-objective strong');
+    assert.equal(await objective.innerText(), scenario.obstacles[0].title.en);
+    const hudMetrics = await page.evaluate(() => {
+      const objective = document.querySelector('.messenger-objective');
+      const counters = document.querySelector('.messenger-counters');
+      return {
+        stacked: counters.getBoundingClientRect().top >= objective.getBoundingClientRect().bottom,
+        objectiveSize: getComputedStyle(objective.querySelector('strong')).fontSize,
+        numberSize: getComputedStyle(counters.querySelector('strong')).fontSize,
+      };
+    });
+    assert.deepEqual(hudMetrics, { stacked: true, objectiveSize: '20px', numberSize: '24px' });
+    await page.screenshot({ path: 'artifacts/hud-normal-en-mobile.png', fullPage: true });
+    await page
+      .locator('.messenger-info')
+      .screenshot({ path: 'artifacts/hud-header-normal-en.png' });
+    await page.setViewportSize({ width: 320, height: 568 });
+    await assertMessengerLayout();
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      false,
+    );
+    assert.ok(await objective.evaluate((e) => e.clientHeight > 26), 'long English objective wraps');
+    await page.screenshot({ path: 'artifacts/hud-small-en-mobile.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('.messenger-status').click();
+    assert.equal(await page.locator('.messenger-info').getAttribute('open'), '');
+    await page.getByText(state.situation, { exact: true }).waitFor();
+    await page.locator('.messenger-status').press('Enter');
+    assert.equal(await page.locator('.messenger-info').getAttribute('open'), null);
+    await page.evaluate(() => {
+      window.__clockWarnings = 0;
+      document.addEventListener('animationstart', (event) => {
+        if (event.animationName === 'clock-warning-pulse') window.__clockWarnings++;
+      });
+    });
+    state.remainingMs = 60_001;
+    state.photoSendsRemaining = 3;
+    await page.locator('.messenger-clock strong').getByText('01:01', { exact: true }).waitFor();
+    assert.equal(
+      await page.locator('.messenger-resource.is-urgent, .messenger-resource.is-caution').count(),
+      0,
+    );
+    state.remainingMs = 60_000;
+    state.photoSendsRemaining = 2;
+    await page.locator('.messenger-clock.is-urgent').waitFor();
+    await page.locator('.messenger-action-count.is-caution').waitFor();
+    await page.waitForFunction(() => window.__clockWarnings === 1);
+    assert.equal(await page.locator('.messenger-clock strong').innerText(), '01:00');
+    assert.equal(await page.locator('.messenger-warning-icon').count(), 2);
+    await page.waitForTimeout(1100);
+    state.remainingMs = 59_000;
+    await page.locator('.messenger-clock strong').getByText('00:59', { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => window.__clockWarnings),
+      1,
+      'ticks do not replay warning',
+    );
+    await page.screenshot({ path: 'artifacts/hud-warning-en-mobile.png', fullPage: true });
+    await page.locator('.messenger-status').evaluate((e) => e.blur());
+    await page
+      .locator('.messenger-info')
+      .screenshot({ path: 'artifacts/hud-header-warning-en.png' });
+    state.photoSendsRemaining = 1;
+    await page.locator('.messenger-action-count.is-urgent').waitFor();
+    assert.equal(await page.locator('.messenger-action-count strong').innerText(), '1');
+    state.photoSendsRemaining = 0;
+    await page.locator('.messenger-action-count strong').getByText('0', { exact: true }).waitFor();
+    await page
+      .getByText(
+        'No photo sends left. Keep giving voice instructions using the tools already sent.',
+        { exact: true },
+      )
+      .waitFor();
+    assert.equal(
+      await page.locator('.messenger-complete').count(),
+      0,
+      'zero sends does not end the game',
+    );
+    assert.equal(
+      await page.getByRole('button', { name: 'Camera', exact: true }).isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page
+        .getByRole('button', { name: 'Choose from photo library / files', exact: true })
+        .isDisabled(),
+      true,
+    );
+    assert.equal(
+      await page.getByRole('button', { name: 'Send photo', exact: true }).isDisabled(),
+      true,
+    );
+    state.actionsUsed++;
+    state.obstacle = { ...state.obstacle, index: 1, title: scenario.obstacles[1].title.en };
+    await objective.getByText(scenario.obstacles[1].title.en, { exact: true }).waitFor();
+    assert.equal(await page.getByText(scenario.obstacles[0].title.en, { exact: true }).count(), 0);
+    await page.reload();
+    await page.locator('.messenger-clock.is-urgent').waitFor();
+    assert.equal(
+      await page.locator('.messenger-action-count strong').innerText(),
+      '0',
+      'zero sends survives restore',
+    );
+    assert.equal(
+      await page.locator('.clock-warning-pulse').count(),
+      0,
+      'restoring a low timer does not animate',
+    );
+    // A fresh mount above the boundary with reduced motion still changes color and warning text.
+    state.remainingMs = 61_000;
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.reload();
+    await page.locator('.messenger-clock strong').getByText('01:01', { exact: true }).waitFor();
+    state.remainingMs = 58_000;
+    await page.locator('.messenger-clock.is-urgent').waitFor();
+    assert.equal(
+      await page.locator('.messenger-clock').evaluate((e) => getComputedStyle(e).animationName),
+      'none',
+    );
+    assert.match(
+      await page.getByRole('status').filter({ hasText: 'One minute' }).innerText(),
+      /One minute or less/,
+    );
+    state.status = 'expired';
+    await page.getByText('Call ended', { exact: true }).first().waitFor();
+    assert.equal(
+      await page.locator('.messenger-counters').count(),
+      0,
+      'terminal state hides resources',
+    );
+    assert.deepEqual(pageErrors, []);
     console.log(
-      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout. Fake API/media only.',
+      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, bilingual HUD, warning thresholds, single animation, restore and reduced motion. Fake API/media only.',
     );
   } finally {
     await browser.close();

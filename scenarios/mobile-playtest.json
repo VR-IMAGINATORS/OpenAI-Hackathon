@@ -14,8 +14,8 @@
     "en": "Your future self is calling for help. Photograph everyday objects and describe your idea to open a path to escape."
   },
   "rules": {
-    "maxActions": 4,
-    "maxPhotosPerAction": 2,
+    "maxPhotoSends": 4,
+    "maxPhotosPerSend": 2,
     "totalTimeSeconds": 300
   },
   "setting": {
@@ -31,8 +31,8 @@
     {
       "id": "restraint",
       "title": {
-        "ja": "手首の拘束",
-        "en": "Bound Wrists"
+        "ja": "手首の拘束を外す",
+        "en": "Remove the wrist restraints"
       },
       "situation": "椅子に座った状態で手首が縄で縛られている。",
       "goal": "手首を自由にする",
@@ -69,8 +69,8 @@
     {
       "id": "door",
       "title": {
-        "ja": "開かない扉",
-        "en": "The Jammed Door"
+        "ja": "扉を開ける",
+        "en": "Open the door"
       },
       "situation": "倉庫の扉は内側の錆びた留め金で固定されている。",
       "goal": "扉を通れる状態にする",
@@ -107,8 +107,8 @@
     {
       "id": "escape",
       "title": {
-        "ja": "外への通路",
-        "en": "The Way Outside"
+        "ja": "捕まらずに外へ出る",
+        "en": "Escape without getting caught"
       },
       "situation": "外へ続く通路には監禁犯の気配がある。",
       "goal": "監禁犯に捕まらず外へ出る",

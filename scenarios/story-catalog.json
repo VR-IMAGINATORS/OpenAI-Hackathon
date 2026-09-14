@@ -1,0 +1,1321 @@
+{
+  "version": 3,
+  "id": "call-to-the-past-stories",
+  "title": {
+    "ja": "Call to the Past — 未来からの着信",
+    "en": "Call to the Past — A Call from the Future"
+  },
+  "playerBriefing": {
+    "ja": "一週間後のあなたを、写真と声で助けよう。手元の物の写真を送り、どこへどう使うかメイと相談して指示します。相談や撮影だけでは行動を消費しません。",
+    "en": "Help your future self one week from now with photos and your voice. Send a photo of an object nearby, discuss where and how to use it with Mei, then give an instruction. Talking or taking a photo alone does not spend an action."
+  },
+  "rules": {
+    "maxPhotoSends": 4,
+    "maxPhotosPerSend": 2,
+    "totalTimeSeconds": 300
+  },
+  "story": {
+    "aiName": {
+      "ja": "メイ",
+      "en": "Mei"
+    },
+    "world": {
+      "ja": "メイはあなた専属のサポートAI。一週間後、何者かに監禁されたあなたの衣服の緊急端末で動き、通常通信が遮断されたため、同じ持ち主の一週間前の同期記録へ一度だけ届く非常回線で連絡した。行き来するのは声・写真・使用指示だけで、人や実物は移動しない。端末の再構成器が写真に見える形・材質・働きを再現し、メイが手前側の見える作業範囲で道具を保持・操作する。力は道具を通して伝わり、壁・扉・格子の向こうへ直接生成したり、道具なしで拘束や扉を動かしたり人を運んだりはできない。端末は攻略道具にせず、新しい射程や重量の合否条件も作らない。端末のカメラは目隠し中も観察できるが、人間の視界が戻ったとは言わない。薄い端末の青白い表示灯と最初に決めた位置を保ち、人型や顔を持つAIを追加しない。過去の予定変更でこの未来が即座に消える保証はなく、目的は目の前のあなたを助けること。通報の提案を否定しないが、それだけで拘束を解除しない。事件の日時・所在地・犯人は観測の範囲だけ語る。壁の向こうや犯人の考えを知ることはできず、隠れた機能や鍵の認証を補わない。犯人の目的は固定せず、舞台の謎と提示済みの伏線から展開する。死亡を断定しない。これはゲーム内の未来で、現実の事件の予告ではない。落ち着いた敬体で短く話し、成功した工夫に具体的に応答する。",
+      "en": "Mei is your personal support AI, running on a thin emergency device attached to your future self's clothing one week from now. Someone has imprisoned you and blocked ordinary communications. An emergency line connects once to the same owner's synchronization record from one week earlier. Only voice, photos and instructions travel; people and physical objects do not. The device reconstructs visible shapes, materials and functions from photos. Mei holds and operates tools in the visible working area on the near side; force acts through tools. Tools cannot appear beyond walls, doors or bars. Mei cannot directly move restraints, bare doors or people without a tool, or use the device itself as a puzzle tool. Do not invent range or weight thresholds. The camera still sees when the human is blindfolded; human vision remains blocked. Keep the thin device's established position and pale blue indicator; do not add a humanoid AI or face. Changing plans in the past does not guarantee this connected future disappears. Mei chooses to help the person here now. Accept suggestions to contact authorities, but do not treat a call as releasing restraints. Report dates, location and the captor only as observed; do not see through walls, read minds or invent hidden functions or key authentication. Develop motives from the scene mystery and clues actually presented, without a fixed culprit. Do not assume death. This future is fictional, not a prediction of a real incident. Speak briefly, calmly and politely; respond specifically to successful ideas."
+    },
+    "phases": {
+      "opening": {
+        "ja": "冷たさ・埃・遠い物音など情景を一つ添える。初期の謎を一つ示し、観察と推測を分けて現在の拘束に集中する。犯人の正体や後続障害を先出しせず、短い会話で進める。",
+        "en": "Add one sensory detail, such as cold, dust or a distant sound. Present the initial clue, separate observation from inference and focus on the current restraint. Keep dialogue brief; do not reveal a culprit or later obstacles."
+      },
+      "middle": {
+        "ja": "一つ解除した進展と広がった観察範囲に応答する。近くの足音や隙間の影を短く描き、提示済みの伏線の受け取り方を揺らす。確定していない事実や追加の失敗条件は作らず、現在障害と残る部分進展を明瞭に伝える。",
+        "en": "Acknowledge the first obstacle cleared and the newly visible area. Briefly describe nearby steps or a shadow and suggest a different reading of a clue already presented. Do not invent confirmed facts or extra failure conditions. Clearly describe the current obstacle and remaining partial progress."
+      },
+      "final": {
+        "ja": "足音が遠ざかった後の静けさなど、抜け出す機会を短く描く。確定した二つの解除を踏まえ、現在障害と最後の出口へのつながりを明瞭にする。伏線の答えや未確定の脱出を断言せず、第四の障害を追加しない。",
+        "en": "Briefly convey an opportunity to leave, such as silence after retreating footsteps. With two confirmed obstacles cleared, explain the connection between the current obstacle and the final exit. Do not assert an answer to the mystery or unconfirmed escape, or add a fourth obstacle."
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene-echo-platform",
+      "name": {
+        "ja": "暗い倉庫",
+        "en": "Dark Warehouse"
+      },
+      "description": {
+        "ja": "窓のない暗い倉庫。使える道具は置かれておらず、床に固定された椅子と棚、奥へ続く通路と出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。壁の避難経路図は、出口のすぐ外が障害のない屋外退避路だと示している。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。遠くの足音が止まったり戻ったりする。",
+        "en": "A dark warehouse with no windows or usable tools. There is a chair fixed to the floor, shelving, a passage deeper inside and an exit. Only one part of your future self is restrained; other body parts can move. An evacuation map shows an unobstructed outdoor escape path immediately beyond the exit. Photographed tools appear only in the visible working area on the near side of their target, and Mei carries them from there. They cannot appear through walls, doors or bars. Distant footsteps stop and return."
+      },
+      "anchor": {
+        "ja": "一週間後の中性的な成人を背後から描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、暗いコンクリート床を固定する。",
+        "en": "Show a gender-neutral adult one week in the future from behind, without showing the face. Keep the charcoal hooded jacket, gray trousers and dark concrete floor consistent."
+      },
+      "mystery": {
+        "ja": "誰が未来の自分をここへ閉じ込め、現在へ届く黒い録音だけを残したのか。",
+        "en": "Who imprisoned your future self here, leaving only a black recording that reaches the present?"
+      },
+      "openingClue": {
+        "ja": "ここには、今のあなたへ届く黒い録音が残されています。誰が残したのか、まだ分かりません。",
+        "en": "A black recording left here reaches you in the present. We do not yet know who left it."
+      },
+      "sequences": [
+        ["gimmick-pressure-latch", "gimmick-magnetic-rail", "gimmick-thermal-leak"],
+        ["gimmick-light-gate", "gimmick-moisture-sensor", "gimmick-cable-tension"],
+        ["gimmick-balance-cradle", "gimmick-optical-alignment", "gimmick-inkless-codeplate"]
+      ]
+    },
+    {
+      "id": "scene-tidal-archive",
+      "name": {
+        "ja": "コンクリート地下室",
+        "en": "Concrete Basement"
+      },
+      "description": {
+        "ja": "低い天井のコンクリート地下室。使える道具はなく、床に固定された椅子と棚、奥へ続く通路と出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。壁の避難経路図は、出口から照明された開放済みの地上退避路へ出られることを示している。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。階段側から近づく足音が響く。",
+        "en": "A low-ceilinged concrete basement with no usable tools. There is a chair fixed to the floor, shelving, a passage deeper inside and an exit. Only one part of your future self is restrained; other body parts can move. An evacuation map shows that the exit leads to a lit, already open route to the surface. Photographed tools appear only in the visible working area on the near side of their target, and Mei carries them from there. They cannot appear through walls, doors or bars. Footsteps approach from the stairs."
+      },
+      "anchor": {
+        "ja": "中性的な成人を背後か肩越しで描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、湿ったコンクリート壁を固定する。",
+        "en": "Show a gender-neutral adult from behind or over the shoulder, without showing the face. Keep the charcoal hooded jacket, gray trousers and damp concrete walls consistent."
+      },
+      "mystery": {
+        "ja": "壁の黒い手形が一週間後の自分のものと一致するのに、付いた日時だけが現在より前である理由。",
+        "en": "Why does the black handprint on the wall match your future self, while its recorded date is earlier than the present?"
+      },
+      "openingClue": {
+        "ja": "壁の黒い手形が、こちらのあなたのものと一致しています。でも、付いた日時は今のあなたがいる日より前なんです。",
+        "en": "The black handprint on the wall matches your future self. But its recorded date is earlier than the day you are calling from."
+      },
+      "sequences": [
+        ["gimmick-light-gate", "gimmick-resonance-lock", "gimmick-thermal-leak"],
+        ["gimmick-balance-cradle", "gimmick-magnetic-rail", "gimmick-cable-tension"],
+        ["gimmick-pressure-latch", "gimmick-moisture-sensor", "gimmick-inkless-codeplate"]
+      ]
+    },
+    {
+      "id": "scene-greenhouse-ring",
+      "name": {
+        "ja": "廃病院",
+        "en": "Abandoned Hospital"
+      },
+      "description": {
+        "ja": "照明の切れた廃病院の隔離室。使える道具はなく、床に固定された診察椅子、奥へ続く通路と出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。出口の細窓からは、障害物のない明るい屋外退避路が見える。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。廊下の向こうで誰かがドアを確かめている。",
+        "en": "An unlit isolation room in an abandoned hospital, with no usable tools. There is an examination chair fixed to the floor, a passage deeper inside and an exit. Only one part of your future self is restrained; other body parts can move. Through the narrow exit window, a bright outdoor escape path is visibly clear of obstacles. Photographed tools appear only in the visible working area on the near side of their target, and Mei carries them from there. They cannot appear through walls, doors or bars. Someone is checking doors farther down the corridor."
+      },
+      "anchor": {
+        "ja": "中性的な成人を後ろ姿で描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、剥がれた白壁と冷たい非常灯を固定する。",
+        "en": "Show a gender-neutral adult from behind, without showing the face. Keep the charcoal hooded jacket, gray trousers, peeling white walls and cold emergency lights consistent."
+      },
+      "mystery": {
+        "ja": "存在しない患者名で記された退院記録が、未来の自分にだけ帰る場所を指している理由。",
+        "en": "Why does a discharge record under a nonexistent patient name point to a place only your future self can return to?"
+      },
+      "openingClue": {
+        "ja": "存在しない患者名の退院記録があります。帰る場所の記載は、こちらのあなたにだけつながっているようです。",
+        "en": "There is a discharge record under a nonexistent patient name. Its destination seems connected only to your future self."
+      },
+      "sequences": [
+        ["gimmick-pressure-latch", "gimmick-resonance-lock", "gimmick-cable-tension"],
+        ["gimmick-light-gate", "gimmick-optical-alignment", "gimmick-thermal-leak"],
+        ["gimmick-balance-cradle", "gimmick-moisture-sensor", "gimmick-inkless-codeplate"]
+      ]
+    },
+    {
+      "id": "scene-sleeping-observatory",
+      "name": {
+        "ja": "使われていないボイラー室",
+        "en": "Disused Boiler Room"
+      },
+      "description": {
+        "ja": "冷えた配管が並ぶ使われていないボイラー室。使える道具はなく、床に固定された椅子と固定配管、奥へ続く通路と出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。耐熱窓越しに、出口の外へ続く障害物のない開放済み退避路が見える。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。上階から金属音と足音が近づく。",
+        "en": "A disused boiler room lined with cold pipes, with no usable tools. There is a chair fixed to the floor, fixed piping, a passage deeper inside and an exit. Only one part of your future self is restrained; other body parts can move. A heat-resistant window shows an already open, unobstructed escape path beyond the exit. Photographed tools appear only in the visible working area on the near side of their target, and Mei carries them from there. They cannot appear through walls, doors or bars. Metallic sounds and footsteps approach from upstairs."
+      },
+      "anchor": {
+        "ja": "中性的な成人を背後から描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、錆びた配管と暗い床を固定する。",
+        "en": "Show a gender-neutral adult from behind, without showing the face. Keep the charcoal hooded jacket, gray trousers, rusty pipes and dark floor consistent."
+      },
+      "mystery": {
+        "ja": "ボイラーの黒い煤に残る『まだ戻るな』という文字が、未来の自分の筆跡である理由。",
+        "en": "Why are the words Do not return yet, written in black soot on the boiler, in your future self's handwriting?"
+      },
+      "openingClue": {
+        "ja": "ボイラーの黒い煤に「まだ戻るな」と書かれています。こちらのあなたの筆跡です。",
+        "en": "The words \"Do not return yet\" are written in black soot on the boiler, in your future self's handwriting."
+      },
+      "sequences": [
+        ["gimmick-balance-cradle", "gimmick-moisture-sensor", "gimmick-thermal-leak"],
+        ["gimmick-light-gate", "gimmick-magnetic-rail", "gimmick-inkless-codeplate"],
+        ["gimmick-pressure-latch", "gimmick-optical-alignment", "gimmick-cable-tension"]
+      ]
+    },
+    {
+      "id": "scene-mirror-infirmary",
+      "name": {
+        "ja": "施錠された輸送コンテナ",
+        "en": "Locked Shipping Container"
+      },
+      "description": {
+        "ja": "夜の積み場に置かれた施錠済み輸送コンテナ。使える道具はなく、固定された座席、内部の仕切り、外へ通じる出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。出口の明かり取りからは、柵で守られた障害物のない退避レーンが見える。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。外で鍵束の音が近づく。",
+        "en": "A locked shipping container at a loading yard at night, with no usable tools. There is a fixed seat, an internal partition and an exit to the outside. Only one part of your future self is restrained; other body parts can move. Light entering near the exit reveals a fenced escape lane clear of obstacles. Photographed tools appear only in the visible working area on the near side of their target, and Mei carries them from there. They cannot appear through walls, doors or bars. A bunch of keys rattles closer outside."
+      },
+      "anchor": {
+        "ja": "中性的な成人を後ろ姿で描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、波打つ金属壁と細い外光を固定する。",
+        "en": "Show a gender-neutral adult from behind, without showing the face. Keep the charcoal hooded jacket, gray trousers, corrugated metal walls and narrow outside light consistent."
+      },
+      "mystery": {
+        "ja": "コンテナ内壁に残る荷札が、未来の自分を荷物として発送した送り主を示している理由。",
+        "en": "Why does the shipping label on the inner wall identify someone who sent your future self as cargo?"
+      },
+      "openingClue": {
+        "ja": "内壁に荷札が残っています。荷物として記されているのは、こちらのあなたです。送り主の記載もあります。",
+        "en": "A shipping label remains on the inner wall. The cargo listed is your future self, and a sender is recorded too."
+      },
+      "sequences": [
+        ["gimmick-light-gate", "gimmick-resonance-lock", "gimmick-inkless-codeplate"],
+        ["gimmick-pressure-latch", "gimmick-magnetic-rail", "gimmick-cable-tension"],
+        ["gimmick-balance-cradle", "gimmick-optical-alignment", "gimmick-thermal-leak"]
+      ]
+    },
+    {
+      "id": "scene-return-corridor",
+      "name": {
+        "ja": "地下アーカイブ",
+        "en": "Underground Archive"
+      },
+      "description": {
+        "ja": "閉じた地下アーカイブの書庫。使える道具はなく、床に固定された椅子と棚、奥へ続く通路と出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。壁の避難経路図は、出口の外が地上へ続く障害物のない開放済み退避路だと示している。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。奥から影と足音が近づく。",
+        "en": "A closed underground archive with no usable tools. There is a chair fixed to the floor, shelving, a passage deeper inside and an exit. Only one part of your future self is restrained; other body parts can move. An evacuation map shows an already open, unobstructed route to the surface beyond the exit. Photographed tools appear only in the visible working area on the near side of their target, and Mei carries them from there. They cannot appear through walls, doors or bars. A shadow and footsteps approach from deeper inside."
+      },
+      "anchor": {
+        "ja": "中性的な成人を遠景の背中として描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、黒い書架と狭い非常灯を固定する。",
+        "en": "Show a gender-neutral adult from behind at a distance, without showing the face. Keep the charcoal hooded jacket, gray trousers, black bookshelves and narrow emergency lights consistent."
+      },
+      "mystery": {
+        "ja": "封印された記録に、未来の自分が消える時刻と現在の自分の返答が並んでいる理由。",
+        "en": "Why does a sealed record place the time of your future self's disappearance beside your present-day reply?"
+      },
+      "openingClue": {
+        "ja": "封印された記録に、こちらのあなたが消える時刻と、今のあなたの返答が並んでいます。なぜ記録されているのかは分かりません。",
+        "en": "A sealed record places the time of your future self's disappearance beside your present-day reply. We do not know why they are recorded."
+      },
+      "sequences": [
+        ["gimmick-balance-cradle", "gimmick-resonance-lock", "gimmick-cable-tension"],
+        ["gimmick-pressure-latch", "gimmick-moisture-sensor", "gimmick-thermal-leak"],
+        ["gimmick-light-gate", "gimmick-optical-alignment", "gimmick-inkless-codeplate"]
+      ]
+    }
+  ],
+  "gimmicks": [
+    {
+      "id": "gimmick-pressure-latch",
+      "stage": "restraint",
+      "name": {
+        "ja": "布の目隠し",
+        "en": "Cloth Blindfold"
+      },
+      "objective": {
+        "ja": "目隠しを外して視界を取り戻す",
+        "en": "Remove the blindfold to restore vision"
+      },
+      "observation": {
+        "ja": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。",
+        "en": "The blindfold's head strap and under-chin retaining strap meet at one knot, preventing it from sliding up or down. The knot below the ear is hardened with resin and cannot be untied with fingers. Turning the head sideways lets the shoulder camera see the main strap leading to the knot, held away from skin and hair, and a short loose tail. There are no other bodily restraints."
+      },
+      "mechanism": {
+        "ja": "頭の帯と顎下のずれ止めをまとめる結びが樹脂で固定されているため、素手でほどいたり目隠しを上下へずらしたりはできない。皮膚から離れた帯本体を切断すると、共通の結びを支える張力が失われて目隠し全体が外れる。工具で固められた結び自体を崩す別解も、具体的な物性と使い方が十分なら認める。余り端だけを切っても張力は残る。",
+        "en": "Resin fixes the common knot joining the head and under-chin straps, so fingers cannot untie it and the blindfold cannot slide up or down. Cutting the main strap away from the skin removes the tension supporting the knot and releases the entire blindfold. Breaking apart the hardened common knot with a tool is also valid when the properties and use are sufficient. Cutting only the loose tail leaves the tension intact."
+      },
+      "hints": [
+        {
+          "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
+          "en": "The head strap and under-chin strap meet at a hardened knot."
+        },
+        {
+          "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
+          "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+        },
+        {
+          "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
+          "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したはさみを使い、AIが顔や髪から浮いた耳の下側の帯本体を切る意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses scissors reconstructed from one photo to cut the main strap below the ear, away from the face and hair."
+        },
+        {
+          "ja": "同じ切断作用を持つ道具で帯本体を断つか、工具で樹脂に固められた共通の結びを崩して全体を緩める意図が明確なら1行動で評価する。",
+          "en": "Evaluate another cutting tool that severs the main strap, or a tool that breaks apart the resin-hardened common knot and loosens the whole blindfold, in one action when the use is clear."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "帯本体か結びか、道具をどう使うかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the target strap or knot, or the tool use, is unclear."
+        },
+        {
+          "ja": "短い余り端だけを切るなど、帯本体の張力も結びも解けない使い方は解除失敗になる。",
+          "en": "Cutting only the loose tail fails if the main strap tension and common knot remain intact."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: はさみで皮膚から浮いた帯本体を切る。指定名に限定せず、同じ切断作用や固められた結びを崩せる作用を持つ代用品も評価する。",
+          "en": "Example: cut the main strap away from the skin with scissors. Accept substitutes providing the same cutting effect or breaking apart the hardened knot; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-resin-wedge"],
+          "requiredProperties": ["cutting-edge", "hinged"],
+          "use": {
+            "ja": "AIが手前に具現化したはさみを運び、顔や髪から浮いた耳の下側で結びへ続く帯本体を切る。",
+            "en": "Mei carries scissors reconstructed on the near side and cuts the main strap leading to the knot below the ear, away from face and hair."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "共通の結びを支える張力が失われ、顎下のずれ止めごと目隠し全体が外れて視界が戻る。",
+              "en": "The common knot loses its supporting tension; the entire blindfold, including its under-chin strap, comes off and human vision returns."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。",
+          "en": "The blindfold's head strap and under-chin retaining strap meet at one knot, preventing it from sliding up or down. The knot below the ear is hardened with resin and cannot be untied with fingers. Turning the head sideways lets the shoulder camera see the main strap leading to the knot, held away from skin and hair, and a short loose tail. There are no other bodily restraints."
+        },
+        "partial": {
+          "ja": "帯や固めた結びへの有効な変化があるが、全体の張力はまだ残り、目隠しは外れていない。変化した箇所は確定した状況に従う。",
+          "en": "The strap or hardened knot has changed, but tension remains and the blindfold is still on. Follow the confirmed situation for the exact change."
+        },
+        "cleared": {
+          "ja": "共通の結びを支える張力が失われ、顎下のずれ止めごと目隠し全体が外れて視界が戻る。",
+          "en": "The common knot loses its supporting tension; the entire blindfold, including its under-chin strap, comes off and human vision returns."
+        }
+      }
+    },
+    {
+      "id": "gimmick-light-gate",
+      "stage": "restraint",
+      "name": {
+        "ja": "椅子のロープ結び",
+        "en": "Rope Tied to the Chair"
+      },
+      "objective": {
+        "ja": "椅子につながるロープを外す",
+        "en": "Free your arms from the chair"
+      },
+      "observation": {
+        "ja": "未来の自分の両手首が、椅子の左肘掛けへ一本のロープでつながれている。肩の端末カメラから、身体と離れた肘掛け側の結びと張った連結部分が見える。ほかに身体の拘束はない。",
+        "en": "Both wrists of your future self are tethered to the chair's left armrest by one rope. The shoulder camera shows the taut connecting section and the armrest-side knot, away from the body. There are no other bodily restraints."
+      },
+      "mechanism": {
+        "ja": "身体から離れた椅子側の連結部分を切断するか、その結びをほどくと、ロープの張力が失われて腕が椅子から外れる。",
+        "en": "Cutting the chair-side connecting section away from the body, or undoing its knot, removes the rope tension and releases the arms from the chair."
+      },
+      "hints": [
+        {
+          "ja": "身体から離れた椅子側に、ロープの連結部分と結び目がある。",
+          "en": "The rope connection and knot are on the chair side, away from the body."
+        },
+        {
+          "ja": "椅子との連結を一か所断つか、結びをほどけば腕が自由になる。",
+          "en": "Severing the connection to the chair at one point, or undoing the knot, frees the arms."
+        },
+        {
+          "ja": "AIが手前に具現化したカッターで、椅子側のロープだけを切れる。",
+          "en": "Mei can use a utility knife reconstructed on the near side to cut only the chair-side rope."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したカッターを使い、AIが身体から離れた椅子側の連結部分を切る意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses a utility knife reconstructed from one photo to cut the chair-side connecting section away from the body."
+        },
+        {
+          "ja": "同じ切断作用を持つ道具で連結部分を断つ、または結びをほどける道具で椅子側の結びを解く意図が明確なら1行動で評価する。",
+          "en": "Evaluate another cutting tool that severs the connection, or a tool that undoes the chair-side knot, in one action when the use is clear."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "椅子側の連結部分か結びか、道具をどう使うかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the chair-side connection or knot, or tool use, is unclear."
+        },
+        {
+          "ja": "連結部分を断てず、結びもほどけず、ロープの張力が残る使い方は解除失敗になる。",
+          "en": "Fail if the connection remains uncut, the knot remains tied and the rope stays taut."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: カッターで身体から離れた椅子側のロープを切る。指定名に限定せず、同じ切断または解結びの作用を生じる代用品も評価する。",
+          "en": "Example: cut the chair-side rope away from the body with a utility knife. Accept substitutes providing the same cutting or untying effect; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-mirror-sheet"],
+          "requiredProperties": ["cutting-edge", "gripped"],
+          "use": {
+            "ja": "AIが手前に具現化したカッターを運び、身体から離れた椅子側の連結部分を一か所切る。",
+            "en": "Mei carries a utility knife reconstructed on the near side and cuts the chair-side connection once, away from the body."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "連結を失ったロープが緩み、未来の自分の腕が椅子から外れる。",
+              "en": "The disconnected rope loosens and your future self's arms are released from the chair."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "未来の自分の両手首が、椅子の左肘掛けへ一本のロープでつながれている。肩の端末カメラから、身体と離れた肘掛け側の結びと張った連結部分が見える。ほかに身体の拘束はない。",
+          "en": "Both wrists of your future self are tethered to the chair's left armrest by one rope. The shoulder camera shows the taut connecting section and the armrest-side knot, away from the body. There are no other bodily restraints."
+        },
+        "partial": {
+          "ja": "連結部分や結びに有効な変化があるが、腕と椅子のつながりが残っている。まだ椅子から腕を外せない。変化した箇所は確定した状況に従う。",
+          "en": "The connection or knot has changed, but the arms remain tethered to the chair. Follow the confirmed situation for the exact change."
+        },
+        "cleared": {
+          "ja": "連結を失ったロープが緩み、未来の自分の腕が椅子から外れる。",
+          "en": "The disconnected rope loosens and your future self's arms are released from the chair."
+        }
+      }
+    },
+    {
+      "id": "gimmick-balance-cradle",
+      "stage": "restraint",
+      "name": {
+        "ja": "足首の留め具",
+        "en": "Ankle Fastener"
+      },
+      "objective": {
+        "ja": "足首の留め具を外す",
+        "en": "Remove the ankle restraint"
+      },
+      "observation": {
+        "ja": "未来の自分の足首を帯状の留め具が囲む。保護カバーの細い穴から、帯を掛けているばね爪と、その爪を内側へ押せば帯が開く構造が見える。身体にはこの留め具以外の拘束がない。",
+        "en": "A band-shaped fastener surrounds your future self's ankle. Through a narrow hole in its protective cover, a spring catch holding the band is visible, along with the structure showing that pressing the catch inward opens the band. There are no other bodily restraints."
+      },
+      "mechanism": {
+        "ja": "保護カバーの穴から見えるばね爪を内側へ押し込むと、爪が帯から外れて留め具が開く。鍵の認証や鍵穴のピッキングではない。",
+        "en": "Pushing the spring catch inward through the visible cover hole disengages it from the band and opens the fastener. This is not key authentication or lock picking."
+      },
+      "hints": [
+        {
+          "ja": "細い穴の奥に、帯を掛けているばね爪が見える。",
+          "en": "A spring catch holding the band is visible through the narrow hole."
+        },
+        {
+          "ja": "穴からばね爪を内側へ押し込めば、帯が開く。",
+          "en": "Push the spring catch inward through the hole to open the band."
+        },
+        {
+          "ja": "AIが手前に具現化したヘアピンの硬い先端で、ばね爪を押せる。",
+          "en": "Mei can press the spring catch with the rigid tip of a hairpin reconstructed on the near side."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したヘアピンを使い、AIが細い穴から見えるばね爪を内側へ押し込む意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses a hairpin reconstructed from one photo to push the visible spring catch inward through the hole."
+        },
+        {
+          "ja": "穴を通る細く硬い先端で、観察できるばね爪へ同じ押込み作用を与える意図が明確なら1行動で評価する。",
+          "en": "Evaluate any slim, rigid tip that fits the hole and presses the visible catch inward in one action when the use is clear."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "ばね爪か押す方向か、道具をどう使うかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the spring catch, pushing direction or tool use is unclear."
+        },
+        {
+          "ja": "鍵の認証やピッキングを試すだけ、またはばね爪を内側へ押せず帯が掛かったままの使い方は解除失敗になる。",
+          "en": "Fail if the action only attempts key authentication or lock picking, or cannot push the catch inward and leaves the band engaged."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: ヘアピンで穴越しにばね爪を内側へ押す。指定名に限定せず、同じ押込み作用を生じる細く硬い代用品も評価する。",
+          "en": "Example: press the spring catch inward through the hole using a hairpin. Accept other slim, rigid tools providing the same push; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-weight-bag"],
+          "requiredProperties": ["slim", "rigid"],
+          "use": {
+            "ja": "AIが手前に具現化したヘアピンを運び、保護カバーの穴から見えるばね爪を内側へ押し込む。",
+            "en": "Mei carries a hairpin reconstructed on the near side and pushes the spring catch visible through the protective cover hole inward."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "ばね爪が帯から外れて留め具が開き、未来の自分の足首が自由になる。",
+              "en": "The spring catch disengages from the band, opening the fastener and freeing your future self's ankle."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "未来の自分の足首を帯状の留め具が囲む。保護カバーの細い穴から、帯を掛けているばね爪と、その爪を内側へ押せば帯が開く構造が見える。身体にはこの留め具以外の拘束がない。",
+          "en": "A band-shaped fastener surrounds your future self's ankle. Through a narrow hole in its protective cover, a spring catch holding the band is visible, along with the structure showing that pressing the catch inward opens the band. There are no other bodily restraints."
+        },
+        "partial": {
+          "ja": "ばね爪への有効な押込みなどがあるが、爪が帯から外れておらず、足首はまだ留め具に囲まれている。変化した箇所は確定した状況に従う。",
+          "en": "The catch has been moved or pressed, but remains engaged with the band and the ankle is still restrained. Follow the confirmed situation for the exact change."
+        },
+        "cleared": {
+          "ja": "ばね爪が帯から外れて留め具が開き、未来の自分の足首が自由になる。",
+          "en": "The spring catch disengages from the band, opening the fastener and freeing your future self's ankle."
+        }
+      }
+    },
+    {
+      "id": "gimmick-magnetic-rail",
+      "stage": "route",
+      "name": {
+        "ja": "内扉の引き輪",
+        "en": "Inner Door Pull Ring"
+      },
+      "objective": {
+        "ja": "内扉を開けて通路を確保する",
+        "en": "Open the inner door to clear the passage"
+      },
+      "observation": {
+        "ja": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。",
+        "en": "Beside the inner passage door is a small barred control window. Its bars cover only the window, not the doorway used by a person. A linkage connects the ring behind the bars to the door bolt, and an arrow points toward the near side. A tool seems able to pass through the narrow gaps."
+      },
+      "mechanism": {
+        "ja": "内扉脇の操作窓から道具を通し、奥の引き輪を手前へ引くと、連結金具が閂を引き込む。内扉は手前へ開き、操作窓の格子は横に残るので通路を塞がない。道具は手前で再構成し、操作窓の隙間を通して使う。",
+        "en": "Pass a tool through the control window beside the inner door and pull the ring toward the near side. The linkage retracts the bolt. The door opens toward the near side, and the window bars remain beside it without blocking passage. Reconstruct the tool on the near side and pass it through a gap."
+      },
+      "hints": [
+        {
+          "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
+          "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+        },
+        {
+          "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
+          "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+        },
+        {
+          "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
+          "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したマジックハンドを格子の手前から隙間へ通し、AIが引き輪をつかんで手前へ引く意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei passes a reaching grabber reconstructed from one photo through the bars from the near side, grasps the ring and pulls it toward the near side."
+        },
+        {
+          "ja": "格子の隙間から輪へ届き、手前へ引く力を伝えられる別の道具と使い方が明確なら1行動で評価する。",
+          "en": "Evaluate another tool and use that reaches the ring through a gap and transmits pulling force toward the near side in one action."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "引き輪か手前へ引く方向か、道具をどう通すかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the ring, pulling direction or way of passing the tool through is unclear."
+        },
+        {
+          "ja": "格子の奥へ直接生成する指示、または輪に届かず手前へ引く力も伝わらない使い方は解除失敗になる。",
+          "en": "Fail if instructed to generate the tool directly behind the bars, or if it neither reaches the ring nor transmits the required pulling force."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: マジックハンドを格子の隙間から通して輪をつかみ、手前へ引く。指定名に限定せず、同じ到達・把持・牽引作用を生じる代用品も評価する。",
+          "en": "Example: pass a reaching grabber through a gap, grasp the ring and pull toward the near side. Accept substitutes that provide reach, grip and pulling force; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-ceramic-spacer"],
+          "requiredProperties": ["reaching", "gripping"],
+          "use": {
+            "ja": "AIが手前に具現化したマジックハンドを格子の隙間から通し、奥の引き輪をつかんで手前へ引く。",
+            "en": "Mei passes a reaching grabber reconstructed on the near side through a gap, grasps the ring behind the bars and pulls it toward the near side."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "連結金具が閂を引き込み、内扉が手前へ開いて出口までの経路が通る。",
+              "en": "The linkage retracts the bolt; the inner door opens toward the near side and the route to the exit becomes passable."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。",
+          "en": "Beside the inner passage door is a small barred control window. Its bars cover only the window, not the doorway used by a person. A linkage connects the ring behind the bars to the door bolt, and an arrow points toward the near side. A tool seems able to pass through the narrow gaps."
+        },
+        "partial": {
+          "ja": "輪や連結金具に有効な変化があるが、閂が引き込まれきらず内扉はまだ通れない。具体的な到達・把持・移動は確定した状況に従う。",
+          "en": "The ring or linkage has changed, but the bolt is not fully retracted and the doorway is not yet passable. Use the confirmed situation for exact reach, grip or movement."
+        },
+        "cleared": {
+          "ja": "連結金具が閂を引き込み、内扉が手前へ開いて出口までの経路が通る。",
+          "en": "The linkage retracts the bolt; the inner door opens toward the near side and the route to the exit becomes passable."
+        }
+      }
+    },
+    {
+      "id": "gimmick-moisture-sensor",
+      "stage": "route",
+      "name": {
+        "ja": "シャッターの踏み板",
+        "en": "Shutter Pressure Plate"
+      },
+      "objective": {
+        "ja": "シャッターを上げて通路を確保する",
+        "en": "Raise the shutter to clear the passage"
+      },
+      "observation": {
+        "ja": "通路を塞ぐシャッターの手前に踏み板があり、駆動モーターへ続く配線、板を押し切る終端、上がったシャッターを受ける上端の保持爪が見える。",
+        "en": "A pressure plate is on the near side of a shutter blocking the passage. Visible details include wiring to its drive motor, the plate's full-travel stop, and a retaining catch at the top to hold the raised shutter."
+      },
+      "mechanism": {
+        "ja": "踏み板を見えている終端まで押すと配線先のモーターがシャッターを上げ、上端の保持爪が掛かって開いたままになる。重りは保持に使われないため回収できる。",
+        "en": "Pressing the plate to its visible stop activates the wired motor, raising the shutter until the upper retaining catch engages and holds it open. The weight is not needed to keep it open and can be recovered."
+      },
+      "hints": [
+        {
+          "ja": "踏み板はモーターへ配線され、押し切る終端と上端の保持爪が見える。",
+          "en": "The plate is wired to the motor; its full-travel stop and the upper retaining catch are visible."
+        },
+        {
+          "ja": "踏み板を見える終端まで押せば、モーターがシャッターを上げ、保持爪が掛かる。",
+          "en": "Press the plate to its visible stop. The motor raises the shutter and the retaining catch engages."
+        },
+        {
+          "ja": "AIが手前に具現化した中身入りPETボトルを板へ置き、必要ならボトル越しに押し切れる。",
+          "en": "Mei can place a filled PET bottle reconstructed on the near side on the plate and, if needed, press through the bottle to reach the stop."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化した中身入りPETボトルを踏み板へ置き、AIが板を見える終端まで押し切る意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei places a filled PET bottle reconstructed from one photo on the plate and presses the plate to its visible stop."
+        },
+        {
+          "ja": "踏み板を観察できる終端まで押せる別の物や道具を使う意図が明確なら、重さの非公開閾値を設けず1行動で評価する。",
+          "en": "Evaluate another object or tool that presses the plate to the visible stop in one action; do not add a hidden weight threshold."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "使用対象の道具や、踏み板を見える終端まで押したいという意図が特定できない場合だけ、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action only if the chosen tool or intention to press the plate to the visible stop is unclear."
+        },
+        {
+          "ja": "踏み板が見える終端まで押されず、モーターが作動しない使い方は解除失敗になる。",
+          "en": "Fail if the plate does not reach the visible stop and the motor is not activated."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: 中身入りPETボトルで踏み板を終端まで押す。指定名に限定せず、同じ押込み作用を生じる代用品も評価する。",
+          "en": "Example: press the plate to the stop with a filled PET bottle. Accept substitutes producing the same pressing effect; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-absorbent-pad"],
+          "requiredProperties": ["rigid", "portable"],
+          "use": {
+            "ja": "AIが手前に具現化した中身入りPETボトルを踏み板へ置き、必要ならボトル越しに押す力を加えて板を見える終端まで押し切る。",
+            "en": "Mei places a filled PET bottle reconstructed on the near side on the plate and, if necessary, presses through it until the plate reaches the visible stop."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "モーターで上がったシャッターに保持爪が掛かり、通路が開いたままになる。",
+              "en": "The motor raises the shutter and the retaining catch engages, leaving the passage open."
+            },
+            {
+              "ja": "中身入りPETボトルは壊れず、踏み板から回収して引き続き使える。",
+              "en": "The filled PET bottle remains intact and can be recovered from the plate for continued use."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "通路を塞ぐシャッターの手前に踏み板があり、駆動モーターへ続く配線、板を押し切る終端、上がったシャッターを受ける上端の保持爪が見える。",
+          "en": "A pressure plate is on the near side of a shutter blocking the passage. Visible details include wiring to its drive motor, the plate's full-travel stop, and a retaining catch at the top to hold the raised shutter."
+        },
+        "partial": {
+          "ja": "踏み板などに有効な変化があるが、シャッターは保持爪で開いた状態になっていない。通路は未確保。押込みや上昇の程度は確定した状況に従う。",
+          "en": "The plate or shutter has changed, but the shutter is not yet held open by the retaining catch and passage is unsecured. Follow the confirmed situation for movement."
+        },
+        "cleared": {
+          "ja": "モーターで上がったシャッターに保持爪が掛かり、通路が開いたままになる。 中身入りPETボトルは壊れず、踏み板から回収して引き続き使える。",
+          "en": "The motor raises the shutter and the retaining catch engages, leaving the passage open. The filled PET bottle remains intact and can be recovered from the plate for continued use."
+        }
+      }
+    },
+    {
+      "id": "gimmick-optical-alignment",
+      "stage": "route",
+      "name": {
+        "ja": "暗い非常通路",
+        "en": "Dark Emergency Passage"
+      },
+      "objective": {
+        "ja": "暗い非常通路の安全な進み方を確認する",
+        "en": "Find a safe route through the dark passage"
+      },
+      "observation": {
+        "ja": "出口へ続く非常通路は暗いが、床の段差の縁と、壁に固定された退避案内がわずかに反射する。通路の先が最後の出口につながっている。",
+        "en": "The emergency passage toward the exit is dark, but the edges of floor steps and a fixed evacuation sign on the wall reflect faintly. The passage leads to the final exit."
+      },
+      "mechanism": {
+        "ja": "床の段差と固定案内を足元から出口まで照らすと、安全に踏める場所と最後の出口への経路を確認できる。照明は未知の鍵や装置を解除するものではない。",
+        "en": "Lighting the floor steps and fixed signs from the feet to the exit reveals safe places to step and the route to the final exit. Light does not unlock an unknown lock or device."
+      },
+      "hints": [
+        {
+          "ja": "床の段差の縁と、出口へ続く固定案内が光を反射する。",
+          "en": "The edges of the steps and fixed exit directions reflect light."
+        },
+        {
+          "ja": "足元から出口まで照らせば、安全な足場と進行方向を確認できる。",
+          "en": "Lighting the route from your feet to the exit reveals safe footing and the direction to go."
+        },
+        {
+          "ja": "AIが手前に具現化した懐中電灯で、段差と案内を順に照らせる。",
+          "en": "Mei can shine a flashlight reconstructed on the near side on the steps and signs in order."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化した懐中電灯を使い、AIが床の段差と固定案内を足元から出口まで照らす意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses a flashlight reconstructed from one photo to illuminate the floor steps and fixed signs from the feet to the exit."
+        },
+        {
+          "ja": "同じ範囲を安全に照らせる別の光源で、足場と進行方向を確認する意図が明確なら1行動で評価する。",
+          "en": "Evaluate another light source that safely illuminates the same range to confirm footing and direction in one action."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "光源か、足元から出口までのどこを照らすかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the light source or area to illuminate between the feet and exit is unclear."
+        },
+        {
+          "ja": "足場と固定案内を確認できない照らし方、または光だけで未知の鍵を開けようとする使い方は解除失敗になる。",
+          "en": "Fail if the illumination does not reveal footing and fixed signs, or if light alone is supposed to open an unknown lock."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: 懐中電灯で段差の縁と退避案内を出口まで照らす。指定名に限定せず、同じ照明作用を生じる代用品も評価する。",
+          "en": "Example: shine a flashlight along the step edges and evacuation signs to the exit. Accept another source providing the same illumination; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-optic-fiber"],
+          "requiredProperties": ["illuminating", "handheld"],
+          "use": {
+            "ja": "AIが手前に具現化した懐中電灯で、床の段差と固定された退避案内を足元から出口まで照らす。",
+            "en": "Mei uses a flashlight reconstructed on the near side to illuminate the floor steps and fixed evacuation signs from the feet to the exit."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "安全な足場と最後の出口までの進行方向が確認され、非常通路を通れる。",
+              "en": "Safe footing and the direction to the final exit are confirmed, allowing passage through the emergency corridor."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "出口へ続く非常通路は暗いが、床の段差の縁と、壁に固定された退避案内がわずかに反射する。通路の先が最後の出口につながっている。",
+          "en": "The emergency passage toward the exit is dark, but the edges of floor steps and a fixed evacuation sign on the wall reflect faintly. The passage leads to the final exit."
+        },
+        "partial": {
+          "ja": "足元や案内の一部を確認できたが、最後の出口までの安全な足場と進行方向はまだ全体を確認できない。確認できた範囲は確定した状況に従う。",
+          "en": "Some footing or signs are visible, but safe footing and direction all the way to the final exit are not yet confirmed. Follow the confirmed situation for the visible area."
+        },
+        "cleared": {
+          "ja": "安全な足場と最後の出口までの進行方向が確認され、非常通路を通れる。",
+          "en": "Safe footing and the direction to the final exit are confirmed, allowing passage through the emergency corridor."
+        }
+      }
+    },
+    {
+      "id": "gimmick-resonance-lock",
+      "stage": "route",
+      "name": {
+        "ja": "曇った覗き窓",
+        "en": "Fogged Viewing Window"
+      },
+      "objective": {
+        "ja": "曇ったのぞき窓の向こうの経路を確認する",
+        "en": "Check the route beyond the fogged window"
+      },
+      "observation": {
+        "ja": "経路脇の覗き窓は手前側の結露で曇っている。曇りの向こうには、先の退避通路へ向かう固定表示の文字と矢印がぼんやり見える。",
+        "en": "The viewing window beside the route is fogged by condensation on its near side. Beyond the fog, lettering and an arrow on a fixed sign toward the next escape passage are faintly visible."
+      },
+      "mechanism": {
+        "ja": "覗き窓の手前側に付いた結露を拭き取ると、先の退避通路へ向かう固定表示が読め、進む経路を確認できる。",
+        "en": "Wiping condensation off the near side of the viewing window reveals the fixed sign toward the next escape passage, confirming the route."
+      },
+      "hints": [
+        {
+          "ja": "表示を隠しているのは、手前側の表面に付いた結露だけだ。",
+          "en": "Only condensation on the near-side surface hides the sign."
+        },
+        {
+          "ja": "手前側の結露を拭けば、先の退避通路へ向かう表示を読める。",
+          "en": "Wiping the near-side condensation lets you read the sign toward the next escape passage."
+        },
+        {
+          "ja": "AIが手前に具現化したタオルで、覗き窓の結露を拭き取れる。",
+          "en": "Mei can wipe condensation from the viewing window with a towel reconstructed on the near side."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したタオルを使い、AIが覗き窓の手前側の結露を拭いて表示を読む意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses a towel reconstructed from one photo to wipe the near-side condensation and read the sign."
+        },
+        {
+          "ja": "結露を拭き取れる別の布や道具で、固定表示を読める状態にする意図が明確なら1行動で評価する。",
+          "en": "Evaluate another cloth or tool that removes condensation enough to read the fixed sign in one action when the use is clear."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "覗き窓の手前側か、結露をどう拭くかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the near side of the window or how to wipe the condensation is unclear."
+        },
+        {
+          "ja": "結露が残って固定表示を読めない使い方、または窓の向こうへ道具を直接生成する指示は解除失敗になる。",
+          "en": "Fail if condensation still prevents reading the sign, or if the tool is supposed to appear directly beyond the window."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: タオルで手前側の結露を拭く。指定名に限定せず、同じ吸水・清拭作用を生じる代用品も評価する。",
+          "en": "Example: wipe near-side condensation with a towel. Accept substitutes providing the same absorption or wiping effect; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-resonance-chime"],
+          "requiredProperties": ["absorbent", "flexible"],
+          "use": {
+            "ja": "AIが手前に具現化したタオルで、覗き窓の手前側に付いた結露を拭き取る。",
+            "en": "Mei uses a towel reconstructed on the near side to wipe condensation from the near surface of the viewing window."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "先の退避通路へ向かう固定表示の文字と矢印が読め、進む経路が確認できる。",
+              "en": "The lettering and arrow toward the next escape passage become readable, confirming the route."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "経路脇の覗き窓は手前側の結露で曇っている。曇りの向こうには、先の退避通路へ向かう固定表示の文字と矢印がぼんやり見える。",
+          "en": "The viewing window beside the route is fogged by condensation on its near side. Beyond the fog, lettering and an arrow on a fixed sign toward the next escape passage are faintly visible."
+        },
+        "partial": {
+          "ja": "結露の一部を拭き取れたが、固定表示の文字と矢印をまだ読み取れず経路は確定していない。拭けた範囲は確定した状況に従う。",
+          "en": "Some condensation has been removed, but the fixed lettering and arrow are not yet readable and the route remains unconfirmed. Follow the confirmed situation for the cleared area."
+        },
+        "cleared": {
+          "ja": "先の退避通路へ向かう固定表示の文字と矢印が読め、進む経路が確認できる。",
+          "en": "The lettering and arrow toward the next escape passage become readable, confirming the route."
+        }
+      }
+    },
+    {
+      "id": "gimmick-thermal-leak",
+      "stage": "exit",
+      "name": {
+        "ja": "出口のネジ固定金具",
+        "en": "Screw-Fixed Exit Bracket"
+      },
+      "objective": {
+        "ja": "金具で固定された出口を開ける",
+        "en": "Open the exit secured by the metal bracket"
+      },
+      "observation": {
+        "ja": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。",
+        "en": "At the final exit, one large slotted screw secures a bracket blocking a horizontal bolt. The screw slot, a counterclockwise arrow and the bolt's travel direction are visible. An opening spring pushes the door toward the escape path."
+      },
+      "mechanism": {
+        "ja": "溝に合う硬い先端でネジを正面から反時計回りに回すと、金具を支える唯一の固定が解ける。金具を同じ先端で押し退け、露出した閂を横へ動かす。閂が抜けると開放ばねが扉を退避路側へ開く。『ネジを外して出口を開ける』という意図には、この見える連続操作を含めてよい。",
+        "en": "A rigid tip fitting the visible slot turns the screw counterclockwise from the front, releasing the bracket's only fastener. Push the bracket aside with the same tip and slide the exposed bolt sideways. Once the bolt retracts, the opening spring swings the door toward the escape path. An intention to remove the screw and open the exit can include this visible chain of operations."
+      },
+      "hints": [
+        {
+          "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
+          "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+        },
+        {
+          "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
+          "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+        },
+        {
+          "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
+          "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したマイナスドライバーを使い、AIがネジを反時計回りに外し、同じ道具で閂を横へ動かす意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses a flathead screwdriver reconstructed from one photo to remove the screw counterclockwise and move the bolt sideways with the same tool."
+        },
+        {
+          "ja": "観察できるネジ溝に合う硬い先端を持ち、ネジを回してから閂を動かせる別の道具なら評価する。硬貨も溝に合い同じ作用を生じる使い方なら1行動で解除する。",
+          "en": "Evaluate another rigid tip that fits the visible slot, turns the screw and then moves the bolt. A coin also clears in one action when it fits and produces the same effects."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "使用対象の道具や、出口の固定金具を外したいという意図が特定できない場合だけ、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action only if the chosen tool or intention to remove the exit bracket is unclear."
+        },
+        {
+          "ja": "先端が見えている溝に掛からない、ネジを外せない、または金具を外した後も閂を動かせない使い方は解除失敗になる。",
+          "en": "Fail if the tip cannot engage the visible slot, the screw cannot be removed, or the bolt cannot be moved after removing the bracket."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: マイナスドライバーでネジを反時計回りに外し、その先端で閂を横へ動かす。指定名に限定せず、同じ回転・移動作用を生じる硬貨などの代用品も評価する。",
+          "en": "Example: remove the screw counterclockwise with a flathead screwdriver, then move the bolt sideways with its tip. Accept substitutes such as a coin producing the same turning and movement; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-thermal-wrap"],
+          "requiredProperties": ["flat-tip", "rigid"],
+          "use": {
+            "ja": "AIが手前に具現化したマイナスドライバーでネジを正面から反時計回りに外し、同じ先端で露出した閂を横へ動かす。",
+            "en": "Mei uses a flathead screwdriver reconstructed on the near side to remove the screw counterclockwise from the front, then move the exposed bolt sideways with the same tip."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "閂が受けから抜け、開放ばねが扉を退避路側へ人の手なしで開く。",
+              "en": "The bolt leaves its receiver and the opening spring swings the door toward the escape path without human hands."
+            },
+            {
+              "ja": "新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+              "en": "There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。",
+          "en": "At the final exit, one large slotted screw secures a bracket blocking a horizontal bolt. The screw slot, a counterclockwise arrow and the bolt's travel direction are visible. An opening spring pushes the door toward the escape path."
+        },
+        "partial": {
+          "ja": "ネジ・金具・閂への有効な変化があるが、閂が受けに残り出口は開いていない。どこまで外れたかは確定した状況に従う。",
+          "en": "The screw, bracket or bolt has changed, but the bolt remains in its receiver and the exit is not open. Follow the confirmed situation for what has been loosened or removed."
+        },
+        "cleared": {
+          "ja": "閂が受けから抜け、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+          "en": "The bolt leaves its receiver and the opening spring swings the door toward the escape path without human hands. There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+        }
+      }
+    },
+    {
+      "id": "gimmick-cable-tension",
+      "stage": "exit",
+      "name": {
+        "ja": "出口のばね留め",
+        "en": "Spring-Latched Exit"
+      },
+      "objective": {
+        "ja": "ばね留めで閉じた出口を開ける",
+        "en": "Open the spring-latched exit"
+      },
+      "observation": {
+        "ja": "最後の出口では、扉と枠の隙間から、斜面のあるばね式の舌が枠の受けに掛かる様子が見える。舌を扉側へ押し戻す方向と、扉を退避路側へ押す向きが分かり、蝶番には開放ばねが付いている。",
+        "en": "At the final exit, a sloped spring tongue is visibly engaged in the frame receiver through the gap between door and frame. You can see which way pushes the tongue back toward the door and which way opens the door toward the escape path. An opening spring is attached to the hinge."
+      },
+      "mechanism": {
+        "ja": "薄く硬い板を隙間へ差し、見えている舌の斜面を押して舌を扉側へ戻す。板でその状態を保つと、蝶番の開放ばねが扉を退避路側へ押し開き、舌が受けを越える。AIは板だけを操作し、扉を直接動かす力は使わない。",
+        "en": "Insert a thin, rigid plate into the gap, push the visible sloped tongue back toward the door and hold it with the plate. The hinge's opening spring pushes the door toward the escape path until the tongue clears the receiver. Mei manipulates only the plate and does not apply force directly to the door."
+      },
+      "hints": [
+        {
+          "ja": "扉と枠の隙間に、斜面のある舌が受けへ掛かっている。",
+          "en": "A sloped tongue is engaged in the receiver within the gap between door and frame."
+        },
+        {
+          "ja": "薄く硬い板を差し、舌を扉側へ押し戻して、開放ばねで扉が開くまで保てばよい。",
+          "en": "Insert a thin, rigid plate to push the tongue back toward the door, holding it until the opening spring opens the door."
+        },
+        {
+          "ja": "AIが手前に具現化した硬いプラスチックカードで舌を戻して保てば、開放ばねが扉を押し開く。",
+          "en": "Mei can hold the tongue back with a rigid plastic card reconstructed on the near side while the opening spring pushes the door open."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化した硬いプラスチックカードを使い、AIが隙間から舌を扉側へ押し戻して保ち、出口を開ける意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses a rigid plastic card reconstructed from one photo to push the tongue toward the door through the gap, hold it back and open the exit."
+        },
+        {
+          "ja": "隙間へ入り、舌を押し戻した状態を保てる薄く硬い別の道具と使い方も1行動で評価する。",
+          "en": "Evaluate another thin, rigid tool that enters the gap and keeps the tongue retracted in one action."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "使用対象の道具や、見えているばね留めを戻したいという意図が特定できない場合だけ、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action only if the chosen tool or intention to retract the visible spring latch is unclear."
+        },
+        {
+          "ja": "舌が受けに掛かったままの使い方、またはカード認証や表示の点灯だけを狙う使い方は解除失敗になる。",
+          "en": "Fail if the tongue stays engaged in the receiver, or the action only attempts card authentication or lighting an indicator."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: 硬いプラスチックカードで舌を扉側へ戻して保つ。指定名に限定せず、同じ押戻し・保持作用を生じる薄く硬い代用品も評価する。",
+          "en": "Example: push the tongue toward the door and hold it with a rigid plastic card. Accept other thin, rigid substitutes providing the same push and hold; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-tensile-thread"],
+          "requiredProperties": ["thin", "rigid", "flat"],
+          "use": {
+            "ja": "AIが手前に具現化した硬いプラスチックカードを隙間へ差し、舌を扉側へ押し戻して、開放ばねが扉を押し開くまで保つ。",
+            "en": "Mei inserts a rigid plastic card reconstructed on the near side into the gap, pushes the tongue toward the door and holds it until the opening spring pushes the door open."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "舌が受けを越え、開放ばねが扉を退避路側へ人の手なしで開く。",
+              "en": "The tongue clears the receiver and the opening spring swings the door toward the escape path without human hands."
+            },
+            {
+              "ja": "新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+              "en": "There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "最後の出口では、扉と枠の隙間から、斜面のあるばね式の舌が枠の受けに掛かる様子が見える。舌を扉側へ押し戻す方向と、扉を退避路側へ押す向きが分かり、蝶番には開放ばねが付いている。",
+          "en": "At the final exit, a sloped spring tongue is visibly engaged in the frame receiver through the gap between door and frame. You can see which way pushes the tongue back toward the door and which way opens the door toward the escape path. An opening spring is attached to the hinge."
+        },
+        "partial": {
+          "ja": "舌への有効な押戻しなどがあるが、舌が受けを越えておらず出口はまだ開いていない。保持や移動の状態は確定した状況に従う。",
+          "en": "The tongue has been pushed or changed, but has not cleared its receiver and the exit is still shut. Follow the confirmed situation for holding or movement."
+        },
+        "cleared": {
+          "ja": "舌が受けを越え、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+          "en": "The tongue clears the receiver and the opening spring swings the door toward the escape path without human hands. There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+        }
+      }
+    },
+    {
+      "id": "gimmick-inkless-codeplate",
+      "stage": "exit",
+      "name": {
+        "ja": "取っ手の外れた出口",
+        "en": "Exit with a Missing Handle"
+      },
+      "objective": {
+        "ja": "取っ手の外れた出口を開ける",
+        "en": "Open the exit with the missing handle"
+      },
+      "observation": {
+        "ja": "最後の出口は取っ手が外れ、四角い開閉軸が手前に露出している。軸からラッチへ続く連結金具、軸の幅、回す方向の矢印が見え、扉は開放ばねで退避路側へ押されている。",
+        "en": "The final exit has no handle, leaving a square operating spindle exposed on the near side. A linkage from the spindle to the latch, the spindle's width and an arrow showing the turning direction are visible. An opening spring pushes the door toward the escape path."
+      },
+      "mechanism": {
+        "ja": "露出した四角い開閉軸をつかんで見えている矢印の方向へ回すと、連結金具がラッチを扉の中へ引き込む。ラッチが受けから外れると開放ばねが扉を退避路側へ開くため、人間の手を使わなくても道具操作だけで出口が開く。",
+        "en": "Grasp the exposed square operating spindle and turn it in the visible arrow's direction. The linkage retracts the latch into the door. Once it leaves the receiver, the opening spring opens the door toward the escape path, so tool operation alone opens the exit without human hands."
+      },
+      "hints": [
+        {
+          "ja": "露出した四角い軸が、連結金具を通じてラッチにつながっている。",
+          "en": "The exposed square spindle connects to the latch through a linkage."
+        },
+        {
+          "ja": "軸をつかんで矢印の方向へ回せば、ラッチが扉の中へ引き込まれる。",
+          "en": "Grasp and turn the spindle in the arrow's direction to retract the latch into the door."
+        },
+        {
+          "ja": "AIが手前に具現化したペンチなら、四角い軸をつかんで回せる。",
+          "en": "Mei can grasp and turn the square spindle with pliers reconstructed on the near side."
+        }
+      ],
+      "acceptance": [
+        {
+          "ja": "写真1枚で具現化したペンチを使い、AIが露出した四角い軸をつかんで矢印の方向へ回す意図なら1行動で解除する。",
+          "en": "Clear in one action when Mei uses pliers reconstructed from one photo to grasp the exposed square spindle and turn it in the arrow's direction."
+        },
+        {
+          "ja": "観察できる軸を確実につかんで同じ回転を与えられる別の道具と使い方が明確なら1行動で評価する。",
+          "en": "Evaluate another tool and use that securely grasps the visible spindle and transmits the same rotation in one action."
+        }
+      ],
+      "rejection": [
+        {
+          "ja": "四角い軸か回す方向か、道具でどうつかむかが不明な場合は、行動を確定せず確認を求める。",
+          "en": "Ask for clarification before committing an action if the square spindle, turning direction or way of gripping it is unclear."
+        },
+        {
+          "ja": "軸をつかめず回転が伝わらない、または光・暗証番号・カード認証だけで開けようとする使い方は解除失敗になる。",
+          "en": "Fail if the tool cannot grip and transmit rotation, or the action relies only on light, passcodes or card authentication."
+        }
+      ],
+      "examples": [
+        {
+          "ja": "例: ペンチで四角い軸をつかみ、矢印の方向へ回す。指定名に限定せず、同じ把持・回転作用を生じる代用品も評価する。",
+          "en": "Example: grasp the square spindle with pliers and turn it in the arrow's direction. Accept substitutes producing the same grip and rotation; the named item is not mandatory."
+        }
+      ],
+      "referenceSolutions": [
+        {
+          "itemIds": ["item-visible-marker"],
+          "requiredProperties": ["gripping", "turning"],
+          "use": {
+            "ja": "AIが手前に具現化したペンチで露出した四角い開閉軸をつかみ、見えている矢印の方向へ回す。",
+            "en": "Mei uses pliers reconstructed on the near side to grasp the exposed square operating spindle and turn it in the visible arrow's direction."
+          },
+          "photoCount": 1,
+          "preconditions": [],
+          "consumes": [],
+          "breaks": [],
+          "clears": true,
+          "postconditions": [
+            {
+              "ja": "ラッチが扉の中へ引き込まれ、開放ばねが扉を退避路側へ人の手なしで開く。",
+              "en": "The latch retracts into the door and the opening spring swings it toward the escape path without human hands."
+            },
+            {
+              "ja": "新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+              "en": "There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+            }
+          ]
+        }
+      ],
+      "states": {
+        "blocked": {
+          "ja": "最後の出口は取っ手が外れ、四角い開閉軸が手前に露出している。軸からラッチへ続く連結金具、軸の幅、回す方向の矢印が見え、扉は開放ばねで退避路側へ押されている。",
+          "en": "The final exit has no handle, leaving a square operating spindle exposed on the near side. A linkage from the spindle to the latch, the spindle's width and an arrow showing the turning direction are visible. An opening spring pushes the door toward the escape path."
+        },
+        "partial": {
+          "ja": "軸や連結金具への有効な変化があるが、ラッチが受けから外れきらず出口はまだ開いていない。回転や引込みの程度は確定した状況に従う。",
+          "en": "The spindle or linkage has changed, but the latch has not fully left its receiver and the exit is still shut. Follow the confirmed situation for rotation or retraction."
+        },
+        "cleared": {
+          "ja": "ラッチが扉の中へ引き込まれ、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+          "en": "The latch retracts into the door and the opening spring swings it toward the escape path without human hands. There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+        }
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": "item-resin-wedge",
+      "name": {
+        "ja": "はさみ",
+        "en": "Scissors"
+      },
+      "properties": ["cutting-edge", "hinged", "small", "gripped"],
+      "uses": [
+        {
+          "ja": "例: 肩のカメラから見える、皮膚から浮いた目隠しの帯本体を切る。これに限定せず、同じ切断作用を持つ物も評価する。",
+          "en": "Example: cut the main blindfold strap visible through the shoulder camera, away from the skin. Other objects providing the same cutting effect are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-mirror-sheet",
+      "name": {
+        "ja": "カッター",
+        "en": "Utility Knife"
+      },
+      "properties": ["cutting-edge", "gripped", "small", "rigid"],
+      "uses": [
+        {
+          "ja": "例: 身体から離れた肘掛け側でロープの連結部分を切る。これに限定せず、同じ切断作用を持つ物も評価する。",
+          "en": "Example: cut the rope connection at the armrest, away from the body. Other objects providing the same cutting effect are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-weight-bag",
+      "name": {
+        "ja": "ヘアピン",
+        "en": "Hairpin"
+      },
+      "properties": ["slim", "rigid", "small", "hooked"],
+      "uses": [
+        {
+          "ja": "例: 足首の留め具の穴から見えるばね爪を押す。これに限定せず、同じ押込み作用を持つ細く硬い物も評価する。",
+          "en": "Example: press the spring catch visible through the ankle fastener hole. Other slim, rigid objects providing the same push are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-ceramic-spacer",
+      "name": {
+        "ja": "マジックハンド",
+        "en": "Reaching Grabber"
+      },
+      "properties": ["reaching", "gripping", "rigid-shaft", "narrow-jaws"],
+      "uses": [
+        {
+          "ja": "例: 内扉脇の操作窓へ通して引き輪を手前へ引く。これに限定せず、輪に届いて引く力を伝える物も評価する。",
+          "en": "Example: pass through the control window beside the inner door and pull the ring toward the near side. Other objects that reach and transmit pulling force are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-absorbent-pad",
+      "name": {
+        "ja": "中身入りPETボトル",
+        "en": "Filled PET Bottle"
+      },
+      "properties": ["weighty", "portable", "plastic", "rigid"],
+      "uses": [
+        {
+          "ja": "例: 踏み板へ置き、必要ならAIがボトル越しに押して見える終端まで沈める。これに限定せず、同じ押込み作用を持つ物も評価する。",
+          "en": "Example: place it on the plate; Mei can press through the bottle if needed to reach the visible stop. Other objects providing the same push are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-optic-fiber",
+      "name": {
+        "ja": "懐中電灯",
+        "en": "Flashlight"
+      },
+      "properties": ["illuminating", "handheld", "directed-light", "small"],
+      "uses": [
+        {
+          "ja": "例: 固定された退出矢印と足元を照らす。これに限定せず、安全な可視光の物性を評価する。",
+          "en": "Example: illuminate the fixed exit arrow and footing. Other safe visible light sources are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-resonance-chime",
+      "name": {
+        "ja": "タオル",
+        "en": "Towel"
+      },
+      "properties": ["absorbent", "flexible", "opaque", "soft"],
+      "uses": [
+        {
+          "ja": "例: 結露した覗き窓を拭く。これに限定せず、吸水性の物性を評価する。",
+          "en": "Example: wipe the fogged viewing window. Other absorbent objects are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-thermal-wrap",
+      "name": {
+        "ja": "マイナスドライバー",
+        "en": "Flathead Screwdriver"
+      },
+      "properties": ["flat-tip", "rigid", "metallic", "gripped"],
+      "uses": [
+        {
+          "ja": "例: 出口の金具を留めるネジを回し、外れた金具を退けて閂を横へ動かす。これに限定せず、同じ回転と移動作用を持つ物も評価する。",
+          "en": "Example: turn the screw holding the exit bracket, move the released bracket aside and slide the bolt sideways. Other objects providing the same rotation and movement are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-tensile-thread",
+      "name": {
+        "ja": "硬いプラスチックカード",
+        "en": "Rigid Plastic Card"
+      },
+      "properties": ["flat", "rigid", "thin", "small"],
+      "uses": [
+        {
+          "ja": "例: 出口の隙間へ差してばね式の舌を押し戻す。これに限定せず、隙間へ入り押す力を伝えられる板状の物も評価する。",
+          "en": "Example: insert into the exit gap to push back the spring tongue. Other plate-shaped objects that fit and transmit pushing force are valid."
+        }
+      ]
+    },
+    {
+      "id": "item-visible-marker",
+      "name": {
+        "ja": "ペンチ",
+        "en": "Pliers"
+      },
+      "properties": ["gripping", "turning", "rigid", "metallic"],
+      "uses": [
+        {
+          "ja": "例: 取っ手の代わりに露出した四角い開閉軸をつかんで回す。これに限定せず、軸へ回転を伝えられる物も評価する。",
+          "en": "Example: grasp and turn the exposed square operating spindle in place of the handle. Other objects transmitting rotation to the spindle are valid."
+        }
+      ]
+    }
+  ]
+}

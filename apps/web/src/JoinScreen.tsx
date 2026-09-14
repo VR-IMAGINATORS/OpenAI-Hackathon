@@ -10,11 +10,20 @@ import type {
 import { clientId, playRequest, PlayApiError, retryUncertain, setApiLocale } from './play-api.js';
 import { LiveConnection } from './live.js';
 import PlayScreen from './PlayScreen.js';
+import {
+  difficultySchema,
+  difficultyPresets,
+  type Difficulty,
+} from '../../../packages/shared/difficulty.js';
 export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }) {
-  const [locale, setLocale] = useState<'ja' | 'en'>('ja');
+  const [locale, setLocale] = useState<'ja' | 'en'>('en');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const passphraseInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setApiLocale(locale);
     document.documentElement.lang = locale;
+    document.title =
+      locale === 'ja' ? 'Call to Past — 接続準備' : 'Call to Past — Ready to connect';
   }, [locale]);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
   const [showOpening, setShowOpening] = useState(false);
@@ -37,6 +46,8 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       const envelope = await playRequest<HostedPlayState>('/api/play/state', undefined, 'GET', {
         playId: session.playId,
       });
+      if (envelope.state.locale) setLocale(envelope.state.locale);
+      if (envelope.state.difficulty) setDifficulty(envelope.state.difficulty);
       setPlay({ id: session.playId, envelope });
     }
   }
@@ -48,17 +59,27 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       })
       .finally(() => setLoading(false));
   }, []);
-  async function authenticate() {
+  async function begin(selectedDifficulty: Difficulty) {
     if (locked.current) return;
+    if (!authenticated && !passphrase.trim()) {
+      window.alert(t('合言葉を入力してください。', 'Please enter the passphrase.'));
+      passphraseInput.current?.focus();
+      return;
+    }
     locked.current = true;
+    setDifficulty(selectedDifficulty);
+    createId.current = null;
     setLoading(true);
     setError('');
     try {
-      await playRequest('/api/auth', { passphrase });
-      setPassphrase('');
-      await restore();
+      if (!authenticated) {
+        await playRequest('/api/auth', { passphrase });
+        setPassphrase('');
+        await restore();
+      }
+      setShowOpening(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '参加できませんでした。');
+      setError(e instanceof Error ? e.message : t('参加できませんでした。', 'Unable to join.'));
     } finally {
       locked.current = false;
       setLoading(false);
@@ -77,7 +98,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
     try {
       await connection.prepare();
       createId.current ??= crypto.randomUUID();
-      const body = { requestId: createId.current, clientId, locale };
+      const body = { requestId: createId.current, clientId, locale, difficulty };
       const created = await retryUncertain(() => playRequest<CreatedPlay>('/api/plays', body));
       setPlay({
         id: created.playId,
@@ -93,7 +114,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
     } catch (e) {
       connection.close();
       if (e instanceof PlayApiError && e.status !== 0) createId.current = null;
-      setError(e instanceof Error ? e.message : '開始できませんでした。');
+      setError(e instanceof Error ? e.message : t('開始できませんでした。', 'Unable to start.'));
       if (e instanceof PlayApiError && e.code === 'PLAY_ALREADY_ACTIVE') await restore();
     } finally {
       locked.current = false;
@@ -160,37 +181,58 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
             createId.current = null;
           }}
         >
-          <option value="ja">日本語</option>
           <option value="en">English</option>
+          <option value="ja">日本語</option>
         </select>
       </label>
-      {!authenticated ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void authenticate();
-          }}
-        >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const submitter = (e.nativeEvent as SubmitEvent).submitter;
+          if (!(submitter instanceof HTMLButtonElement)) return;
+          const selected = difficultySchema.safeParse(submitter.value);
+          if (selected.success) void begin(selected.data);
+        }}
+      >
+        {!authenticated && (
           <label className="play-field">
             {t('参加の合言葉', 'Passphrase')}
             <input
+              ref={passphraseInput}
               type="password"
               autoComplete="off"
               value={passphrase}
               maxLength={256}
+              disabled={loading}
               onChange={(e) => setPassphrase(e.target.value)}
             />
           </label>
-          <button className="primary-button" disabled={loading || !passphrase}>
-            {t('合言葉で参加', 'Join')}
-          </button>
-        </form>
-      ) : (
-        <button className="primary-button" disabled={loading} onClick={() => setShowOpening(true)}>
-          {loading ? t('接続準備中…', 'Connecting…') : t('体験を始める', 'Begin experience')}
-          <span aria-hidden="true">↗</span>
-        </button>
-      )}
+        )}
+        <fieldset className="difficulty-choice" disabled={loading}>
+          <legend>{t('難易度を選んで開始', 'Choose a difficulty to start')}</legend>
+          <div className="difficulty-options">
+            {difficultySchema.options.map((value) => {
+              const preset = difficultyPresets[value];
+              return (
+                <button
+                  className="difficulty-card"
+                  key={value}
+                  type="submit"
+                  name="difficulty"
+                  value={value}
+                >
+                  <strong>{preset.label[locale]}</strong>
+                  <small>
+                    {preset.totalTimeSeconds / 60}
+                    {t('分', ' min')} · {preset.maxPhotoSends}
+                    {t('回送信', ' sends')}
+                  </small>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      </form>
       <p className="play-footnote">
         {t('カメラとマイクを使用します。', 'Camera and microphone access is required.')}
         <br />

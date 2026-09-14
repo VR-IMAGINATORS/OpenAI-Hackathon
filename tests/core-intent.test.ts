@@ -317,3 +317,356 @@ test('photo context changes invalidate a classification and reservation retains 
   assert.equal(count, 2);
   assert.equal(reserved, true);
 });
+
+function watchdog(
+  classify?: (
+    context: ReturnType<ConversationLedger['captureUnconsumedContext']>,
+  ) => Promise<IntentDecision>,
+) {
+  let time = 0,
+    executions = 0,
+    classifications = 0;
+  const expired: string[] = [],
+    recovered: string[] = [],
+    failed: number[] = [];
+  const ledger = new ConversationLedger({ generation: 1, now: () => time });
+  const coordinator = new IntentCoordinator({
+    ledger,
+    now: () => time,
+    classify: async (context) => {
+      classifications++;
+      return classify
+        ? classify(context)
+        : {
+            kind: 'execute',
+            evidenceSeq: context.eligibleEvidenceSeq,
+            itemRefs: [{ photoId }],
+            usage: 'cut',
+            reason: 'directive',
+          };
+    },
+    execute: async () => {
+      executions++;
+    },
+    onExpired: (d) => {
+      expired.push(d.id);
+    },
+    onMissingDelegation: (d) => {
+      recovered.push(d.kind);
+    },
+    onRecoveryExpired: (c) => {
+      failed.push(c.contextVersion);
+    },
+  });
+  let event = 0;
+  const input = (delta = 'cut') => {
+    ledger.append({
+      eventId: `watch-${++event}`,
+      generation: 1,
+      speaker: 'user',
+      delta,
+      startMs: event * 100,
+      endMs: event * 100 + 50,
+    });
+    coordinator.onContextChanged();
+  };
+  const tick = async (at: number) => {
+    time = at;
+    coordinator.tick();
+    await coordinator.settled();
+  };
+  return {
+    ledger,
+    coordinator,
+    input,
+    tick,
+    expired,
+    recovered,
+    failed,
+    executions: () => executions,
+    classifications: () => classifications,
+    setTime: (at: number) => {
+      time = at;
+    },
+  };
+}
+
+test('missed delegation is read-only, once per context, and expires without another event', async () => {
+  const s = watchdog();
+  s.input();
+  await s.tick(2999);
+  assert.equal(s.classifications(), 0);
+  await s.tick(3000);
+  assert.deepEqual(s.recovered, ['execute']);
+  assert.equal(s.executions(), 0);
+  assert.deepEqual(s.ledger.captureUnconsumedContext().eligibleEvidenceSeq, [1]);
+  await s.tick(22000);
+  assert.equal(s.classifications(), 1);
+  await s.tick(23000);
+  await s.tick(30000);
+  assert.equal(s.failed.length, 1);
+  s.coordinator.acceptDelegation({ id: 'real', generation: 1, offsetMs: 150 });
+  await s.coordinator.settled();
+  assert.equal(s.executions(), 0);
+  s.input('repeat cut');
+  await s.coordinator.settled();
+  assert.equal(s.executions(), 1);
+  await s.tick(60000);
+  assert.equal(s.failed.length, 1);
+});
+
+test('read-only consultation and unfinished speech never execute or report a stalled action', async () => {
+  for (const kind of ['consult', 'wait'] as const) {
+    const s = watchdog(async (c) =>
+      kind === 'wait'
+        ? { kind, reason: 'unfinished' }
+        : { kind, reason: 'question', evidenceSeq: c.eligibleEvidenceSeq },
+    );
+    s.input();
+    await s.tick(3000);
+    await s.tick(40000);
+    assert.deepEqual(s.recovered, [kind]);
+    assert.equal(s.executions(), 0);
+    assert.deepEqual(s.failed, []);
+    assert.deepEqual(s.ledger.captureUnconsumedContext().eligibleEvidenceSeq, [1]);
+  }
+});
+
+test('heartbeat expires a real delegation once even without any new Live event', async () => {
+  const s = watchdog(async () => ({ kind: 'wait', reason: 'unfinished' }));
+  s.input();
+  s.coordinator.acceptDelegation({ id: 'real', generation: 1, offsetMs: 150 });
+  await s.coordinator.settled();
+  await s.tick(20000);
+  await s.tick(21000);
+  assert.deepEqual(s.expired, ['real']);
+  assert.equal(s.executions(), 0);
+});
+
+test('new context recovery is rate limited and cancels the previous recovery notice', async () => {
+  const s = watchdog();
+  s.input();
+  await s.tick(3000);
+  s.setTime(4000);
+  s.input('do not cut');
+  await s.tick(7000);
+  assert.equal(s.classifications(), 1);
+  await s.tick(13000);
+  assert.equal(s.classifications(), 2);
+  s.coordinator.reset();
+  await s.tick(40000);
+  assert.deepEqual(s.failed, []);
+  assert.equal(s.classifications(), 2);
+});
+
+test('real delegation arriving during recovery shares the worker and invalidates late recovery', async () => {
+  const pending = deferred<IntentDecision>();
+  let count = 0;
+  const s = watchdog(async (c) =>
+    ++count === 1
+      ? pending.promise
+      : { kind: 'consult', evidenceSeq: c.eligibleEvidenceSeq, reason: 'question' },
+  );
+  s.input();
+  s.setTime(3000);
+  s.coordinator.tick();
+  await Promise.resolve();
+  s.coordinator.acceptDelegation({ id: 'real', generation: 1, offsetMs: 150 });
+  assert.equal(s.classifications(), 1);
+  pending.resolve({
+    kind: 'execute',
+    evidenceSeq: [1],
+    itemRefs: [{ photoId }],
+    usage: 'cut',
+    reason: 'old',
+  });
+  await s.coordinator.settled();
+  assert.equal(s.classifications(), 2);
+  assert.deepEqual(s.recovered, []);
+  assert.equal(s.executions(), 0);
+});
+
+test('recovery discards late classification after correction, control transfer, reset or stop', async () => {
+  for (const change of ['correction', 'controller', 'generation', 'reset', 'stop']) {
+    const pending = deferred<IntentDecision>();
+    const s = watchdog(() => pending.promise);
+    s.input();
+    s.setTime(3000);
+    s.coordinator.tick();
+    await Promise.resolve();
+    if (change === 'correction') s.input('do not cut');
+    if (change === 'controller') s.ledger.updateState({ controllerEpoch: 1 });
+    if (change === 'generation') s.ledger.updateState({ generation: 2 });
+    if (change === 'reset') s.coordinator.reset();
+    if (change === 'stop') s.coordinator.stop();
+    pending.resolve({
+      kind: 'execute',
+      evidenceSeq: [1],
+      itemRefs: [{ photoId }],
+      usage: 'cut',
+      reason: 'old',
+    });
+    await s.coordinator.settled();
+    assert.deepEqual(s.recovered, []);
+    assert.equal(s.executions(), 0);
+  }
+});
+
+test('heartbeat can expire an in-flight real classification and discard its late execute result', async () => {
+  const pending = deferred<IntentDecision>();
+  const s = watchdog(() => pending.promise);
+  s.input();
+  s.coordinator.acceptDelegation({ id: 'real', generation: 1, offsetMs: 150 });
+  await Promise.resolve();
+  s.setTime(20000);
+  s.coordinator.tick();
+  assert.deepEqual(s.expired, ['real']);
+  s.coordinator.reset();
+  pending.resolve({
+    kind: 'execute',
+    evidenceSeq: [1],
+    itemRefs: [{ photoId }],
+    usage: 'cut',
+    reason: 'late',
+  });
+  await s.coordinator.settled();
+  assert.equal(s.executions(), 0);
+  assert.deepEqual(s.recovered, []);
+});
+
+test('expired evidence cannot trigger recovery until fresh user evidence, and expiry notices coalesce', async () => {
+  const s = watchdog(async (c) => ({ kind: 'wait', reason: 'incomplete' }));
+  s.input();
+  s.coordinator.acceptDelegation({ id: 'first', generation: 1, offsetMs: 150 });
+  s.coordinator.acceptDelegation({ id: 'second', generation: 1, offsetMs: 150 });
+  await s.coordinator.settled();
+  assert.equal(s.classifications(), 2);
+  await s.tick(20000);
+  assert.deepEqual(s.expired, ['first']);
+  assert.deepEqual(s.recovered, []);
+  s.ledger.append({
+    eventId: 'assistant-update',
+    generation: 1,
+    speaker: 'assistant',
+    delta: 'Please repeat',
+    startMs: 300,
+    endMs: 400,
+  });
+  s.ledger.contextChanged();
+  s.coordinator.onContextChanged();
+  await s.tick(30000);
+  assert.equal(s.classifications(), 2);
+  assert.deepEqual(s.recovered, []);
+  s.setTime(31000);
+  s.input('cut again');
+  await s.tick(34000);
+  assert.equal(s.classifications(), 3);
+  assert.deepEqual(s.recovered, ['wait']);
+  assert.equal(s.executions(), 0);
+});
+
+test('expired real request quarantines its evidence from a later delegation but preserves a new correction', async () => {
+  const pending = deferred<IntentDecision>();
+  let classified = 0;
+  const s = watchdog(async (c) =>
+    ++classified === 1
+      ? pending.promise
+      : {
+          kind: 'execute',
+          evidenceSeq: c.eligibleEvidenceSeq,
+          itemRefs: [{ photoId }],
+          usage: 'cut',
+          reason: 'fresh',
+        },
+  );
+  s.input();
+  s.coordinator.acceptDelegation({ id: 'old', generation: 1, offsetMs: 150 });
+  await Promise.resolve();
+  s.setTime(20000);
+  s.coordinator.tick();
+  assert.deepEqual(s.ledger.captureUnconsumedContext().eligibleEvidenceSeq, []);
+  s.coordinator.acceptDelegation({ id: 'late', generation: 1, offsetMs: 150 });
+  pending.resolve({
+    kind: 'execute',
+    evidenceSeq: [1],
+    itemRefs: [{ photoId }],
+    usage: 'cut',
+    reason: 'old',
+  });
+  await s.coordinator.settled();
+  assert.equal(s.executions(), 0);
+  s.input('fresh cut');
+  await s.coordinator.settled();
+  assert.equal(s.executions(), 1);
+});
+
+test('timing out a stale classification does not consume later user evidence', async () => {
+  const pending = deferred<IntentDecision>();
+  const s = watchdog(() => pending.promise);
+  s.input();
+  s.coordinator.acceptDelegation({ id: 'old', generation: 1, offsetMs: 150 });
+  await Promise.resolve();
+  s.setTime(19000);
+  s.input('correction');
+  s.setTime(20000);
+  s.coordinator.tick();
+  assert.deepEqual(s.ledger.captureUnconsumedContext().eligibleEvidenceSeq, [2]);
+  s.coordinator.reset();
+  pending.resolve({ kind: 'wait', reason: 'old' });
+  await s.coordinator.settled();
+  assert.equal(s.executions(), 0);
+});
+
+test('late rejection after reset never reports a new-session error for classification, recovery or execution', async () => {
+  for (const mode of ['classification', 'recovery', 'execution']) {
+    let reject!: (error: Error) => void;
+    const pending = new Promise<never>((_resolve, fail) => {
+      reject = fail;
+    });
+    let time = 0,
+      errors = 0,
+      executions = 0;
+    const ledger = new ConversationLedger({ generation: 1, now: () => time });
+    const coordinator = new IntentCoordinator({
+      ledger,
+      now: () => time,
+      classify: async (c) =>
+        mode === 'execution'
+          ? {
+              kind: 'execute',
+              evidenceSeq: c.eligibleEvidenceSeq,
+              itemRefs: [{ photoId }],
+              usage: 'cut',
+              reason: 'directive',
+            }
+          : pending,
+      execute: async () => {
+        executions++;
+        await pending;
+      },
+      onError: () => {
+        errors++;
+      },
+    });
+    ledger.append({
+      eventId: 'input',
+      generation: 1,
+      speaker: 'user',
+      delta: 'cut',
+      startMs: 1,
+      endMs: 2,
+    });
+    coordinator.onContextChanged();
+    if (mode === 'recovery') {
+      time = 3000;
+      coordinator.tick();
+    } else coordinator.acceptDelegation({ id: 'real', generation: 1, offsetMs: 2 });
+    await Promise.resolve();
+    await Promise.resolve();
+    coordinator.reset();
+    reject(new Error('old request failed'));
+    await coordinator.settled();
+    assert.equal(errors, 0, mode);
+    assert.equal(executions, mode === 'execution' ? 1 : 0, mode);
+  }
+});

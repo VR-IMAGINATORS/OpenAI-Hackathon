@@ -3,7 +3,7 @@
 ## GameSession (localのみ)
 - id: UUID、ownerTokenHash: SHA256、generation: 非負整数。
 - status: joining | briefing | playing | judging | won | lost | expired。
-- scenario: Scenario、obstacleIndex: 0..obstacles.length-1、actionsUsed: 0..maxActions。
+- scenario: Scenario、obstacleIndex: 0..obstacles.length-1、actionsUsed: 確定行動数（ゲーム上限なし）、photoSendsUsed: 0..maxPhotoSends。詳細は [写真送信回数の制限](../photo-send-limit/spec.md)。
 - inventory: {id:UUID,name:string,description:string,status:available|damaged|consumed}[]、最大40。
 - situation: string（最大2000文字）、photos: {id:UUID,jpeg:Buffer}[]（1枚2MiB以下、最大設定枚数）。
 - proposal: {revision:整数,items:{photoId:UUID|null,inventoryId:UUID|null,name:string}[],usage:string,summary:string}|null。

@@ -118,9 +118,11 @@
 
 ## エンディングの文章
 
-### 本文を先に確定する
+### 選択脚本と本文を整える
 
 ending-packetの成否・行動・在庫・初期伏線と、直前までの描写を照合する。未解除の拘束や設備が判然としなければ、動ける範囲を保守的に描き、新たな突破を発明しない。
+
+映像脚本は[ending.mdの行動と演技から起承転結を作る](references/ending.md#行動と演技から起承転結を作る)に従う。直近2行動を起点に、期待・結果・次の行動・反応をつなぐ脚本を検討し、複雑なら1行動に絞って、本文を合わせる。下記の本文要素を、映像は行動後からしか始められないという制約にしない。
 
 `story.json`は既存契約どおり`title`・`story`・`evaluation`の3文字列だけ。`story`を日本語100〜200文字程度、原則その範囲内に整える。文字数は改行を除く本文で数え、句読点を含め、タイトルと評価は含めない。3〜5文程度の小説調とし、状況説明の箇条書きにしない。
 
@@ -131,7 +133,7 @@ ending-packetの成否・行動・在庫・初期伏線と、直前までの描�
 
 全部を盛り込んで15秒に収まらなくなる場合は、動作を一つの連なりに絞る。回想・別の時代への場面転換・後日の説明は避ける。黒幕の推測を入れるなら根拠を短く添え、観測済み事実のようには語らない。
 
-**本文は動画の前にプレイヤーへ提示する。** タイトル・happy/normal/badのラベル・得点・評価は、従来どおり動画提示後のリザルトまで伏せる。文章版を明示選択した場合の扱いは[ending.md](references/ending.md)に従う。
+**結末を含む本文は動画の後にプレイヤーへ提示する。** 指定文字は動画の最後にH3で登場させ、物語タイトル・得点・評価は動画後のリザルトで示す。文章版を明示選択した場合の扱いは[ending.md](references/ending.md)に従う。
 
 | 確定種別 | 本文で成立させる結末 | 避ける飛躍 |
 |---|---|---|
@@ -161,76 +163,12 @@ ending-packetの成否・行動・在庫・初期伏線と、直前までの描�
 
 > 扉の下を横切っていた光が、人影に塞がれた。一週間後のあなたは椅子ごと身を引こうとするが、固定された脚は動かない。手首のロープが軋み、背もたれに押しつけた肩が小さく震える。すぐ外で、足音が止まった。メイの送信灯だけが暗がりに残り、消える寸前、着信のときと同じ間隔で二度またたく。返事を送る前に、回線は途切れた。
 
-## 本文を忠実に映像化する
+## 本文を映像化する
 
-### 制作順序と保存
+制作の正本は[ending.md](references/ending.md)。人物の目的とプレイヤーの工夫から場面を選び、本文と映像の出来事・道具・順序・成否を一致させる。本文を先に固定して映画の構成を歪めず、選択脚本と本文を一緒に整えてから登録する。
 
-物語の順番を、映像側の都合で変えない。次の成果物はプレイの保存先へUTF-8で保存し、スキル配下には置かない。以下の名前は制作時の推奨名で、新しいCLI契約や自動検証機能ではない。
+最後のゲーム画像と確定履歴を参照し、開始画像とタイトル入り終了画像を生成または再利用する。登場する道具の外観・位置を引き継ぐ。出口は必ず映すものではなく、場面に必要で映す場合に外観・位置を引き継ぐ。絵コンテ画像は生成しない。カット数・時間配分・カメラは自由。大きな移動や3等分を必須にしない。開始画像は結末も文字も先出しせず、動画の最後の証拠を見せた後に、終了画像のタイトルと完成構図へ到達するようH3で動きとVFXを生成する。確定した拘束や移動可能範囲を守る。画面内の文字はhappyが中央下の`SUCCESS!!`、normal/badが右下の`to be continued...`。結末の場面を残し、暗転や旧エンドラベルの併記はしない。
 
-1. **本文**：`story.json`を作成し、成否・文字数・15秒での成立を確認する。
-2. **対応表**：`ending-shot-plan.md`に、本文の出来事と0〜5秒・5〜10秒・10〜15秒の動作、カメラ、音を対応させる。人物・衣装・場所・道具・残る拘束を共通条件として固定する。
-3. **プロンプト**：`ending-start-prompt.txt`、`ending-end-prompt.txt`、`ending-prompt.txt`の3本を、画像生成より前に作る。最初の2本は画像用、最後は動画用。テンプレート内の角括弧は実履歴で埋める。
-4. **文章登録・提示**：整合した本文を`attach-story`で登録して提示する。登録後は異なる本文へ差し替えられないため、以後は画像・動画を本文へ合わせる。
-5. **画像**：直前の結果画像と共通条件を参照して開始・終了画像を生成し、両方を閲覧する。寸法・縦横比を揃え、場面差と身体状態を確認する。実画像で初めて分かった小さな画面構成の調整は、本文を変えず各プロンプトへ反映する。
-6. **動画**：[ending.md](references/ending.md)と[h3-cli.md](references/h3-cli.md)に従い、実画像と最終プロンプト・最新見積を揃え、具体的承認の範囲で15秒を一度だけ送信する。
-7. **照合**：映像と音を本文・対応表に照らす。ファイルが再生できたことだけで、物語の忠実な再現ができたとは報告しない。
+story.json、文章による演出設計・レビュー、開始・終了画像用プロンプト（新規作成時）、動画プロンプトをプレイ保存先へ置く。[ending.mdのH3用演出設計](references/ending.md#h3用の演出設計と最終プロンプト)に従い、調査資料から採用した撮影技法を最終動画プロンプトにも残す。登録した本文の結末と評価は動画後に提示する。実送信・登録は[h3-cli.md](references/h3-cli.md)と[CLI手順](references/cli.md)へ進み、通常の2画像runでは送信する終了画像をattach-endingで登録する。承認済み旧1画像runは終了画像なしで回収・登録する。
 
-「忠実」は、誰が何をしたか、道具、順番、場所、成否、主要な光・音の出来事が一致すること。内面は姿勢や呼吸に置き換えてよい。本文にない救助者の登場、敵との格闘、脱出ルート、道具を増やさない。生成結果のずれは記録し、確定本文を後から変えて合格扱いにしない。
-
-### 画像プロンプトの共通骨格
-
-```text
-Create one cinematic realistic 3D mystery-game ending frame.
-STORY SOURCE: [確定したstory本文]
-RECORDED OUTCOME: [成否。画像内には文字表示しない]
-CONTINUITY: [直前画像の人物・衣装・場所・照明・残る拘束]
-Same androgynous adult, charcoal hooded jacket, gray trousers.
-Face hidden: rear view, occluded, or cropped below mouth level; no eyes or full face.
-AI has no humanoid body. If established and visible, keep the small emergency
-terminal in its established position; its indicator is pale blue-white.
-No robot, holographic person, extra hands, or newly invented equipment.
-FRAME: [STARTまたはEND。該当時点の位置・姿勢・構図・光]
-OBJECTS: [この時点でそこにある道具と使用状態。空なら追加しない]
-PHYSICAL LIMITS: [残る拘束・閉じた出口・移動可能範囲]
-Match the supplied reference images. No captions, UI, ending labels or gore.
-Use the same image dimensions and aspect ratio for both ending frames.
-```
-
-開始は本文の最初の可視的瞬間、終了は最後の可視的瞬間。happyの例なら「扉の内側、隙間から夜気」→「外に踏み出した後ろ姿、細くなる室内光」。normalなら「窓へ向き直る」→「寄った身体と戻って止まる外光」。badなら「影に塞がれる扉と拘束椅子」→「椅子に押し戻された肩と消える表示灯」。各例の前提を満たす履歴でのみ使う。
-
-全エンドで姿勢・カメラ・場所や環境の複数に明確な差を設ける。動けない場合も、上体の動き、カメラの回り込み、遮られる光で差を作れる。場面差のために拘束を解かない。
-
-### 動画プロンプトの共通骨格
-
-```text
-15-second cinematic realistic 3D mystery-game ending, matching both reference frames.
-STORY SOURCE: [確定したstory本文]
-CONTINUITY AND LIMITS: [画像と共通の人物・衣装・空間・道具・拘束]
-0-5s: [本文の最初の出来事。人物の動き、開始構図、対応する音]
-5-10s: [次の出来事。実際に可能な移動や大きな動作、追従カメラ]
-10-15s: [最後の出来事。変化した構図・環境、成否と通話の余韻]
-Connect all actions physically; no teleportation, dissolve, or unrelated cutaway.
-Show a clear change of pose and framing plus established location or environmental light.
-Keep the face hidden throughout, including reflections; no eyes or full face.
-AI remains disembodied. Show only its established terminal indicator when relevant.
-Use only the recorded available objects; preserve any supports left in place.
-SOUND: [本文に対応する足音・衣服・風・呼吸・通信ノイズ等]
-Ambient sound and physical sound effects, no spoken dialogue, title text, subtitles,
-ending labels or gore. Do not change the recorded outcome or add a rescue or new action.
-```
-
-### happy本文例の映像対応
-
-上のhappy例が使える履歴での具体化。これは新しい実プレイ結果ではない。
-
-| 時間 | 本文の出来事 | 画と音 |
-|---|---|---|
-| 0〜5秒 | 隙間の夜気、肩で押し広げる | 背後から中景。肩で扉を押す動作に合わせてカメラも進む。風と蝶番、奥の足音。 |
-| 5〜10秒 | 外へ踏み出す、地面を踏む、背後の明かりが細くなる | 数歩の移動を連続して追う。濡れた地面の靴音、戻り始める扉に遮られて小さくなる足音。 |
-| 10〜15秒 | 呼吸がほどける、風の音と消える送信灯 | 屋外の背中と肩へ寄る。息を吐く動き、冒頭の雑音に似た風、端末灯の消灯。台詞や字幕で説明しない。 |
-
-文章だけで分かる「一週間後」という情報は導入で共有済みなので字幕を足さない。風の音による伏線回収は、対応する導入がある場合に成立する。端末が見える構図で目や顔が映り込まないことも確認する。
-
-### 完了の判断
-
-本文の100〜200文字、出来事の対応、開始・終了画像の連続性、全編の動作と音、確定成否の一致をそれぞれ確認する。生成サービスによる忠実性は保証できないので、技術QC・目視した範囲・音を聴いた範囲・未確認箇所を区別する。動画提示後に種別・タイトル・得点・工夫へのコメントを表示する。
+生成後はファイル照合と登録に必要な技術検査まで行い、映像・音・文字・面白さは人が確認する。技術検査の成功を映像の再現成功と報告しない。

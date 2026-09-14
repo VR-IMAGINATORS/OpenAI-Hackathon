@@ -8,7 +8,7 @@ test('default scenario exposes only public briefing and settings', () => {
   const scenario = parseScenario(sample());
   const projected = publicScenario(scenario);
   assert.equal(projected.obstacleCount, 3);
-  assert.equal(projected.rules.maxActions, 4);
+  assert.equal(projected.rules.maxPhotoSends, 4);
   assert.deepEqual(Object.keys(projected).sort(), [
     'id',
     'obstacleCount',
@@ -21,13 +21,13 @@ test('default scenario exposes only public briefing and settings', () => {
 test('planner typos, duplicate IDs, impossible counts and unknown event references are rejected', () => {
   const cases = [
     (s: any) => {
-      s.rules.maxActions = 0;
+      s.rules.maxPhotoSends = 0;
     },
     (s: any) => {
-      s.rules.maxActions = 2;
+      s.rules.maxPhotoSends = 21;
     },
     (s: any) => {
-      s.rules.maxPhotosPerAction = 3;
+      s.rules.maxPhotosPerSend = 3;
     },
     (s: any) => {
       s.rules.totalTimeSeconds = 0;
@@ -60,10 +60,10 @@ test('planner typos, duplicate IDs, impossible counts and unknown event referenc
 test('planner can tune values, replace scenario and disable an event', () => {
   const value = sample();
   value.id = 'another-scenario';
-  value.rules.maxActions = 6;
+  value.rules.maxPhotoSends = 6;
   value.rules.totalTimeSeconds = 180;
   value.events[0].mode = 'disabled';
   const scenario = parseScenario(value);
-  assert.equal(scenario.rules.maxActions, 6);
+  assert.equal(scenario.rules.maxPhotoSends, 6);
   assert.equal(scenario.events[0].mode, 'disabled');
 });

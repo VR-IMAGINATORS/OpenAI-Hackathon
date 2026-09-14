@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "id": "game-core",
+  "title": "Liveハーネスの回復と時間通知",
+  "goal": "委譲漏れ・相談回答欠落・予告なし時間終了を改善する",
+  "source": { "type": "spec-workflow", "spec_path": "specs/game-core/spec.md" },
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "statement": "相談の回答を理由から分離し、現在の公開状態を使用する",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-2",
+      "statement": "確定後に結果と次の状況を通知する",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-3",
+      "statement": "委譲漏れと期限切れを案内し、無委譲で自動実行しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-4",
+      "statement": "残り時間を設定閾値で一度通知、停止・終了・世代変更を尊重する",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-5",
+      "statement": "PCとスマホで委譲回復と時間通知の聞こえ方を確認する",
+      "verification": "manual"
+    }
+  ],
+  "architecture_constraints": [
+    { "id": "AR-1", "statement": "ゲーム確定・時間切れはサーバーが所有し二重実行を防止する" }
+  ],
+  "risk": { "level": "medium", "domains": ["concurrency"] },
+  "out_of_scope": ["AWSデプロイ", "音声の完全一致保証"],
+  "accepted_risks": ["Liveへの指示は音声開始・完了を保証しない"],
+  "created_at": "2026-09-14",
+  "updated_at": "2026-09-14"
+}

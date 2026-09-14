@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { ResultStore, ResultStoreError } from './result-store.js';
 import { SceneJobs } from './scene-jobs.js';
+import { EndingJobs, type EndingJobsOptions } from './ending-jobs.js';
 import express, { type Request, type ErrorRequestHandler } from 'express';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { AiService, AiServiceError } from '../../packages/server/ai-service.js';
 import type { OpenAITransport } from '../../packages/server/openai.js';
 import { localizeScenario, publicScenario } from '../../packages/shared/scenario.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
+import { difficultySchema } from '../../packages/shared/difficulty.js';
 import { GameRuntime } from '../local-server/hosted-runtime.js';
 import { GameError } from '../local-server/game.js';
 import { LiveOutboxError } from '../local-server/live-outbox.js';
@@ -24,7 +26,12 @@ import { operationalLog, type OperationalEvent } from './logging.js';
 
 const uuid = z.string().uuid();
 const createSchema = z
-  .object({ requestId: uuid, clientId: uuid, locale: z.enum(['ja', 'en']) })
+  .object({
+    requestId: uuid,
+    clientId: uuid,
+    locale: z.enum(['ja', 'en']),
+    difficulty: difficultySchema.optional(),
+  })
   .strict();
 const liveSchema = z.object({ requestId: uuid, sdp: z.string().min(1).max(65536) }).strict();
 const photoSchema = z
@@ -64,6 +71,7 @@ export function createHostedApp(
     now?: () => number;
     wallNow?: () => number;
     log?: (event: OperationalEvent) => void;
+    ending?: Omit<EndingJobsOptions, 'now'>;
   } = {},
 ) {
   const now = options.now ?? (() => performance.now());
@@ -89,11 +97,34 @@ export function createHostedApp(
     wallOrigin = wallNow();
   const resultNow = () => wallOrigin + now() - clockOrigin;
   const sceneJobs = new SceneJobs(ai, { now });
+  let endingJobs: EndingJobs;
   const results = new ResultStore({
     now: resultNow,
     ttlMs: config.resultTtlMs ?? 300_000,
-    onEvict: (id) => sceneJobs.forgetPlay(id),
+    maxEntryBytes: config.ending?.enabled ? 32 * 1024 * 1024 : undefined,
+    onEvict: (id) => {
+      sceneJobs.forgetPlay(id);
+      endingJobs?.cancelPlay(id);
+    },
   });
+  endingJobs = new EndingJobs(
+    ai,
+    config.ending ?? {
+      enabled: false,
+      globalAttempts: 0,
+      timeoutMs: 480_000,
+      concurrent: 2,
+    },
+    results,
+    {
+      ...options.ending,
+      now,
+      onFailure: (playId, stage, errorCode, context) => {
+        log({ event: 'ending_failed_' + stage, correlationId: playId, errorCode, ...context });
+        options.ending?.onFailure?.(playId, stage, errorCode, context);
+      },
+    },
+  );
   function safeDisplay(fn: () => void) {
     try {
       fn();
@@ -109,7 +140,7 @@ export function createHostedApp(
     recoveryMs: config.recoveryMs,
     resultTtlMs: config.resultTtlMs ?? 300_000,
     factory: (id, deadline, auth, request) => {
-      const snapshot = config.scenarioCatalog?.current(request.locale ?? 'ja');
+      const snapshot = config.scenarioCatalog?.current(request.locale ?? 'ja', request.difficulty);
       const scenario = snapshot
         ? localizeScenario(snapshot.scenarioV2, snapshot.locale)
         : structuredClone(config.scenario);
@@ -131,7 +162,16 @@ export function createHostedApp(
           now,
           snapshot,
           {
-            transcript: (fragment) => safeDisplay(() => results.appendTranscript(id, fragment)),
+            notice: (text) =>
+              safeDisplay(() =>
+                results.appendMessage(id, {
+                  side: 'assistant',
+                  kind: 'system',
+                  text: text.slice(0, 4000),
+                }),
+              ),
+            transcript: (fragment, messageId) =>
+              safeDisplay(() => results.appendTranscript(id, fragment, messageId)),
             photos: async (photos) => {
               try {
                 const assetIds = [];
@@ -165,11 +205,12 @@ export function createHostedApp(
                   id: input.messageId,
                   side: 'assistant',
                   kind: 'result',
-                  text: input.text.slice(0, 4000),
+                  text: input.awaitTranscript ? '' : input.text.slice(0, 4000),
                   relatedCommandSeq: input.commandSeq,
                   liveGeneration: input.generation,
                   imageSlot: slot,
                 });
+                results.bindScene(id, input.messageId, input.gameVersion);
                 const fail = () =>
                   safeDisplay(() =>
                     results.updateMessage(id, input.messageId, {
@@ -201,18 +242,23 @@ export function createHostedApp(
                         }
                       },
                       failed: fail,
-                      stage: (stage) =>
+                      stage: (stage) => {
+                        // Inspection passed, but ready() must finish storing the asset first.
+                        // Publish ready and its asset ID together in the callback above.
+                        if (stage === 'ready') return;
                         safeDisplay(() =>
                           results.updateMessage(id, input.messageId, {
                             imageSlot: { ...slot, status: stage },
                           }),
-                        ),
+                        );
+                      },
                     },
                   );
                 } catch {
                   fail();
                 }
               }),
+            ending: (packet, seal) => safeDisplay(() => endingJobs.enqueue(packet, seal)),
             ended: (state) =>
               safeDisplay(() => {
                 results.end(id, state);
@@ -246,15 +292,16 @@ export function createHostedApp(
   const liveRequests = new WeakMap<GameRuntime, Set<string>>();
   function status() {
     const counts = ai.snapshot();
-    const remaining = Math.max(
-      registry.occupied,
-      counts.liveBusy +
-        counts.pendingCreates +
-        counts.responseBusy +
-        counts.unknownCreates +
-        (counts.imageBusy ?? 0) +
-        (counts.inspectionBusy ?? 0),
-    );
+    const remaining =
+      Math.max(
+        registry.occupied,
+        counts.liveBusy +
+          counts.pendingCreates +
+          counts.responseBusy +
+          counts.unknownCreates +
+          (counts.imageBusy ?? 0) +
+          (counts.inspectionBusy ?? 0),
+      ) + endingJobs.snapshot().remaining;
     return {
       readyToDeploy: registry.admission === 'draining' && remaining === 0,
       version: config.version,
@@ -267,7 +314,7 @@ export function createHostedApp(
     registry.admission = 'draining';
     sceneJobs.cancelAll();
     log({ event: 'drain_started', version: config.version });
-    draining = Promise.all([registry.drain(), ai.shutdown()]).then(() => {
+    draining = Promise.all([endingJobs.drain(), registry.drain(), ai.shutdown()]).then(() => {
       log({ event: 'drain_finished', version: config.version, count: status().remaining });
     });
     return draining;
@@ -282,6 +329,7 @@ export function createHostedApp(
       if (now() >= play.runtime.closingAt) work.push(registry.end(play));
     }
     results.sweep();
+    endingJobs.tick();
     sessions.sweep();
     const completion = Promise.all(work);
     if (waitForClose) await completion;
@@ -314,6 +362,7 @@ export function createHostedApp(
     queue.dispose();
     await drain();
     results.clear();
+    endingJobs.dispose();
   }
   function owner(req: Request) {
     return sessions.authorize(cookieToken(req));
@@ -407,18 +456,13 @@ export function createHostedApp(
   app.get('/api/bootstrap', (_req, res) =>
     res.json({
       app: { name: 'Call to the Past', stage: 'hosted-multiplayer' },
-      scenario: publicScenario(config.scenario),
+      scenario: config.scenarioCatalog?.preview('ja') ?? publicScenario(config.scenario),
       supportedLocales: ['ja', 'en'],
       scenarios: config.scenarioCatalog
         ? Object.fromEntries(
             ['ja', 'en'].map((locale) => [
               locale,
-              publicScenario(
-                localizeScenario(
-                  config.scenarioCatalog!.current(locale as 'ja' | 'en').scenarioV2,
-                  locale as 'ja' | 'en',
-                ),
-              ),
+              config.scenarioCatalog!.preview(locale as 'ja' | 'en'),
             ]),
           )
         : { ja: publicScenario(config.scenario), en: publicScenario(config.scenario) },
@@ -461,7 +505,7 @@ export function createHostedApp(
   app.post('/api/plays', (req, res) => {
     const body = config.scenarioCatalog
       ? createSchema.parse(req.body)
-      : createSchema.omit({ locale: true }).parse(req.body);
+      : createSchema.omit({ locale: true, difficulty: true }).parse(req.body);
     const { play, reused } = registry.create(owner(req), body);
     if (!reused) log({ event: 'play_started', correlationId: play.id, count: registry.occupied });
     res.status(reused ? 200 : 201).json({ controlEpoch: play.controllerEpoch, ...update(play) });
@@ -489,6 +533,59 @@ export function createHostedApp(
     const auth = sessions.authorizeResult(cookieToken(req));
     const asset = results.asset(auth.digest, playId(req), uuid.parse(req.params.assetId));
     res.type(asset.mime).send(asset.bytes);
+  });
+  function endingPlayId(req: Request) {
+    const query = req.query.playId;
+    const header = req.get('X-Play-Id');
+    if (query !== undefined && header !== undefined && query !== header)
+      throw new SessionError('INVALID_PLAY_ID', 400);
+    return uuid.parse(query ?? header);
+  }
+  app.get('/api/play/ending', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req));
+    res.json(results.ending(auth.digest, endingPlayId(req)));
+  });
+  app.get('/api/play/ending/video', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req));
+    const bytes = results.endingVideo(auth.digest, endingPlayId(req));
+    res.set({ 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' });
+    const range = req.get('Range');
+    if (!range) {
+      res.set('Content-Length', String(bytes.length));
+      return res.send(bytes);
+    }
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    let start = 0,
+      end = bytes.length - 1;
+    if (
+      !match ||
+      (!match[1] && !match[2]) ||
+      [match[1], match[2]].some((n) => n && !Number.isSafeInteger(Number(n)))
+    ) {
+      res.set('Content-Range', `bytes */${bytes.length}`);
+      return res.status(416).end();
+    }
+    if (!match[1]) start = Math.max(0, bytes.length - Number(match[2]));
+    else {
+      start = Number(match[1]);
+      if (match[2]) end = Math.min(end, Number(match[2]));
+    }
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      start < 0 ||
+      start > end ||
+      start >= bytes.length ||
+      (!match[1] && Number(match[2]) <= 0)
+    ) {
+      res.set('Content-Range', `bytes */${bytes.length}`);
+      return res.status(416).end();
+    }
+    res.status(206).set({
+      'Content-Range': `bytes ${start}-${end}/${bytes.length}`,
+      'Content-Length': String(end - start + 1),
+    });
+    return res.send(bytes.subarray(start, end + 1));
   });
   app.get('/api/play/state', (req, res) => {
     const auth = sessions.authorizeResult(cookieToken(req)),
@@ -645,6 +742,7 @@ export function createHostedApp(
     if (!status().readyToDeploy || !ai.resume()) throw new SessionError('DRAIN_INCOMPLETE', 409);
     registry.resume();
     sceneJobs.resume();
+    endingJobs.resume();
     draining = undefined;
     drainRequestId = undefined;
     res.json(status());
@@ -669,13 +767,14 @@ export function createHostedApp(
     } else if (error instanceof GameError) {
       status = error.status;
       code =
-        status === 409
+        error.code ??
+        (status === 409
           ? 'PLAY_CONFLICT'
           : status === 410
             ? 'PLAY_EXPIRED'
             : status === 503
               ? 'PHOTO_BUSY'
-              : 'GAME_REQUEST_FAILED';
+              : 'GAME_REQUEST_FAILED');
     } else if (
       error instanceof Error &&
       ['CONVERSATION_LIMIT', 'DELEGATION_LIMIT'].includes(error.message)
@@ -712,5 +811,17 @@ export function createHostedApp(
     errorResponse(res, status, code, message);
   };
   app.use(errors);
-  return { app, registry, ai, sessions, results, sceneJobs, tick, drain, dispose, bootId };
+  return {
+    app,
+    registry,
+    ai,
+    sessions,
+    results,
+    sceneJobs,
+    endingJobs,
+    tick,
+    drain,
+    dispose,
+    bootId,
+  };
 }

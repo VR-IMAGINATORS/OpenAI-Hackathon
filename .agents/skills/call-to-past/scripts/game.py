@@ -1072,8 +1072,29 @@ def ending_packet(session_dir: str | Path) -> dict[str, Any]:
         "scene": {"id": scene["id"], "name": scene["name"], "description": scene["description"], "anchor": scene["anchor"], "mystery": state["scenario"]["mystery"]},
         "events": events, "inventory": _public_inventory(state),
         "derived_outcome": {"type": state["ending"]["type"], "cleared_count": state["ending"]["cleared_count"], "attempts": state["ending"]["attempts"]},
+        "escape_evidence": {
+            "escaped": len(state["cleared"]) == 3,
+            "action_limit_reached": state["attempts"] == MAX_ACTIONS,
+            "remaining_obstacles": [
+                {"id": gid, "name": gimmicks[gid]["name"],
+                 "observation": gimmicks[gid]["observation"], "mechanism": gimmicks[gid]["mechanism"],
+                 "attempted": any(event["gimmick_id"] == gid for event in state["events"])}
+                for gid in state["scenario"]["order"] if gid not in state["cleared"]
+            ],
+        },
         "start_frame": events[-1]["image"] if events and events[-1]["media_status"] == "ready" else None,
         "ending_image": state["ending"]["ending_image"], "story": state["ending"]["story"],
+        "production": {
+            "input_mode": "start_and_end_frames",
+            "generate_end_frame": True,
+            "generate_storyboard": False,
+            "ending_title": "SUCCESS!!" if state["ending"]["type"] == "happy" else "to be continued...",
+            "title_mode": "end_frame_embedded",
+            "title_position": "lower_center" if state["ending"]["type"] == "happy" else "lower_right",
+            "title_transition": "brief_amber_light_sweep_then_stable_hold",
+            "continuity_reference": events[-1]["image"] if events and events[-1]["media_status"] == "ready" else None,
+            "instructions": "references/ending.md",
+        },
         "visual_constraints": {"person": "gender-neutral adult; face hidden or no higher than the mouth", "continuity_anchor": scene["anchor"], "duration_seconds": 15, "resolution": "768P"},
     }
 
@@ -1123,6 +1144,7 @@ def attach_ending_image(session_dir: str | Path, *, source: str | Path, media_ki
         _require(state["ending"] is not None, "game is not terminal")
         _require(_latest_event_missing_image(state) is None, "all committed events need images first")
         _require(state["ending"]["story"] is not None, "attach the generated ending story before the ending image")
+        _require(state["ending"]["media"]["video"] is None or state["ending"]["ending_image"] is not None, "ending image is frozen after video attachment")
         _validate_media_kind(state["mode"], media_kind)
         record = _copy_image_to_session(session, Path(source), "ending", "ending")
         record.update({"kind": media_kind, "provenance": provenance, "attached_at": _now()})
@@ -1180,7 +1202,7 @@ def _validate_h3_receipt(
     h3_run: Path,
     receipt_path: Path,
     source_video: Path,
-    ending_image_sha256: str,
+    ending_image_sha256: str | None,
 ) -> dict[str, Any]:
     raw_run = _assert_no_reparse_chain(h3_run, where="h3_run")
     run = raw_run.resolve(strict=True)
@@ -1204,7 +1226,8 @@ def _validate_h3_receipt(
     _require(re.fullmatch(r"[A-Za-z0-9_.:-]{3,256}", request_id) is not None, "H3 receipt.request_id: invalid")
     receipt_manifest_hash = _hex_digest(receipt["manifest_sha256"], where="H3 receipt.manifest_sha256")
     receipt_start_hash = _hex_digest(receipt["start_image_sha256"], where="H3 receipt.start_image_sha256")
-    receipt_end_hash = _hex_digest(receipt["end_image_sha256"], where="H3 receipt.end_image_sha256")
+    receipt_end_hash = (_hex_digest(receipt["end_image_sha256"], where="H3 receipt.end_image_sha256")
+                        if receipt["end_image_sha256"] is not None else None)
     completed_at = _receipt_timestamp(receipt["completed_at"])
 
     manifest_path = _external_child(run, "approval-manifest.json", where="approval manifest")
@@ -1223,13 +1246,18 @@ def _validate_h3_receipt(
     _require(settings.get("resolution") == "768P", "approval manifest must specify 768P")
     start_record = manifest.get("start_image")
     end_record = manifest.get("end_image")
-    _require(isinstance(start_record, dict) and isinstance(end_record, dict), "approval manifest image records are invalid")
+    _require("end_image" in manifest, "approval manifest must explicitly record end_image or null")
+    _require(isinstance(start_record, dict) and (end_record is None or isinstance(end_record, dict)), "approval manifest image records are invalid")
     manifest_start_hash = _hex_digest(start_record.get("sha256"), where="approval manifest start image hash")
-    manifest_end_hash = _hex_digest(end_record.get("sha256"), where="approval manifest end image hash")
+    manifest_end_hash = (_hex_digest(end_record.get("sha256"), where="approval manifest end image hash")
+                         if end_record is not None else None)
     _require(receipt_start_hash == manifest_start_hash, "H3 receipt start image hash mismatch")
     _require(receipt_end_hash == manifest_end_hash, "H3 receipt end image hash mismatch")
-    _require(receipt_end_hash == _hex_digest(ending_image_sha256, where="game ending image hash"), "H3 receipt end image is not the game ending image")
+    if end_record is not None:
+        _require(receipt_end_hash == _hex_digest(ending_image_sha256, where="game ending image hash"), "H3 receipt end image is not the game ending image")
     for label, record, expected_hash in (("start", start_record, manifest_start_hash), ("end", end_record, manifest_end_hash)):
+        if record is None:
+            continue
         snapshot = _external_child(run, record.get("snapshot"), where=f"approval {label} snapshot")
         _require(snapshot.is_file() and _sha_bytes(snapshot.read_bytes()) == expected_hash, f"approval {label} snapshot hash mismatch")
 
@@ -1340,7 +1368,6 @@ def attach_video(
             _write_state(session, state)
             return {"status": "failed", "reason": reason}
         _require(state["ending"]["story"] is not None, "attach the generated ending story before the video")
-        _require(state["ending"]["ending_image"] is not None, "attach the ending image before the video")
         _validate_media_kind(state["mode"], media_kind)
         source_path = Path(source)
         data, fmt, extension = _read_video(source_path)
@@ -1348,7 +1375,8 @@ def attach_video(
         technical_probe = None
         if state["mode"] == "live":
             _require(h3_run is not None and receipt is not None, "live video requires --h3-run and --receipt from the approved H3 recovery")
-            h3_evidence = _validate_h3_receipt(Path(h3_run), Path(receipt), source_path, state["ending"]["ending_image"]["sha256"])
+            end_image = state["ending"]["ending_image"]
+            h3_evidence = _validate_h3_receipt(Path(h3_run), Path(receipt), source_path, end_image["sha256"] if end_image else None)
             technical_probe = _probe_live_video(source_path)
         else:
             _require(h3_run is None and receipt is None, "H3 receipt evidence is reserved for live video attachment")

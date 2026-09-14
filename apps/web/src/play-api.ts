@@ -1,9 +1,11 @@
 import type { PlayControl } from '../../../packages/shared/api.js';
-let apiLocale: 'ja' | 'en' = 'ja';
+import type { EndingView } from '../../../packages/shared/ending.js';
+let apiLocale: 'ja' | 'en' = 'en';
 export function setApiLocale(locale: 'ja' | 'en') {
   apiLocale = locale;
 }
 const englishMessages: Record<string, string> = {
+  PHOTO_SEND_LIMIT: 'No photo sends left. Continue using the tools already sent.',
   AUTH_REQUIRED: 'Enter the shared passphrase to join.',
   AUTH_FAILED: 'Incorrect passphrase. Check the passphrase shared by the host.',
   AUTH_RATE_LIMIT: 'Too many attempts. Wait a moment and try again.',
@@ -27,6 +29,7 @@ export function controlHeaders(control: PlayControl | { playId: string }) {
   };
 }
 const publicMessages: Record<string, string> = {
+  PHOTO_SEND_LIMIT: '送信回数を使い切りました。届いた道具を使って続けてください。',
   AUTH_REQUIRED: '合言葉を入力して参加してください。',
   AUTH_FAILED: '合言葉が違います。運営から共有された内容を確認してください。',
   AUTH_RATE_LIMIT: '合言葉の確認回数が上限に達しました。しばらく待って再試行してください。',
@@ -55,8 +58,12 @@ export async function playRequest<T>(
   body?: unknown,
   method = 'POST',
   control?: PlayControl | { playId: string },
+  signal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   const timer = window.setTimeout(() => controller.abort(), 40000);
   try {
     const response = await fetch(path, {
@@ -97,7 +104,21 @@ export async function playRequest<T>(
     );
   } finally {
     window.clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
+}
+export function endingVideoPath(playId: string): string {
+  return '/api/play/ending/video?playId=' + encodeURIComponent(playId);
+}
+/** Reading an ending never creates or retries a generation job. */
+export function getEnding(playId: string, signal?: AbortSignal): Promise<EndingView> {
+  return playRequest(
+    '/api/play/ending?playId=' + encodeURIComponent(playId),
+    undefined,
+    'GET',
+    undefined,
+    signal,
+  );
 }
 export async function retryUncertain<T>(request: () => Promise<T>): Promise<T> {
   try {

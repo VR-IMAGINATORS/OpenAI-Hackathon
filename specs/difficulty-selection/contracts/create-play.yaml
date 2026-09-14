@@ -1,0 +1,26 @@
+openapi: 3.1.0
+info:
+  title: Difficulty selection (existing API extension)
+  version: 1.0.0
+paths:
+  /api/plays:
+    post:
+      description: Existing cookie authentication and admission limits apply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [requestId, clientId, locale]
+              properties:
+                requestId: { type: string, format: uuid }
+                clientId: { type: string, format: uuid }
+                locale: { type: string, enum: [ja, en] }
+                difficulty: { type: string, enum: [normal, hard, nightmare] }
+      responses:
+        '201': { description: Created with server-owned difficulty limits }
+        '200': { description: Identical request replay; same play and limits }
+        '400': { description: Invalid difficulty or undeclared properties }
+        '409': { description: Conflicting replay or unavailable play slot }

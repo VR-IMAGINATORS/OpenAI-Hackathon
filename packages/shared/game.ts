@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { EndingOutcome, GameEndReason } from './ending.js';
+import type { Difficulty } from './difficulty.js';
 const short = z.string().max(1000);
 export const itemStatus = z.enum(['available', 'damaged', 'consumed']);
 export const proposalSchema = z
@@ -42,12 +44,16 @@ export interface Proposal extends RecognizedProposal {
 }
 export type VoiceState = 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 export interface LiveCommand {
-  type: 'session.thinking.append' | 'session.commentary.append';
+  type: 'session.thinking.append' | 'session.commentary.append' | 'session.instructions.append';
   event_id: string;
   delegation_id: string | null;
   content: string;
 }
 export interface PublicGameState {
+  difficulty?: Difficulty;
+  endingOutcome?: EndingOutcome | null;
+  endReason?: GameEndReason | null;
+  clearedCount?: number;
   automaticActions?: boolean;
   diagnosticsAvailable?: boolean;
   locale?: 'ja' | 'en';
@@ -59,7 +65,8 @@ export interface PublicGameState {
   briefing: string;
   obstacle: { title: string; index: number; count: number };
   situation: string;
-  actionsRemaining: number;
+  photoSendsRemaining: number;
+  actionsUsed: number;
   remainingMs: number;
   waitingRemainingMs: number;
   paused: boolean;

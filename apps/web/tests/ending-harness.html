@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import React from 'react';
+      import { createRoot } from 'react-dom/client';
+      import EndingVideo from '../src/EndingVideo.tsx';
+      import '../src/styles.css';
+      const root = createRoot(document.getElementById('root'));
+      window.renderEnding = (playId, locale = 'ja') =>
+        root.render(
+          React.createElement(EndingVideo, {
+            key: playId,
+            playId,
+            locale,
+            outcome: 'normal',
+            clearedCount: 2,
+          }),
+        );
+      window.renderEnding('11111111-1111-4111-8111-111111111111');
+    </script>
+  </body>
+</html>

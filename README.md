@@ -50,4 +50,43 @@ fake providerでの成功と、実API・実機・AWSの確認は分けて扱い�
 
 ## Game core更新
 
-音声自動実行・会話履歴・検査つき状況画像・終了後結果保持の現在の構成と試遊手順は[ゲームコアの動作確認](docs/game-core.md)を参照。旧手動実行ボタンの説明はv1回帰用の経路にのみ適用する。
+旧試作の利用方法は [旧スキル](.agents/skills/call-to-past/SKILL.md)、[旧仕様/検証](specs/call-to-past/verification.md)。
+
+会話版のエンディングは[映画の制作設計](docs/ending-film-production-design.md)に基づき、人物の目的とプレイヤーの工夫から場面を作ります。新規・再開とも開始画像1枚を使い、終了画像と絵コンテ画像は生成しません。最後のエンドタイトルとVFXもH3で一緒に生成します。
+
+```mermaid
+flowchart LR
+  A[履歴と確定結果] --> B[場面を選び文章で演出設計]
+  B --> C[開始画像1枚と動画プロンプト]
+  C --> D[H3で本編・文字・VFXを生成]
+  D --> E[照合・登録・表示]
+  E --> F[人が映像を確認]
+```
+
+[現行手順](.agents/skills/call-to-past/references/ending.md)と[文字生成のノウハウ](docs/research/minimax-h3/typography-motion-graphics.md)を参照してください。通常プレイの終了画像なし登録は対応済み、文字入り試作動画は回収済みです。内容品質の評価とWeb版への統合は別途必要です。座標による空間構築・配置図・動画連結の検証ツールは撤去しました。[残したものと撤去したもの](docs/ending-production-cleanup.md)を整理しています。
+
+次の開発は [後続の進め方](specs/web-foundation/next-steps.md) を参照してください。
+
+## ドッグフーディング用のCodex試作
+
+このリポジトリをCodexで開くと、`.agents/skills/call-to-past/` がプロジェクト用スキルとして検出されます。ユーザー領域へのコピーは不要です。表示されない場合は新しいセッションを開始してください。
+
+```text
+$call-to-past を使って、新しいゲームを日本語で始めてください。
+```
+
+実行スクリプトと素材は、読み込んだ `SKILL.md` のあるフォルダを基準に参照します。プレイ記録は作業フォルダ内の `runs/call-to-past/` へ保存するため、通常はリポジトリルートから実行します。[CLI手順](.agents/skills/call-to-past/references/cli.md)も参照してください。
+
+試作のテスト（リポジトリルート、ネットワーク・有料生成なし。Windowsでは `py` も使用可能）:
+
+```powershell
+python -X utf8 -m unittest discover -s .agents/skills/call-to-past/tests -v
+```
+
+## スマホで音声と写真を使って試遊する
+
+モバイル試遊版は `npm run play:mobile` で起動します。PCのターミナルと管理画面に表示されるQRからスマホで参加できます。
+
+事前に運営側のGPT-Live利用権限を持つAPIキーとrelay設定、および起動PCのcloudflaredが必要です。審査員にAPIキーを渡す必要はありません。[セットアップと起動手順](docs/development.md#モバイル試遊版を起動する)を参照してください。
+
+ゲームは音声相談・写真認識・明示実行・JSONの障害進行を実装しています。生成画像・動画・緊迫イベントは後続です。実API・実機の確認状況は[検証記録](specs/mobile-playtest/verification.md)に分けて記載します。

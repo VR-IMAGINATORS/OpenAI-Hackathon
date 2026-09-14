@@ -50,3 +50,8 @@ Status: P3–P6 integrated; automated and browser verification passed; real API/
 全172テスト、変更コードのPrettier check、ビルド、Chrome模擬検証を通過。実HTTPサーバーとChromeの写真→自動実行→検査済み画像も接続確認（有料API/マイクだけfake）。実Live本編・生成精度・スマホ撮影・AWS5人の確認は未実施。P0/P4/P7の実機を含む全面完了チェックは保留する。
 
 工程: [P3a](tasks/P3a-store.md)、[P3b](tasks/P3b.md)、[P4](tasks/P4.md)、[P5/P6](tasks/P5-P6.md)。試遊は[動作確認手順](../../docs/game-core.md)。
+
+## 2026-09-14 ハーネス改善
+- [x] H1: [委譲の回復](tasks/H1.md)
+- [x] H2: [相談回答とLive指示](tasks/H2.md)
+- [x] H3: [統合と時間通知](tasks/H3.md)
