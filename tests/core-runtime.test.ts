@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { GameRuntime } from '../apps/local-server/hosted-runtime.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { PhotoQueue } from '../apps/server/photo-queue.js';
+import { ResultStore } from '../apps/server/result-store.js';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
@@ -93,8 +94,11 @@ async function setup(
   const queue = new PhotoQueue();
   const notices: string[] = [];
   const scenes: any[] = [];
+  const results = new ResultStore();
+  const playId = randomUUID();
+  results.create({ playId, ownerDigest: 'test', locale: 'ja' });
   const runtime = new GameRuntime(
-    randomUUID(),
+    playId,
     600000,
     localizeScenario(snapshot.scenarioV2, 'ja'),
     ai,
@@ -103,10 +107,25 @@ async function setup(
     () => now,
     snapshot,
     {
-      transcript() {},
+      transcript(fragment, messageId) {
+        results.appendTranscript(playId, fragment, messageId);
+      },
       async photos() {},
       scene(input) {
         scenes.push(input);
+        results.appendMessage(playId, {
+          id: input.messageId,
+          side: 'assistant',
+          kind: 'result',
+          text: input.text,
+          liveGeneration: input.generation,
+          imageSlot: {
+            status: 'queued',
+            assetId: null,
+            errorCode: null,
+            deadline: new Date(Date.now() + 150_000).toISOString(),
+          },
+        });
       },
       ended() {},
       notice(text) {
@@ -133,6 +152,7 @@ async function setup(
     snapshot,
     notices,
     scenes,
+    feed: () => results.feed('test', playId),
     calls,
     generation: live.generation,
     photo,
@@ -156,6 +176,68 @@ async function setup(
       }),
   };
 }
+
+test('opening speech updates its image bubble across pauses and retries, then user replies start a new turn', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: 'waiting' }));
+  const opening = h.feed().upserts[0]!;
+  assert.ok(opening.text);
+  assert.ok(opening.imageSlot);
+  const first = {
+    type: 'session.output_transcript.delta',
+    event_id: randomUUID(),
+    delta: '聞こえる？',
+    start_ms: 10,
+    end_ms: 100,
+  };
+  await h.runtime.event(h.generation, first);
+  await h.runtime.event(h.generation, first);
+  assert.equal(h.feed().upserts.length, 1);
+  assert.equal(h.feed().upserts[0]!.text, first.delta);
+  await h.runtime.event(h.generation, {
+    ...first,
+    event_id: randomUUID(),
+    delta: '写真を送って。',
+    start_ms: 5000,
+    end_ms: 6000,
+  });
+  const updated = h.feed().upserts[0]!;
+  assert.equal(h.feed().upserts.length, 1);
+  assert.equal(updated.id, opening.id);
+  assert.equal(updated.createdOrder, opening.createdOrder);
+  assert.deepEqual(updated.imageSlot, opening.imageSlot);
+  assert.equal(updated.text, '聞こえる？写真を送って。');
+  assert.ok(updated.updatedVersion > opening.updatedVersion);
+  await h.say('聞こえるよ');
+  await h.runtime.event(h.generation, {
+    ...first,
+    event_id: randomUUID(),
+    delta: 'ありがとう。',
+    start_ms: 6100,
+    end_ms: 6200,
+  });
+  const messages = h.feed().upserts;
+  assert.equal(messages.length, 3);
+  assert.equal(messages[0]!.text, updated.text);
+  assert.equal(messages[2]!.text, 'ありがとう。');
+  assert.equal(messages[2]!.kind, 'transcript');
+});
+
+test('reconnection keeps the original opening and puts new speech in a separate bubble', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: 'waiting' }));
+  const opening = h.feed().upserts[0]!;
+  const live = await h.runtime.live(randomUUID(), 'new-offer');
+  assert.equal(live.opening, null);
+  h.runtime.heartbeat('connected');
+  await h.runtime.event(live.generation, {
+    type: 'session.output_transcript.delta',
+    event_id: randomUUID(),
+    delta: '戻ったよ。',
+    start_ms: 10,
+    end_ms: 100,
+  });
+  assert.equal(h.feed().upserts.length, 2);
+  assert.deepEqual(h.feed().upserts[0], opening);
+});
 
 test('runtime accepts correction while classification is pending and discards the old execute result', async (t) => {
   const pending = deferred<unknown>();

@@ -188,12 +188,33 @@ export class ResultStore {
     }
     return structuredClone(m);
   }
-  appendTranscript(playId: string, fragment: TranscriptFragment): ChatMessage {
+  appendTranscript(playId: string, fragment: TranscriptFragment, messageId?: string): ChatMessage {
     const e = this.entry(playId);
     for (const [id, g] of e.groups)
       if (g.events.has(fragment.eventId)) return structuredClone(e.messages.get(id)!);
+    const target = messageId ? e.messages.get(messageId) : undefined;
+    if (
+      target?.kind === 'result' &&
+      target.side === fragment.speaker &&
+      target.liveGeneration === fragment.generation
+    ) {
+      const group = e.groups.get(target.id);
+      const text = (group ? target.text : '') + fragment.delta;
+      if (text.length <= 4000) {
+        const message = this.updateMessage(playId, target.id, { text });
+        e.groups.set(target.id, {
+          generation: fragment.generation,
+          speaker: fragment.speaker,
+          start: Math.min(group?.start ?? fragment.startMs, fragment.startMs),
+          end: Math.max(group?.end ?? fragment.endMs, fragment.endMs),
+          events: new Set([...(group?.events ?? []), fragment.eventId]),
+        });
+        return message;
+      }
+    }
     const matches = [...e.groups].filter(
       ([id, g]) =>
+        e.messages.get(id)!.kind === 'transcript' &&
         g.generation === fragment.generation &&
         g.speaker === fragment.speaker &&
         fragment.startMs <= g.end + e.gap &&

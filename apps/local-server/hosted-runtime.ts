@@ -30,7 +30,10 @@ import {
 } from './story.js';
 
 export interface RuntimePresentation {
-  transcript(fragment: import('../../packages/shared/conversation.js').TranscriptFragment): void;
+  transcript(
+    fragment: import('../../packages/shared/conversation.js').TranscriptFragment,
+    messageId?: string,
+  ): void;
   photos(photos: import('./photo.js').GamePhoto[]): Promise<void>;
   scene(input: {
     messageId: string;
@@ -75,6 +78,7 @@ export class GameRuntime {
   private previousState = '';
   private epoch = 1;
   private openingIssued = false;
+  private openingMessageId?: string;
   private seen = new Set<string>();
   private maintenanceTimer?: ReturnType<typeof setInterval>;
   private timeWarningSent = false;
@@ -477,6 +481,7 @@ export class GameRuntime {
     }
   }
   private presentScene(text: string, messageId = randomUUID(), commandSeq: number | null = null) {
+    this.openingMessageId = undefined;
     this.sceneMessages.set(this.game.gameVersion, messageId);
     this.recordSceneEvidence(text, messageId);
     this.presentation?.scene({
@@ -573,6 +578,7 @@ export class GameRuntime {
     if (!this.valid(epoch)) throw new GameError(410, 'プレイまたは操作権が失効しました。');
   }
   async transferControl() {
+    this.openingMessageId = undefined;
     this.epoch++;
     this.game.changeController();
     this.syncCore();
@@ -616,6 +622,7 @@ export class GameRuntime {
           throw new GameError(410, '接続中にプレイが失効しました。');
         }
         this.game.generation++;
+        this.openingMessageId = undefined;
         this.story.startGeneration(this.game.generation, this.now());
         this.syncCore();
         this.intents?.reset();
@@ -646,6 +653,7 @@ export class GameRuntime {
     }
     if (this.photoRequests.size >= 100) throw new GameError(429, '写真送信の試行上限です。');
     const ticket = this.game.beginPhotos();
+    this.openingMessageId = undefined;
     this.syncCore(true);
     const epoch = this.epoch;
     const promise = (async () => {
@@ -701,6 +709,7 @@ export class GameRuntime {
       const event = liveEventSchema.parse(raw);
       this.syncCore();
       if (event.type === 'session.delegation.created') {
+        this.openingMessageId = undefined;
         this.recordDiagnostic('delegation_received');
         if (!this.game.terminal)
           this.intents!.acceptDelegation({
@@ -731,7 +740,12 @@ export class GameRuntime {
           );
         if (fragment) {
           this.story.transcript(fragment, this.now());
-          this.presentation?.transcript(fragment);
+          if (fragment.speaker === 'user' && fragment.delta.trim())
+            this.openingMessageId = undefined;
+          this.presentation?.transcript(
+            fragment,
+            fragment.speaker === 'assistant' ? this.openingMessageId : undefined,
+          );
         }
         this.syncCore();
         if (!this.game.terminal) this.intents!.onContextChanged();
@@ -799,12 +813,17 @@ export class GameRuntime {
       if (evidence.length) this.ledger.consume(evidence);
     }
     this.game.start();
-    if (wasBriefing)
+    if (wasBriefing) {
+      const messageId = randomUUID();
       this.presentScene(
         this.coreSnapshot?.scenarioV2.story
           ? storyOpening(this.coreSnapshot, this.game.situation)
           : this.game.situation,
+        messageId,
       );
+      // Live reads this scene aloud; its opening deltas update the same bubble.
+      this.openingMessageId = messageId;
+    }
     this.syncCore(true);
     return wasBriefing && !this.coreSnapshot
       ? [

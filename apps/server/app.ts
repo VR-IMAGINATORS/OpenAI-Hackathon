@@ -170,7 +170,8 @@ export function createHostedApp(
                   text: text.slice(0, 4000),
                 }),
               ),
-            transcript: (fragment) => safeDisplay(() => results.appendTranscript(id, fragment)),
+            transcript: (fragment, messageId) =>
+              safeDisplay(() => results.appendTranscript(id, fragment, messageId)),
             photos: async (photos) => {
               try {
                 const assetIds = [];
