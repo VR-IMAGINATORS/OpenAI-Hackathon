@@ -164,3 +164,14 @@ npm run buildと対象Prettier check成功。Chromeのopening-smoke/core-smoke/m
 - Chrome `core-smoke.cjs`で日英ラベル、320×568/390×844/1280×900のレイアウト、長い目標の折り返し、詳細のクリック/キーボード開閉、60,001ms→60,000msの警告境界、演出の重複防止、行動3→2→1、再読み込み、動きを減らす設定、終了表示を確認。
 - 表示例: `artifacts/hud-header-normal-en.png`、`artifacts/hud-header-warning-en.png`。全画面例は`artifacts/hud-normal-en-mobile.png`、`artifacts/hud-small-en-mobile.png`、`artifacts/hud-warning-en-mobile.png`。ブラウザの幅を変更して目視確認した。
 - API・音声・マイクは模擬。実AI、物理スマホ、スクリーンリーダーの実読み上げ、公開環境での検証は未実施。
+
+## 2026-09-14 返事を待つ導入会話
+
+- 履歴調査: 旧 `liveInstructions` と `specs/mobile-playtest/opening-tutorial.md` に返事を待つ導入が存在。`d914b8c`（2026-09-13「着信応答から説明と写真送信へ直接つなぐ」）でcoreの開始指示が説明の即時読み上げへ変更された。6舞台取り込み `47c972b` と統合 `70c5990` より前の変更。
+- 日英の初回指示を短い接続確認にし、実際の返事後に「よかった、つながった」から設定済み導入へ続ける。無音・接続完了を返事とみなさず、先に話した場合や「聞こえない」「待って」にも応じる指示を追加。再接続時は導入を繰り返さない。
+- 純粋な接続確認と挨拶はLiveが応答し、分類側はwaitとして追加の回答や実行を行わない方針にした。ゲームの質問・訂正・指示を含む発言は通常どおり分類する。
+- 時計開始・画像生成・開始ボタン・動画の処理は変更していない。待ち方・返事の解釈はLiveへの会話指示による調整であり、コードで発話を強制停止する新しい機構は追加していない。
+- `5c6c11c` 起点の独立worktree `artifacts/opening-call-check`、ブランチ `codex/opening-call-check` で検証。共有フォルダで並行して進む写真送信回数の変更は検証対象に含めない。
+- `node --import tsx --test tests/*.test.ts`: 370件成功、失敗・skip・todoは0。既存の吹き出しテストを実際に希望された3発言の例に更新し、重複文字起こし・再接続・攻略判定の未発生を模擬で確認した。
+- `npm run build`: 型検査、v1/v2/v3全18構成・共通設定の検証、UI・サーバービルド成功。変更コードのPrettier確認と `git diff --check` も成功。
+- 実GPT-Liveが返事を待つ間合い、実マイクでの聞こえ方、スマホ、公開環境での確認は未実施。模擬音声イベントの成功を、実音声の会話品質の確認済みとは扱わない。

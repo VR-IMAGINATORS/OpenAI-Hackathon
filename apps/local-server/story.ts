@@ -43,8 +43,8 @@ export function storyOpening(snapshot: ScenarioSnapshot, situation: string) {
   if (!story) return snapshot.coreConfig.conversation[snapshot.locale].openingMessage;
   const locale = snapshot.locale;
   return locale === 'ja'
-    ? `聞こえる？ 私は${story.aiName.ja}。一週間後のあなたが、ここ${snapshot.scenarioV2.title.ja}に閉じ込められた。普通の通信が使えず、過去のあなたに連絡している。${situation} ${story.openingClue.ja} 身近な物の写真から同じ道具を作って、私が扱える。どう使うか教えて。`
-    : `Can you hear me? I’m ${story.aiName.en}. Your future self is trapped in ${snapshot.scenarioV2.title.en}, one week from now. Normal communication is down, so I called you in the past. ${situation} ${story.openingClue.en} Send a photo of something nearby. I can make and use a matching tool here. Tell me how to use it.`;
+    ? `よかった、つながった。私は${story.aiName.ja}。一週間後のあなたが、ここ${snapshot.scenarioV2.title.ja}に閉じ込められた。普通の通信が使えず、過去のあなたに連絡している。${situation} ${story.openingClue.ja} 身近な物の写真から同じ道具を作って、私が扱える。どう使うか教えて。`
+    : `Good, we’re connected. I’m ${story.aiName.en}. Your future self is trapped in ${snapshot.scenarioV2.title.en}, one week from now. Normal communication is down, so I called you in the past. ${situation} ${story.openingClue.en} Send a photo of something nearby. I can make and use a matching tool here. Tell me how to use it.`;
 }
 
 export function storyFromState(

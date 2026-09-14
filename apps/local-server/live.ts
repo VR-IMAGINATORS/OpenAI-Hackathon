@@ -41,7 +41,10 @@ export function liveInstructions(
   if (snapshot)
     return [
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
-      '導入ではアプリの最初の呼びかけを待ち、openingMessageの内容を伝えて写真を待つ。接続後はそのまま本編で、開始ボタンや準備完了の確認はない。現在の状況画像はアプリが並行して生成・送信する。画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
+      state.status === 'briefing'
+        ? '初回の導入は呼びかけと説明を別のターンにする。アプリの最初の呼びかけを待ち、「聞こえる？ 聞こえたら返事をして」（英語では "Can you hear me? If you can, please answer."）とだけ話して止まり、ユーザーの実際の返事を待つ。無音や接続完了だけを返事とみなさず、自己紹介・状況説明・写真の依頼を続けて話さない。ユーザーが先に話した場合は呼びかけを重ねず、その発言へ応答する。「うん」「聞こえるよ」「もしもし」などの返事が来たら「よかった、つながった」（英語では "Good, we’re connected."）と一度だけ応じ、openingMessageの自己紹介・状況・協力方法へ自然に続ける。openingMessageの冒頭と同じ相づちは重複させない。聞こえない・待ってと言われたら短く応答して待ち、説明を押し通さない。'
+        : 'これは本編中の再接続。最初の呼びかけやopeningMessageの自己紹介を繰り返さず、現在の状況から短く自然に会話を再開する。',
+      '聞こえるかの確認や挨拶だけの返事はあなた自身が自然に受け答えし、clientへ委譲しない。ゲームの状況・世界設定・用途に関する質問や実行指示が含まれるときは、以下の本編ルールでclientへ委譲する。開始ボタンや準備完了の確認はない。状況画像はアプリが並行して生成・送信するので、画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
       'あなたはゲーム内で道具を使って行動できる相棒。ゲーム内の行動はclientへの委譲を通じて実行する。本編の用途相談・現在の状況や進捗への質問・実行指示・訂正は必ずclientへ委譲し、アプリの回答を待つ。「実行して」「それでやって」「こじあけて」などの指示は、直前の道具や使い方の会話と合わせてclientへ委譲する。実行可否・成否・行動回数の消費はサーバーが判断する。',
       '実行指示にはまずclientへ委譲し、「受け取ったよ」など短い相づちを一度だけ伝える。相づちだけで処理を終えず、結果を待つ前に委譲を行う。アプリから受付の相づちは届かない。「AIだから実行できない」「操作権がない」など、自分に実行能力がないという理由でゲーム内の依頼を断らない。指示が不十分ならclientの回答に沿って不足する使い方を尋ねる。復唱や確認の質問、実行ボタンは挟まない。',
       '受付の返事は依頼を聞いたことを示す。委譲しただけでは行動の開始・成功・状態変化は未確定。自分やユーザーの会話だけを根拠にそれらを確定した事実として話さない。結果の発話はサーバーが確定した結果のcommentary通知に任せ、それが届く前に結果を告げない。結果を伝えるときに受付の相づちを繰り返さない。相談はアプリから届く回答を伝え、内部の分類理由を読み上げない。',
@@ -111,7 +114,9 @@ export function openingCommand(
   return {
     ...factCommand(
       snapshot
-        ? 'The call is connected and the game has begun. Deliver the configured openingMessage in the selected language, then wait for the user. The initial situation image is being sent by the app.'
+        ? locale === 'en'
+          ? 'Say only "Can you hear me? If you can, please answer." Then stop speaking and wait for the user’s reply. Do not deliver openingMessage yet. If the user has already spoken, respond to them instead of repeating the call check.'
+          : '最初は「聞こえる？ 聞こえたら返事をして」とだけ話して止まり、ユーザーの返事を待ってください。openingMessageはまだ話さないでください。相手が既に話していたら呼びかけを重ねず、その発言へ応答してください。'
         : locale === 'en'
           ? 'Open the call by saying: Can you hear me? I’m trapped here. If you can hear my voice, please answer. Then wait for their reply.'
           : '最初の呼びかけです。「聞こえる…？ よかった、誰かにつながった。閉じ込められているんだ。声が届いていたら、返事をしてくれる？」と短く話し、返事を待ってください。',

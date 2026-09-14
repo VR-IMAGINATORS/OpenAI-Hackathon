@@ -179,7 +179,7 @@ async function setup(
   };
 }
 
-test('opening speech updates its image bubble across pauses and retries, then user replies start a new turn', async (t) => {
+test('call check updates its image bubble across pauses and retries, then reply and introduction form separate turns', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'waiting' }));
   const opening = h.feed().upserts[0]!;
   assert.equal(opening.text, '');
@@ -198,7 +198,7 @@ test('opening speech updates its image bubble across pauses and retries, then us
   await h.runtime.event(h.generation, {
     ...first,
     event_id: randomUUID(),
-    delta: '写真を送って。',
+    delta: '聞こえたら返事をして。',
     start_ms: 5000,
     end_ms: 6000,
   });
@@ -207,21 +207,23 @@ test('opening speech updates its image bubble across pauses and retries, then us
   assert.equal(updated.id, opening.id);
   assert.equal(updated.createdOrder, opening.createdOrder);
   assert.deepEqual(updated.imageSlot, opening.imageSlot);
-  assert.equal(updated.text, '聞こえる？写真を送って。');
+  assert.equal(updated.text, '聞こえる？聞こえたら返事をして。');
   assert.ok(updated.updatedVersion > opening.updatedVersion);
-  await h.say('聞こえるよ');
+  await h.say('うん、聞こえるよ');
   await h.runtime.event(h.generation, {
     ...first,
     event_id: randomUUID(),
-    delta: 'ありがとう。',
+    delta: 'よかった、つながった。私は未来のあなたを助けるAI。',
     start_ms: 6100,
     end_ms: 6200,
   });
   const messages = h.feed().upserts;
   assert.equal(messages.length, 3);
   assert.equal(messages[0]!.text, updated.text);
-  assert.equal(messages[2]!.text, 'ありがとう。');
+  assert.equal(messages[1]!.text, 'うん、聞こえるよ');
+  assert.equal(messages[2]!.text, 'よかった、つながった。私は未来のあなたを助けるAI。');
   assert.equal(messages[2]!.kind, 'transcript');
+  assert.equal(h.calls.judge, 0);
 });
 
 test('reconnection keeps the original opening and puts new speech in a separate bubble', async (t) => {
