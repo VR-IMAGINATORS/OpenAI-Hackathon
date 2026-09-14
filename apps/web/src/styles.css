@@ -1112,18 +1112,18 @@ h1 span {
 }
 .join-orbit {
   margin: 24px auto 22px;
-  width: clamp(72px, 12svh, 104px);
-  height: clamp(72px, 12svh, 104px);
+  width: clamp(101px, 16.8svh, 146px);
+  height: clamp(101px, 16.8svh, 146px);
   display: grid;
   place-items: center;
   color: var(--mint);
-  font-size: 48px;
+  font-size: 67px;
   background: #b7f6c909;
   border: 1px solid #b7f6c94b;
   border-radius: 50%;
   box-shadow:
-    0 0 0 10px #b7f6c904,
-    0 0 0 11px #b7f6c909;
+    0 0 0 14px #b7f6c904,
+    0 0 0 15px #b7f6c909;
 }
 .join-copy {
   color: #aac1b2;
@@ -1214,9 +1214,9 @@ h1 span {
 @media (max-height: 650px) {
   .join-orbit {
     margin-block: 17px;
-    width: 64px;
-    height: 64px;
-    font-size: 40px;
+    width: 90px;
+    height: 90px;
+    font-size: 56px;
   }
   .join-shell h1 {
     font-size: 24px;
