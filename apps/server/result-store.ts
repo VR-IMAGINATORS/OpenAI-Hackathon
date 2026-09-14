@@ -328,6 +328,31 @@ export class ResultStore {
     if (!asset || asset.kind !== 'scene') throw new ResultStoreError(404, 'ASSET_NOT_FOUND');
     return { messageId, gameVersion, jpeg: asset.bytes };
   }
+  /** Capture completed scenes now; completion order never determines the newest game state. */
+  readySceneReferences(playId: string, maxGameVersion: number): EndingReference[] {
+    const e = this.entry(playId);
+    return [...e.messages.values()]
+      .filter((message) => {
+        const version = e.sceneVersions.get(message.id);
+        return (
+          version !== undefined &&
+          version <= maxGameVersion &&
+          message.imageSlot?.status === 'ready' &&
+          !!message.imageSlot.assetId &&
+          e.assets.get(message.imageSlot.assetId)?.kind === 'scene'
+        );
+      })
+      .sort(
+        (a, b) =>
+          e.sceneVersions.get(b.id)! - e.sceneVersions.get(a.id)! ||
+          b.createdOrder - a.createdOrder,
+      )
+      .map((message) => ({
+        messageId: message.id,
+        gameVersion: e.sceneVersions.get(message.id)!,
+        jpeg: e.assets.get(message.imageSlot!.assetId!)!.bytes,
+      }));
+  }
   initializeEnding(playId: string, view: EndingView): boolean {
     const e = this.entry(playId);
     if (e.ending) return false;

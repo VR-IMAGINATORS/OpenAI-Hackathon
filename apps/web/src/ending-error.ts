@@ -26,8 +26,8 @@ export function endingErrorText(code: string | null, locale: 'ja' | 'en'): strin
     );
   if (code.startsWith('ENDING_REFERENCE_'))
     return t(
-      '動画の元になる最後の場面画像を用意できませんでした。',
-      'The final scene image needed for the video was unavailable.',
+      'プレイ終了時点で、動画の元に使える完成済みの場面画像がありませんでした。',
+      'No completed scene image was available for the video when the game ended.',
     );
   if (code.startsWith('ENDING_STORY_'))
     return t(

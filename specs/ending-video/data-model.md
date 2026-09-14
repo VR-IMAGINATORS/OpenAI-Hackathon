@@ -30,6 +30,8 @@ type GameEndReason = 'escaped' | 'time_limit' | 'action_limit' | 'interrupted';
 
 ゲームのfacts・結果は終了時に固定する。終了前に発生した音声の文字起こしが後着する場合は、既存の最大12秒の通話終了猶予内だけ追記し、脚本生成前に物語材料を凍結する。終了後の新しい発言を過去の伏線にしない。
 
+画像素材は終了callbackで別途固定する。内部ジョブが、その時点で完成・検査済みの最新の場面画像1枚と、直近最大2行動に対応する行動前画像を保持する。`finalMessageId`の画像が未完成でも、同じプレイのより前の完成画像を使う。後着画像は追加せず、画像のgameVersionと終了時の確定gameVersionを制作入力で区別する。画像素材の選定は文字起こし猶予や動画の待機列に影響されない。
+
 ## 生成内容
 
 `EndingDesign`は`title / story / evaluation`、採用した伏線sourceIdと行動ID、候補比較と選択理由、開始画像prompt、終了画像prompt、最終動画promptを持つ。表示文は選択言語、画像・動画promptは英語を使う。

@@ -272,6 +272,15 @@ test('ending scene lookup follows exact message and game version even when image
   assert.equal(reference.gameVersion, 9);
   assert.deepEqual(reference.jpeg, store.asset('alice', id, finalAsset).bytes);
   assert.notDeepEqual(reference.jpeg, store.sceneReference(id, earlier, 8)!.jpeg);
+  assert.deepEqual(
+    store.readySceneReferences(id, 9).map((r) => r.messageId),
+    [final, earlier],
+  );
+  assert.deepEqual(
+    store.readySceneReferences(id, 8).map((r) => r.messageId),
+    [earlier],
+  );
+  assert.deepEqual(store.readySceneReferences(other, 9), []);
   assert.equal(store.sceneReference(id, randomUUID(), 9), null);
   assert.equal(store.sceneReference(other, final, 9), null);
   assert.throws(() => store.bindScene(id, final, 8), error(409, 'SCENE_VERSION'));
@@ -307,4 +316,5 @@ test('failed, cancelled, and non-scene assets never become ending references', a
   });
   store.bindScene(id, message.id, 2);
   assert.throws(() => store.sceneReference(id, message.id, 2), error(404, 'ASSET_NOT_FOUND'));
+  assert.deepEqual(store.readySceneReferences(id, 2), []);
 });

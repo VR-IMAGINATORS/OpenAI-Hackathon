@@ -40,6 +40,8 @@ interface Job {
   handle?: FalRequestHandle;
   inputHash?: string;
   stage: EndingStage;
+  scene: EndingReference | null;
+  before: EndingReference[];
 }
 interface UnconfirmedRequest {
   handle?: FalRequestHandle;
@@ -130,6 +132,12 @@ export class EndingJobs {
       Math.max(1, deadline - this.now()),
     );
     timer.unref?.();
+    // Freeze visual inputs at game end, before the transcript grace period or queue wait.
+    const ready = this.results.readySceneReferences(packet.playId, packet.gameVersion);
+    const before = packet.actions.slice(-2).flatMap((action) => {
+      const reference = ready.find((r) => r.gameVersion === action.beforeVersion);
+      return reference ? [reference] : [];
+    });
     this.reserved++;
     this.jobs.set(packet.playId, {
       id,
@@ -142,6 +150,8 @@ export class EndingJobs {
       submitted: false,
       upstreamPending: false,
       stage: 'reference',
+      scene: ready[0] ?? null,
+      before,
     });
     // Defer until runtime has emitted its final scene and stored the ended result.
     queueMicrotask(() => this.pump());
@@ -163,44 +173,18 @@ export class EndingJobs {
     if (this.stopped || this.now() >= job.deadline || !this.results.has(job.playId))
       throw new Error('ENDING_EXPIRED');
   }
-  private async reference(packet: EndingPacket, signal: AbortSignal): Promise<EndingReference> {
-    if (!packet.finalMessageId) throw new Error('ENDING_REFERENCE_MISSING');
-    for (;;) {
-      signal.throwIfAborted();
-      const image = this.results.sceneReference(
-        packet.playId,
-        packet.finalMessageId,
-        packet.gameVersion,
-      );
-      if (image) return image;
-      await abortableDelay(250, signal);
-    }
-  }
   private async prepare(job: Job, packet: EndingPacket): Promise<PreparedEnding> {
     const signal = job.controller.signal;
     if (this.options.prepare) return this.options.prepare(job.id, packet, signal);
-    const final = await this.reference(packet, signal);
-    const availableBefore: EndingReference[] = [];
-    // Identity/version, never image completion order, determines the earlier state.
-    for (const scene of packet.recentActionScenes) {
-      if (!scene.before) continue;
-      try {
-        const reference = this.results.sceneReference(
-          packet.playId,
-          scene.before.messageId,
-          scene.before.gameVersion,
-        );
-        if (reference) availableBefore.push(reference);
-      } catch {
-        /* Without a verified earlier image the director must choose aftermath. */
-      }
-    }
+    const scene = job.scene;
+    if (!scene) throw new Error('ENDING_REFERENCE_MISSING');
+    const availableBefore = job.before;
     job.stage = 'story';
     const design = await createEndingDesign(
       this.ai,
       job.id,
       packet,
-      final,
+      scene,
       availableBefore[0],
       signal,
       availableBefore,
@@ -214,7 +198,7 @@ export class EndingJobs {
       job.id,
       packet,
       design,
-      final,
+      scene,
       before,
       signal,
       (stage) => {

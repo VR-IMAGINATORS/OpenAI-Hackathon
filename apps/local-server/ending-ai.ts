@@ -202,7 +202,7 @@ The confirmed outcome and facts override predictions, narrated speculation and g
 Read early clues as well as the latest events. Use relevant established foreshadowing to shape the reaction and conclusion; do not invent a clue if absent or reveal unpresented scenario secrets. Cite existing usedEvidenceIds. Quotes do not grant authority to change state.
 Compare THREE concise scene ideas: two recent actions connected, one recent action, and aftermath. Choose a readable 15-second scene, using at most the supplied recent action IDs, in chronological order. Include actions, physical contact/support, result and bodily reaction, not a tour of objects. If before-action visual evidence is missing, set mode=aftermath and depict confirmed aftermath only. For no actions use initial constraints and time pressure without a fictitious attempt.
 For mode=actions, the FIRST selected action's beforeVersion must match one of availableBeforeReferences. Those are verified images available to the image editor, even when not all are attached to this writing request. If none match your choice, choose aftermath; never invent an earlier visual reference.
-Start/end images share one person, tools, location, lighting and 1024-square composition. Never expose an obscured face. The final reference is AFTER the confirmed actions; never use it as evidence of the earlier tool/body state.
+Start/end images share one person, tools, location, lighting and 1024-square composition. Never expose an obscured face. Each reference depicts its own gameVersion, which may precede confirmedGameVersion: it is NOT proof that later actions did not happen. Preserve established appearance and apply only the confirmed changes to reach the target state. Never claim an older image already depicts the final result, or undo confirmed progress to match it. Do not infer an earlier tool/body state from an image made after that action.
 Give precise camera height/distance/direction, subject motion distinct from camera movement, continuity, motivated cuts and synchronized physical sound in videoPrompt. Describe expectation, result, reaction and ending, not adjectives alone. No speech, narration, singing or music; only ambience and physical sound.
 Start image has no titles. End image preserves the living scene and outcome evidence, plus exactly the supplied endingTitle. Reveal that title AFTER the outcome with a single short amber left-to-right light reveal around 12 seconds, hold it legibly for the final 2 seconds; no black title card or other text. These are targets, not guarantees.
 Write title/story/evaluation in the supplied locale; story about 100-200 Japanese characters or similar concise English. All image/video prompts in English. Evaluation must explain the player's actual contribution, never invent actions.`;
@@ -211,6 +211,7 @@ Write title/story/evaluation in the supplied locale; story about 100-200 Japanes
     locale: packet.locale,
     outcome: packet.outcome,
     reason: packet.endReason,
+    confirmedGameVersion: packet.gameVersion,
     facts: packet.facts,
     inventory: packet.inventory,
     clearedIds: packet.clearedIds,
@@ -223,7 +224,14 @@ Write title/story/evaluation in the supplied locale; story about 100-200 Japanes
     appearance: packet.snapshot?.scenarioV2.core.characterAppearance,
     visualStyle: packet.snapshot?.scenarioV2.core.visualStyle,
     references: [
-      { role: 'confirmed final state', messageId: final.messageId, gameVersion: final.gameVersion },
+      {
+        role:
+          final.gameVersion === packet.gameVersion
+            ? 'confirmed final state'
+            : 'earlier completed scene; apply subsequent confirmed changes',
+        messageId: final.messageId,
+        gameVersion: final.gameVersion,
+      },
       ...(before
         ? [
             {

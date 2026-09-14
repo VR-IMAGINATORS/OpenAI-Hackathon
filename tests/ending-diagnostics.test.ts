@@ -108,189 +108,243 @@ test('local startup reports the effective process limit and disabled/mock states
   assert.equal(endingErrorText('PRIVATE_ERROR', 'ja'), null);
 });
 
-test('default producer selects the last action reference instead of rejecting a valid one-action ending', async (t) => {
-  const config = loadAiConfig({ AI_MODE: 'mock' });
-  config.mode = 'live';
-  const source = await sharp({
-    create: { width: 1024, height: 1024, channels: 3, background: '#555' },
-  })
-    .jpeg()
-    .toBuffer();
-  const edits: ImageEditRequest[] = [];
-  const failures: string[] = [];
-  let submits = 0;
-  const design: EndingDesign = {
-    title: 'The last mark',
-    story: 'The mark from the first conversation remained on the glass.',
-    evaluation: 'Two restraints were removed.',
-    usedEvidenceIds: ['early'],
-    usedActionIds: ['second'],
-    candidates: [
-      { focus: 'two actions', reason: 'compare' },
-      { focus: 'one action', reason: 'clear' },
-      { focus: 'aftermath', reason: 'quiet' },
-    ],
-    selectionReason: 'The last action alone is readable.',
-    mode: 'actions',
-    startPrompt: 'The restrained person reaches toward the glass.',
-    endPrompt: 'The same person pauses by the marked glass.',
-    videoPrompt: 'A continuous 15-second scene, ambience only.',
-  };
-  const ai = new AiService(
-    config,
-    {
-      async createLiveSession() {
-        throw Error('NOT_USED');
-      },
-      async hangup() {},
-      async createResponse(body) {
-        const request = body as {
-          text: { format: { name: string } };
-          input: { content: { text?: string }[] }[];
-        };
-        if (request.text.format.name === 'ending_design') {
-          const input = JSON.parse(request.input[0].content[0].text!);
-          assert.deepEqual(
-            input.availableBeforeReferences.map((r: { gameVersion: number }) => r.gameVersion),
-            [0, 1],
-          );
-          return response(design);
-        }
-        return response({ verdict: 'pass', problems: [] });
-      },
-      async createImageEdit(body) {
-        edits.push(body);
-        return { data: [{ b64_json: source.toString('base64') }] };
-      },
-    },
-    () => 0,
-  );
-  const playId = randomUUID();
-  ai.register(playId, 600_000);
-  const results = new ResultStore({ now: () => 1000, maxEntryBytes: 32 * 1024 * 1024 });
-  results.create({ playId, ownerDigest: 'owner', locale: 'en' });
-  const sceneIds = [randomUUID(), randomUUID(), randomUUID()];
-  for (const version of [0, 1, 2]) {
-    const bytes = await sharp({
-      create: {
-        width: 1024,
-        height: 1024,
-        channels: 3,
-        background: version === 1 ? '#888' : '#333',
-      },
+for (const variant of [
+  { name: 'completed final scene', ready: [0, 1, 2], finalStatus: 'ready' },
+  { name: 'queued final scene at time limit', ready: [0, 1], finalStatus: 'queued' },
+  { name: 'failed final scene at time limit', ready: [0, 1], finalStatus: 'failed' },
+  { name: 'cancelled final scene at time limit', ready: [0, 1], finalStatus: 'cancelled' },
+  { name: 'only opening image at time limit', ready: [0], finalStatus: 'queued' },
+  { name: 'images completing after cutoff', ready: [0], finalStatus: 'queued', late: true },
+  { name: 'no completed scene at time limit', ready: [], finalStatus: 'queued', late: true },
+] as const)
+  test('default ending producer: ' + variant.name, async (t) => {
+    const readyVersions: readonly number[] = variant.ready;
+    const latestVersion = readyVersions.at(-1);
+    const hasLastActionReference = readyVersions.includes(1);
+    const config = loadAiConfig({ AI_MODE: 'mock' });
+    config.mode = 'live';
+    const source = await sharp({
+      create: { width: 1024, height: 1024, channels: 3, background: '#555' },
     })
       .jpeg()
       .toBuffer();
-    const assetId = await results.putAsset(playId, { bytes, kind: 'scene', mime: 'image/jpeg' });
-    results.appendMessage(playId, {
-      id: sceneIds[version],
-      side: 'assistant',
-      kind: 'result',
-      text: 'Confirmed scene',
-      imageSlot: {
-        status: 'ready',
-        assetId,
-        errorCode: null,
-        deadline: new Date(600000).toISOString(),
-      },
-    });
-    results.bindScene(playId, sceneIds[version], version);
-  }
-  const snapshot = new ScenarioCatalog({
-    scenarioPath: 'scenarios/mobile-playtest.json',
-    coreConfigPath: 'config/game-core.json',
-  }).current('en');
-  const packet: EndingPacket = {
-    playId,
-    snapshot,
-    scenario: localizeScenario(snapshot.scenarioV2, 'en'),
-    locale: 'en',
-    outcome: 'normal',
-    endReason: 'action_limit',
-    clearedIds: ['one', 'two'],
-    remainingObstacles: [],
-    facts: { obstacleId: 'last', values: {} },
-    inventory: [],
-    endedAt: 0,
-    gameVersion: 2,
-    finalMessageId: sceneIds[2],
-    evidence: {
-      records: [
-        {
-          sourceId: 'early',
-          kind: 'briefing',
-          order: 1,
-          generation: 1,
-          gameVersion: 0,
-          text: 'The mark on the glass is visible.',
-        },
+    const edits: ImageEditRequest[] = [];
+    const failures: string[] = [];
+    let submits = 0;
+    const design: EndingDesign = {
+      title: 'The last mark',
+      story: 'The mark from the first conversation remained on the glass.',
+      evaluation: 'Two restraints were removed.',
+      usedEvidenceIds: ['early'],
+      usedActionIds: hasLastActionReference ? ['second'] : [],
+      candidates: [
+        { focus: 'two actions', reason: 'compare' },
+        { focus: 'one action', reason: 'clear' },
+        { focus: 'aftermath', reason: 'quiet' },
       ],
-      truncated: false,
-    },
-    actions: ['first', 'second'].map((actionId, i) => ({
-      actionId,
-      order: i + 1,
-      obstacleId: 'last',
-      usage: 'Wipe the glass',
-      items: [],
-      beforeVersion: i,
-      afterVersion: i + 1,
-      beforeFacts: { obstacleId: 'last', values: {} },
-      afterFacts: { obstacleId: 'last', values: {} },
-      success: true,
-      cleared: true,
-      narrative: 'The glass is clear.',
-    })),
-    recentActionScenes: ['first', 'second'].map((actionId, i) => ({
-      actionId,
-      before: { messageId: sceneIds[i], gameVersion: i },
-      after: { messageId: sceneIds[i + 1], gameVersion: i + 1 },
-    })),
-  };
-  const jobs = new EndingJobs(
-    ai,
-    { enabled: true, apiKey: 'fake', globalAttempts: 100, timeoutMs: 60000, concurrent: 2 },
-    results,
-    {
-      now: () => 0,
-      graceMs: 0,
-      onFailure: (_id, _stage, code) => failures.push(code),
-      fal: {
-        async submit() {
-          submits++;
-          return { requestId: 'fake', statusUrl: 'fake', resultUrl: 'fake', cancelUrl: 'fake' };
+      selectionReason: 'The last action alone is readable.',
+      mode: hasLastActionReference ? 'actions' : 'aftermath',
+      startPrompt: 'The restrained person reaches toward the glass.',
+      endPrompt: 'The same person pauses by the marked glass.',
+      videoPrompt: 'A continuous 15-second scene, ambience only.',
+    };
+    const ai = new AiService(
+      config,
+      {
+        async createLiveSession() {
+          throw Error('NOT_USED');
         },
-        async status() {
-          return 'COMPLETED';
+        async hangup() {},
+        async createResponse(body) {
+          const request = body as {
+            text: { format: { name: string } };
+            input: { content: { text?: string }[] }[];
+          };
+          if (request.text.format.name === 'ending_design') {
+            const input = JSON.parse(request.input[0].content[0].text!);
+            assert.deepEqual(
+              input.availableBeforeReferences.map((r: { gameVersion: number }) => r.gameVersion),
+              readyVersions.filter((v) => v < 2),
+            );
+            assert.equal(input.confirmedGameVersion, 2);
+            assert.equal(input.references[0].gameVersion, latestVersion);
+            assert.equal(input.facts.values.glass, 'clear');
+            assert.equal(input.actions.length, 2);
+            assert.equal(input.outcome, 'normal');
+            if (latestVersion! < 2) assert.match(input.references[0].role, /earlier/);
+            return response(design);
+          }
+          return response({ verdict: 'pass', problems: [] });
         },
-        async result() {
-          return { videoUrl: 'fake' };
-        },
-        async downloadVideo() {
-          return syntheticEndingMp4();
-        },
-        async cancel() {
-          return { stopConfirmed: true };
+        async createImageEdit(body) {
+          edits.push(body);
+          return { data: [{ b64_json: source.toString('base64') }] };
         },
       },
-    },
-  );
-  t.after(async () => {
-    await jobs.drain();
-    jobs.dispose();
-    await ai.shutdown();
+      () => 0,
+    );
+    const playId = randomUUID();
+    ai.register(playId, 600_000);
+    const results = new ResultStore({ now: () => 1000, maxEntryBytes: 32 * 1024 * 1024 });
+    results.create({ playId, ownerDigest: 'owner', locale: 'en' });
+    const sceneIds = [randomUUID(), randomUUID(), randomUUID()];
+    const assetIds: string[] = [];
+    for (const version of [0, 1, 2]) {
+      const bytes = await sharp({
+        create: {
+          width: 1024,
+          height: 1024,
+          channels: 3,
+          background: version === 1 ? '#888' : '#333',
+        },
+      })
+        .jpeg()
+        .toBuffer();
+      const assetId = await results.putAsset(playId, { bytes, kind: 'scene', mime: 'image/jpeg' });
+      assetIds[version] = assetId;
+      results.appendMessage(playId, {
+        id: sceneIds[version],
+        side: 'assistant',
+        kind: 'result',
+        text: 'Confirmed scene',
+        imageSlot: {
+          status: readyVersions.includes(version)
+            ? 'ready'
+            : version === 2
+              ? variant.finalStatus
+              : 'queued',
+          assetId: readyVersions.includes(version) ? assetId : null,
+          errorCode: null,
+          deadline: new Date(600000).toISOString(),
+        },
+      });
+      results.bindScene(playId, sceneIds[version], version);
+    }
+    const snapshot = new ScenarioCatalog({
+      scenarioPath: 'scenarios/mobile-playtest.json',
+      coreConfigPath: 'config/game-core.json',
+    }).current('en');
+    const packet: EndingPacket = {
+      playId,
+      snapshot,
+      scenario: localizeScenario(snapshot.scenarioV2, 'en'),
+      locale: 'en',
+      outcome: 'normal',
+      endReason: 'time_limit',
+      clearedIds: ['one', 'two'],
+      remainingObstacles: [],
+      facts: { obstacleId: 'last', values: { glass: 'clear' } },
+      inventory: [],
+      endedAt: 0,
+      gameVersion: 2,
+      finalMessageId: sceneIds[2],
+      evidence: {
+        records: [
+          {
+            sourceId: 'early',
+            kind: 'briefing',
+            order: 1,
+            generation: 1,
+            gameVersion: 0,
+            text: 'The mark on the glass is visible.',
+          },
+        ],
+        truncated: false,
+      },
+      actions: ['first', 'second'].map((actionId, i) => ({
+        actionId,
+        order: i + 1,
+        obstacleId: 'last',
+        usage: 'Wipe the glass',
+        items: [],
+        beforeVersion: i,
+        afterVersion: i + 1,
+        beforeFacts: { obstacleId: 'last', values: { glass: 'fogged' } },
+        afterFacts: { obstacleId: 'last', values: { glass: 'clear' } },
+        success: true,
+        cleared: true,
+        narrative: 'The glass is clear.',
+      })),
+      recentActionScenes: ['first', 'second'].map((actionId, i) => ({
+        actionId,
+        before: { messageId: sceneIds[i], gameVersion: i },
+        after: { messageId: sceneIds[i + 1], gameVersion: i + 1 },
+      })),
+    };
+    const jobs = new EndingJobs(
+      ai,
+      { enabled: true, apiKey: 'fake', globalAttempts: 100, timeoutMs: 60000, concurrent: 2 },
+      results,
+      {
+        now: () => 0,
+        graceMs: 20,
+        onFailure: (_id, _stage, code) => failures.push(code),
+        fal: {
+          async submit() {
+            submits++;
+            return { requestId: 'fake', statusUrl: 'fake', resultUrl: 'fake', cancelUrl: 'fake' };
+          },
+          async status() {
+            return 'COMPLETED';
+          },
+          async result() {
+            return { videoUrl: 'fake' };
+          },
+          async downloadVideo() {
+            return syntheticEndingMp4();
+          },
+          async cancel() {
+            return { stopConfirmed: true };
+          },
+        },
+      },
+    );
+    t.after(async () => {
+      await jobs.drain();
+      jobs.dispose();
+      await ai.shutdown();
+    });
+    jobs.enqueue(packet, () => packet);
+    results.end(playId, { status: 'lost' });
+    if ('late' in variant && variant.late) {
+      // These arrive during transcript grace, before preparation runs. They must stay excluded.
+      for (const version of [1, 2])
+        results.updateMessage(playId, sceneIds[version], {
+          imageSlot: {
+            status: 'ready',
+            assetId: assetIds[version],
+            errorCode: null,
+            deadline: new Date(600000).toISOString(),
+          },
+        });
+    }
+    for (
+      let i = 0;
+      i < 300 && !['ready', 'failed'].includes(results.ending('owner', playId).status);
+      i++
+    )
+      await new Promise((r) => setTimeout(r, 5));
+    if (latestVersion === undefined) {
+      assert.equal(results.ending('owner', playId).status, 'failed');
+      assert.deepEqual(failures, ['ENDING_REFERENCE_MISSING']);
+      assert.equal(submits, 0);
+      assert.equal(edits.length, 0);
+      return;
+    }
+    assert.deepEqual(failures, []);
+    assert.equal(results.ending('owner', playId).status, 'ready');
+    assert.equal(submits, 1);
+    assert.equal(edits.length, 2);
+    const startVersion = hasLastActionReference ? 1 : latestVersion;
+    assert.deepEqual(
+      edits[0].images[0],
+      results.sceneReference(playId, sceneIds[startVersion], startVersion)!.jpeg,
+    );
+    assert.deepEqual(
+      edits[1].images[0],
+      results.sceneReference(playId, sceneIds[latestVersion], latestVersion)!.jpeg,
+    );
+    assert.match(edits[1].prompt, /"targetGameVersion":2/);
+    assert.match(edits[1].prompt, new RegExp('"referenceGameVersion":' + latestVersion));
+    assert.match(edits[1].prompt, /"glass":"clear"/);
   });
-  jobs.enqueue(packet, () => packet);
-  results.end(playId, { status: 'lost' });
-  for (
-    let i = 0;
-    i < 300 && !['ready', 'failed'].includes(results.ending('owner', playId).status);
-    i++
-  )
-    await new Promise((r) => setTimeout(r, 5));
-  assert.deepEqual(failures, []);
-  assert.equal(results.ending('owner', playId).status, 'ready');
-  assert.equal(submits, 1);
-  assert.equal(edits.length, 2);
-  assert.deepEqual(edits[0].images[0], results.sceneReference(playId, sceneIds[1], 1)!.jpeg);
-});
