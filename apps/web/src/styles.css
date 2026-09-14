@@ -1095,32 +1095,127 @@ h1 span {
   text-underline-offset: 4px;
 }
 .join-shell {
-  padding-top: 28px;
+  padding-top: clamp(12px, 2.5svh, 24px);
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   text-align: center;
 }
+.join-shell .play-brand {
+  margin: 0;
+}
+.join-shell .play-eyebrow {
+  margin-bottom: 10px;
+}
 .join-shell h1 {
-  font-size: 32px;
+  font-size: clamp(24px, 6.5vw, 30px);
+  line-height: 1.4;
+  margin: 0;
 }
 .join-orbit {
-  margin: 55px auto 34px;
-  width: 115px;
-  height: 115px;
+  margin: 24px auto 22px;
+  width: clamp(56px, 10svh, 80px);
+  height: clamp(56px, 10svh, 80px);
   display: grid;
   place-items: center;
   color: var(--mint);
-  font-size: 55px;
+  font-size: 38px;
   background: #b7f6c909;
   border: 1px solid #b7f6c94b;
   border-radius: 50%;
   box-shadow:
-    0 0 0 18px #b7f6c904,
-    0 0 0 19px #b7f6c909;
+    0 0 0 10px #b7f6c904,
+    0 0 0 11px #b7f6c909;
 }
 .join-copy {
   color: #aac1b2;
-  font-size: 13px;
-  line-height: 2;
-  margin: 22px 0;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.join-shell .language-choice {
+  margin: 10px 0;
+}
+.join-shell .play-field {
+  text-align: left;
+}
+.join-shell .play-field input {
+  margin: 6px 0 12px;
+}
+.join-shell .play-footnote {
+  font-size: 10px;
+  line-height: 1.6;
+  margin-top: 10px;
+}
+.difficulty-choice {
+  padding: 0;
+  margin: 0 0 14px;
+  border: 0;
+  text-align: left;
+  min-width: 0;
+}
+.difficulty-choice legend {
+  font-size: 12px;
+  margin-bottom: 7px;
+  color: #c9dfd0;
+}
+.difficulty-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.difficulty-option {
+  position: relative;
+  cursor: pointer;
+}
+.difficulty-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.difficulty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 64px;
+  padding: 8px 3px;
+  border: 1px solid #b7f6c930;
+  border-radius: 10px;
+  background: #101916;
+}
+.difficulty-card strong {
+  font-size: 12px;
+}
+.difficulty-card small {
+  font-size: 10px;
+  color: #aac1b2;
+}
+.difficulty-option input:checked + .difficulty-card {
+  border-color: var(--mint);
+  background: #b7f6c917;
+  color: var(--mint);
+}
+.difficulty-option input:focus-visible + .difficulty-card {
+  outline: 2px solid var(--mint);
+  outline-offset: 3px;
+}
+.difficulty-choice:disabled {
+  opacity: 0.55;
+}
+@media (max-height: 650px) {
+  .join-orbit {
+    margin-block: 17px;
+    width: 48px;
+    height: 48px;
+    font-size: 30px;
+  }
+  .join-shell h1 {
+    font-size: 24px;
+  }
+  .join-copy {
+    margin-block: 8px;
+  }
 }
 @media (max-width: 370px) {
   .play-shell {

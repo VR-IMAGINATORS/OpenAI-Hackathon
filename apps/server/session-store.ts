@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { SessionError } from './control.js';
+import type { Difficulty } from '../../packages/shared/difficulty.js';
 
 export interface AuthSession {
   digest: string;
@@ -7,6 +8,7 @@ export interface AuthSession {
   activePlayId: string | null;
   lastCreateRequestId?: string;
   lastCreateLocale?: 'ja' | 'en';
+  lastCreateDifficulty?: Difficulty;
   lastCreateClientId?: string;
   lastCreatePlayId?: string;
 }

@@ -107,6 +107,7 @@ export class GameSession {
     this.check();
     return structuredClone({
       id: this.id,
+      ...(this.coreSnapshot?.difficulty ? { difficulty: this.coreSnapshot.difficulty } : {}),
       generation: this.generation,
       status: this.status,
       endingOutcome: endingOutcome(this.status, this.clearedIds),

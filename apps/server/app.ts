@@ -11,6 +11,7 @@ import { AiService, AiServiceError } from '../../packages/server/ai-service.js';
 import type { OpenAITransport } from '../../packages/server/openai.js';
 import { localizeScenario, publicScenario } from '../../packages/shared/scenario.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
+import { difficultySchema } from '../../packages/shared/difficulty.js';
 import { GameRuntime } from '../local-server/hosted-runtime.js';
 import { GameError } from '../local-server/game.js';
 import { LiveOutboxError } from '../local-server/live-outbox.js';
@@ -25,7 +26,12 @@ import { operationalLog, type OperationalEvent } from './logging.js';
 
 const uuid = z.string().uuid();
 const createSchema = z
-  .object({ requestId: uuid, clientId: uuid, locale: z.enum(['ja', 'en']) })
+  .object({
+    requestId: uuid,
+    clientId: uuid,
+    locale: z.enum(['ja', 'en']),
+    difficulty: difficultySchema.optional(),
+  })
   .strict();
 const liveSchema = z.object({ requestId: uuid, sdp: z.string().min(1).max(65536) }).strict();
 const photoSchema = z
@@ -134,7 +140,7 @@ export function createHostedApp(
     recoveryMs: config.recoveryMs,
     resultTtlMs: config.resultTtlMs ?? 300_000,
     factory: (id, deadline, auth, request) => {
-      const snapshot = config.scenarioCatalog?.current(request.locale ?? 'ja');
+      const snapshot = config.scenarioCatalog?.current(request.locale ?? 'ja', request.difficulty);
       const scenario = snapshot
         ? localizeScenario(snapshot.scenarioV2, snapshot.locale)
         : structuredClone(config.scenario);
@@ -494,7 +500,7 @@ export function createHostedApp(
   app.post('/api/plays', (req, res) => {
     const body = config.scenarioCatalog
       ? createSchema.parse(req.body)
-      : createSchema.omit({ locale: true }).parse(req.body);
+      : createSchema.omit({ locale: true, difficulty: true }).parse(req.body);
     const { play, reused } = registry.create(owner(req), body);
     if (!reused) log({ event: 'play_started', correlationId: play.id, count: registry.occupied });
     res.status(reused ? 200 : 201).json({ controlEpoch: play.controllerEpoch, ...update(play) });

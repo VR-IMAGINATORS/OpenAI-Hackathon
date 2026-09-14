@@ -1,5 +1,7 @@
 # モバイル音声・写真プレイテスト
 
+2026-09-14追記: 開始画面と選択した難易度の時間・行動上限は [difficulty-selection/spec.md](../difficulty-selection/spec.md) を参照。
+
 Status: approved (2026-09-12)
 
 ## 目的

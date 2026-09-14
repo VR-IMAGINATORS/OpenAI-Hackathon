@@ -14,18 +14,19 @@ const fs = require('node:fs');
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Begin experience' : '体験を始める',
+        name: english ? 'Start game' : 'ゲームを始める',
         exact: true,
       });
       const answer = page.getByRole('button', {
         name: english ? 'Answer' : '応答する',
         exact: true,
       });
-      await begin.or(answer).first().waitFor();
+      const skip = page.getByRole('button', { name: 'Skip', exact: true });
+      await begin.or(answer).or(skip).first().waitFor();
       if (await begin.isVisible()) {
         await begin.click();
-        await page.getByRole('button', { name: 'Skip', exact: true }).click();
       }
+      if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
         .click();
@@ -274,7 +275,7 @@ const fs = require('node:fs');
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: '合言葉で参加' }).click();
+    await page.getByRole('button', { name: 'ゲームを始める' }).click();
     await page.evaluate(() => (window.__denyMic = true));
     await enterCall();
     await page.getByRole('alert').filter({ hasText: 'マイクを許可' }).waitFor();
@@ -414,7 +415,7 @@ const fs = require('node:fs');
     await page.getByRole('button', { name: 'もう一度プレイ' }).waitFor();
     owner = false;
     await page.reload();
-    await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Start game', exact: true }).waitFor();
     assert.deepEqual(pageErrors, []);
     console.log(
       'PASS: fake Live connect/reconnect/reload, passphrase authentication, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',

@@ -10,8 +10,15 @@ import type {
 import { clientId, playRequest, PlayApiError, retryUncertain, setApiLocale } from './play-api.js';
 import { LiveConnection } from './live.js';
 import PlayScreen from './PlayScreen.js';
+import {
+  difficultySchema,
+  difficultyPresets,
+  type Difficulty,
+} from '../../../packages/shared/difficulty.js';
 export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }) {
   const [locale, setLocale] = useState<'ja' | 'en'>('en');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const passphraseInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setApiLocale(locale);
     document.documentElement.lang = locale;
@@ -40,6 +47,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
         playId: session.playId,
       });
       if (envelope.state.locale) setLocale(envelope.state.locale);
+      if (envelope.state.difficulty) setDifficulty(envelope.state.difficulty);
       setPlay({ id: session.playId, envelope });
     }
   }
@@ -53,13 +61,21 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
   }, []);
   async function authenticate() {
     if (locked.current) return;
+    if (!authenticated && !passphrase.trim()) {
+      window.alert(t('合言葉を入力してください。', 'Please enter the passphrase.'));
+      passphraseInput.current?.focus();
+      return;
+    }
     locked.current = true;
     setLoading(true);
     setError('');
     try {
-      await playRequest('/api/auth', { passphrase });
-      setPassphrase('');
-      await restore();
+      if (!authenticated) {
+        await playRequest('/api/auth', { passphrase });
+        setPassphrase('');
+        await restore();
+      }
+      setShowOpening(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('参加できませんでした。', 'Unable to join.'));
     } finally {
@@ -80,7 +96,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
     try {
       await connection.prepare();
       createId.current ??= crypto.randomUUID();
-      const body = { requestId: createId.current, clientId, locale };
+      const body = { requestId: createId.current, clientId, locale, difficulty };
       const created = await retryUncertain(() => playRequest<CreatedPlay>('/api/plays', body));
       setPlay({
         id: created.playId,
@@ -167,33 +183,61 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           <option value="ja">日本語</option>
         </select>
       </label>
-      {!authenticated ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void authenticate();
-          }}
-        >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void authenticate();
+        }}
+      >
+        {!authenticated && (
           <label className="play-field">
             {t('参加の合言葉', 'Passphrase')}
             <input
+              ref={passphraseInput}
               type="password"
               autoComplete="off"
               value={passphrase}
               maxLength={256}
+              disabled={loading}
               onChange={(e) => setPassphrase(e.target.value)}
             />
           </label>
-          <button className="primary-button" disabled={loading || !passphrase}>
-            {t('合言葉で参加', 'Join')}
-          </button>
-        </form>
-      ) : (
-        <button className="primary-button" disabled={loading} onClick={() => setShowOpening(true)}>
-          {loading ? t('接続準備中…', 'Connecting…') : t('体験を始める', 'Begin experience')}
+        )}
+        <fieldset className="difficulty-choice" disabled={loading}>
+          <legend>{t('ゲーム難易度', 'Difficulty')}</legend>
+          <div className="difficulty-options">
+            {difficultySchema.options.map((value) => {
+              const preset = difficultyPresets[value];
+              return (
+                <label className="difficulty-option" key={value}>
+                  <input
+                    type="radio"
+                    name="difficulty"
+                    value={value}
+                    checked={difficulty === value}
+                    onChange={() => {
+                      setDifficulty(value);
+                      createId.current = null;
+                    }}
+                  />
+                  <span className="difficulty-card">
+                    <strong>{preset.label[locale]}</strong>
+                    <small>
+                      {preset.totalTimeSeconds / 60}
+                      {t('分', ' min')} · {preset.maxActions}
+                      {t('回', ' actions')}
+                    </small>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+        <button className="primary-button" disabled={loading}>
+          {loading ? t('準備中…', 'Preparing…') : t('ゲームを始める', 'Start game')}
           <span aria-hidden="true">↗</span>
         </button>
-      )}
+      </form>
       <p className="play-footnote">
         {t('カメラとマイクを使用します。', 'Camera and microphone access is required.')}
         <br />
