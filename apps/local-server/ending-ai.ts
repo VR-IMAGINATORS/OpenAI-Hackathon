@@ -196,7 +196,7 @@ export async function endingClues(
 export function endingTitle(packet: EndingPacket) {
   return packet.outcome === 'happy'
     ? { text: 'SUCCESS!!', position: 'lower center' }
-    : { text: 'to be continued', position: 'lower right' };
+    : { text: 'to be continued...', position: 'lower right' };
 }
 
 function narrativeInput(packet: EndingPacket, evidence: Awaited<ReturnType<typeof endingClues>>) {
@@ -281,7 +281,7 @@ For mode=actions, the FIRST selected action's beforeVersion must match one of av
 Start/end images share one person, tools, location, lighting and 1024-square composition. Never expose an obscured face. Each reference depicts its own gameVersion, which may precede confirmedGameVersion: it is NOT proof that later actions did not happen. Preserve established appearance and apply only the confirmed changes to reach the target state. Never claim an older image already depicts the final result, or undo confirmed progress to match it. Do not infer an earlier tool/body state from an image made after that action.
 When appearance requires a hidden face, use breathing, shoulders and hand posture for reactions; do not request backward glances, head turns or side profiles in either frames or video. For happy aftermath, make completed escape visible with the final open doorway and threshold in the foreground, camera inside looking toward the back of the person whose entire body and both feet are beyond the threshold in the clear safe route. No further closed door may block that route. Recompose an older reference as needed; do not leave the person inside facing a distant exit.
 Give precise camera height/distance/direction, subject motion distinct from camera movement, continuity, motivated cuts and synchronized physical sound in videoPrompt. Describe expectation, result, reaction and ending, not adjectives alone. No speech, narration, singing or music; only ambience and physical sound.
-Start image has no titles. End image preserves the living scene and outcome evidence, plus exactly the supplied endingTitle. For SUCCESS!!, reveal that title AFTER the outcome with a single short amber left-to-right light reveal around 12 seconds. For to be continued, the server composites an existing white left-pointing arrow with black handwritten lettering on a small black background at the lower right; endPrompt must request no lettering and leave that area clear. In videoPrompt, reveal and preserve this exact end-frame artwork around 12 seconds, without retyping it, ellipsis, recoloring or amber effects. Hold the title/artwork legibly for the final 2 seconds; no full-screen black title card or other text. These are targets, not guarantees.
+Start image has no titles. End image preserves the living scene and outcome evidence, plus exactly the supplied endingTitle. Reveal that title AFTER the outcome with a single short amber left-to-right light reveal around 12 seconds, hold it legibly for the final 2 seconds; no black title card or other text. These are targets, not guarantees.
 Write all image/video prompts in English. The film and established short story must agree on the confirmed outcome; the tag may reflect an earlier action outside the film's recent action selection.`;
   const recent = packet.actions.slice(-2);
   // A before-action image alone must not authorize a replay when only the opening is ready.

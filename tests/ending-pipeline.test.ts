@@ -197,7 +197,7 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert(!JSON.stringify(a).includes(second.evidence.records[0].text));
   assert(!JSON.stringify(b).includes(first.evidence.records[0].text));
   assert(!JSON.stringify(a).includes('UNPRESENTED_SECRET_SITUATION'));
-  assert.deepEqual(a.endingTitle, { text: 'to be continued', position: 'lower right' });
+  assert.deepEqual(a.endingTitle, { text: 'to be continued...', position: 'lower right' });
   assert.equal(a.outcome, 'normal');
   assert.deepEqual(a.facts, first.facts);
   assert.equal(f.calls[0].body.max_output_tokens, 4096);
@@ -407,13 +407,12 @@ test('frames retry only an explicit rejection once per frame and pass the accept
   assert.deepEqual(generations[0].body.images, [before.jpeg]);
   assert.deepEqual(generations[2].body.images, [final.jpeg, frames.start]);
   assert.match(generations[1].body.prompt, /Correct the rope contact/);
-  assert.match(generations[2].body.prompt, /arrow artwork will be composited separately/);
+  assert.match(generations[2].body.prompt, /to be continued\.\.\./);
   const endInspection = f.calls.filter((call) => call.kind === 'inspection').at(-1)!;
   assert.equal(
     endInspection.body.input[0].content[1].image_url,
     'data:image/jpeg;base64,' + frames.end.toString('base64'),
   );
-  assert.notDeepEqual(frames.end, frames.start, 'the actual arrow is composited before inspection');
   assert.equal(
     endInspection.body.input[0].content[2].image_url,
     'data:image/jpeg;base64,' + frames.start.toString('base64'),
@@ -421,7 +420,7 @@ test('frames retry only an explicit rejection once per frame and pass the accept
   assert.deepEqual(payloadOf(endInspection).target, packet().facts);
 });
 
-test('normal and bad endings use the arrow while happy endings keep their generated SUCCESS title', async () => {
+test('ending frames retain their generated titles without an arrow overlay', async () => {
   const jpeg = await generatedJpeg();
   for (const outcome of ['normal', 'bad', 'happy'] as const) {
     const ending = packet();
@@ -432,32 +431,11 @@ test('normal and bad endings use the arrow while happy endings keep their genera
     const frames = await createEndingFrames(f.ai, 'job', ending, design(), final, before, signal());
     const endPrompt = f.calls.filter((call) => call.kind === 'frame').at(-1)!.body.prompt;
     const endInspection = f.calls.filter((call) => call.kind === 'inspection').at(-1)!;
-    assert.equal(payloadOf(endInspection).slot, 'end');
-    assert.equal(
-      payloadOf(endInspection).title.text,
-      outcome === 'happy' ? 'SUCCESS!!' : 'to be continued',
-    );
-    assert.equal(
-      endInspection.body.input[0].content[1].image_url,
-      'data:image/jpeg;base64,' + frames.end.toString('base64'),
-    );
-    assert.match(endInspection.body.instructions, /FIRST image is the finished frame/);
-    assert.match(endInspection.body.instructions, /apply only BEFORE that compositing step/);
-    assert.match(endInspection.body.instructions, /Still reject a missing or incorrect title/);
-    if (outcome === 'happy') {
-      assert.deepEqual(frames.end, frames.start);
-      assert.match(endPrompt, /SUCCESS!!/);
-    } else {
-      assert.match(endPrompt, /Do not draw any title/);
-      const region = await sharp(frames.end)
-        .extract({ left: 382, top: 802, width: 560, height: 140 })
-        .stats();
-      assert(region.channels.every((channel) => channel.max > 240 && channel.min < 15));
-      const scene = await sharp(frames.end)
-        .extract({ left: 100, top: 100, width: 100, height: 100 })
-        .stats();
-      assert(Math.abs(scene.channels[0].mean - 136) < 5, 'the scene remains visible');
-    }
+    const title = outcome === 'happy' ? 'SUCCESS!!' : 'to be continued...';
+    assert.equal(payloadOf(endInspection).title.text, title);
+    assert(endPrompt.includes(title));
+    assert.deepEqual(frames.end, frames.start, 'no artwork is composited onto the generated frame');
+    assert.doesNotMatch(endPrompt + endInspection.body.instructions, /composit(?:ed|ing)|arrow artwork/);
   }
 });
 
