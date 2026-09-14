@@ -274,7 +274,7 @@ test('runtime accepts correction while classification is pending and discards th
 
 test('runtime consult consumes no action and a subsequent directive executes once', async (t) => {
   const h = await setup(t, (context) =>
-    context.conversation.fragments.some((f: any) => f.delta === '切って')
+    context.conversation.fragments.some((f: any) => f.delta === '実行して')
       ? execute(context)
       : {
           kind: 'consult',
@@ -291,7 +291,7 @@ test('runtime consult consumes no action and a subsequent directive executes onc
   );
   assert.equal(h.calls.judge, 0);
   assert.equal(h.runtime.state().actionsRemaining, 4);
-  await h.say('切って');
+  await h.say('実行して');
   const id = randomUUID();
   await h.delegate(id);
   await until(() => h.runtime.state().actionsRemaining === 3);

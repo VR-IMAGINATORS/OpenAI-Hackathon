@@ -106,8 +106,14 @@ test('core Live instructions delegate game questions and gate action claims on a
     snapshot,
   );
   assert.match(prompt, /必ずclientへ委譲/);
+  assert.match(prompt, /ゲーム内の行動はclientへの委譲を通じて実行する/);
+  assert.match(prompt, /「実行して」.*直前の道具や使い方の会話と合わせてclientへ委譲する/);
+  assert.match(prompt, /実行指示にはまずclientへ委譲/);
+  assert.match(prompt, /相づちだけで処理を終えず、結果を待つ前に委譲を行う/);
+  assert.match(prompt, /自分に実行能力がないという理由でゲーム内の依頼を断らない/);
   assert.match(prompt, /短い相づちを一度だけ伝える/);
   assert.match(prompt, /アプリから受付の相づちは届かない/);
-  assert.match(prompt, /受付の返事は指示を聞いたことだけを示し、.*行動の開始を断言しない/);
+  assert.match(prompt, /実行可否・成否・行動回数の消費はサーバーが判断する/);
+  assert.match(prompt, /委譲しただけでは行動の開始・成功・状態変化は未確定/);
   assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
 });
