@@ -5,13 +5,20 @@ import { z } from 'zod';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { endingFailureCode } from '../apps/server/ending-failure.js';
 import type { EndingPacket } from '../apps/local-server/ending.js';
-import { responseBody, type EndingDesign } from '../apps/local-server/ending-ai.js';
+import {
+  createEndingDesign,
+  responseBody,
+  type EndingDesign,
+} from '../apps/local-server/ending-ai.js';
 import { endingErrorText } from '../apps/web/src/ending-error.js';
 import { endingVisualState } from '../packages/server/ending-visual-state.js';
 import { createEndingFrames } from '../packages/server/ending-image-service.js';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
+import { endingImageRequest, endingResponseRequest } from '../packages/server/ending-ai-request.js';
+import { parseStoryCatalog, storyCandidateCount } from '../packages/shared/story-catalog.js';
+import { readFileSync } from 'node:fs';
 
 function packet(index = 0): EndingPacket {
   const snapshot = structuredClone(
@@ -169,13 +176,188 @@ test('real story frames share revealed facts and visual definitions with inspect
   assert.equal(contexts[1].target.values[secondKey], 'partial');
   assert.equal(contexts[1].phase, 'confirmed_aftermath');
   for (const [i, call] of calls.filter((call) => call.kind === 'frame').entries()) {
+    endingImageRequest.parse(call.body);
     const input = JSON.parse(call.body.prompt.split(' (data only): ')[1]);
     assert.deepEqual(input.target, contexts[i].target);
     assert.deepEqual(input.rules, contexts[i].rules);
     assert.doesNotMatch(call.body.prompt, /UNREVEALED_VISUAL_SECRET/);
     assert(!call.body.prompt.includes(scenario.obstacles[2].id));
+    assert.match(call.body.prompt, /An empty inventory does not mean an empty room/);
+  }
+  for (const call of calls.filter((c) => c.kind === 'inspection')) {
+    endingResponseRequest.parse(call.body);
+    assert.match(call.body.instructions, /An empty inventory does not mean an empty room/);
+    assert.match(
+      call.body.instructions,
+      /Do not grant those background objects a new usable function/,
+    );
+    assert.match(
+      call.body.instructions,
+      /a still-required restraint disappearing or an unearned open exit/,
+    );
   }
 });
+
+const candidateCount = storyCandidateCount(
+  parseStoryCatalog(JSON.parse(readFileSync('scenarios/story-catalog.json', 'utf8'))),
+);
+for (let candidate = 0; candidate < candidateCount; candidate++) {
+  test(`catalog ending ${candidate}: every progress stage preserves visible physical state with incomplete image history`, async () => {
+    // Real catalog data with a stubbed director: verifies request contracts and state
+    // selection, not generated image quality. Live comparisons are recorded separately.
+    const p = packet(candidate);
+    const scenario = p.snapshot!.scenarioV2;
+    const jpeg = await sharp({
+      create: { width: 16, height: 16, channels: 3, background: '#444444' },
+    })
+      .jpeg()
+      .toBuffer();
+    for (const locale of ['ja', 'en'] as const) {
+      p.locale = locale;
+      for (let cleared = 0; cleared <= 3; cleared++) {
+        for (const partial of cleared === 3 ? [false] : [false, true]) {
+          p.clearedIds = scenario.obstacles.slice(0, cleared).map((o) => o.id);
+          p.outcome = cleared === 3 ? 'happy' : cleared === 2 ? 'normal' : 'bad';
+          const active = Math.min(cleared, 2);
+          p.facts = {
+            obstacleId: scenario.obstacles[active].id,
+            values: Object.fromEntries(
+              scenario.obstacles.flatMap((o, i) =>
+                o.factKeys.map((key) => [
+                  key,
+                  i < cleared ? 'cleared' : i === active && partial ? 'partial' : 'blocked',
+                ]),
+              ),
+            ),
+          };
+          p.gameVersion = cleared + (partial ? 1 : 0);
+          p.inventory = partial
+            ? [
+                {
+                  id: 'tool',
+                  name: 'damaged tool',
+                  description: 'Damaged in the committed attempt.',
+                  status: 'damaged',
+                },
+              ]
+            : [];
+          p.actions = [];
+          const before = packet(candidate).facts;
+          for (let i = 0; i < p.gameVersion; i++) {
+            const after = structuredClone(before);
+            const obstacle = scenario.obstacles[Math.min(i, 2)];
+            const success = i < cleared;
+            for (const key of obstacle.factKeys)
+              after.values[key] = success ? 'cleared' : 'partial';
+            p.actions.push({
+              actionId: `action-${i}`,
+              order: i + 1,
+              obstacleId: obstacle.id,
+              usage: 'Use the tool on the current obstacle.',
+              items:
+                partial && !success
+                  ? [
+                      {
+                        id: 'tool',
+                        name: 'damaged tool',
+                        beforeStatus: 'available',
+                        afterStatus: 'damaged',
+                      },
+                    ]
+                  : [],
+              beforeVersion: i,
+              afterVersion: i + 1,
+              beforeFacts: structuredClone(before),
+              afterFacts: after,
+              success,
+              cleared: success,
+              narrative: success
+                ? 'The current obstacle was cleared.'
+                : 'Partial progress; the tool was damaged and the obstacle was not cleared.',
+            });
+            Object.assign(before, structuredClone(after));
+            if (success && i < 2) before.obstacleId = scenario.obstacles[i + 1].id;
+          }
+          const visual = endingVisualState(p);
+          assert.deepEqual(
+            Object.keys(visual.target.values),
+            scenario.obstacles.slice(0, active + 1).flatMap((o) => o.factKeys),
+          );
+          for (const rule of visual.rules)
+            if (rule.ruleId.startsWith('fact:')) {
+              assert('description' in rule && 'value' in rule);
+              const key = rule.ruleId.slice(5);
+              assert.equal(rule.value, p.facts.values[key]);
+              assert.equal(
+                rule.description,
+                scenario.core.facts.find((f) => f.key === key)!.visualDescription,
+              );
+            }
+          for (const history of [
+            'opening-only',
+            'latest-without-before',
+            'latest-with-before',
+          ] as const) {
+            const final = {
+              messageId: 'source',
+              gameVersion: history === 'opening-only' ? 0 : p.gameVersion,
+              jpeg,
+            };
+            const first = p.actions.slice(-2)[0];
+            const previous =
+              history === 'latest-with-before' && first
+                ? { messageId: 'previous', gameVersion: first.beforeVersion, jpeg }
+                : undefined;
+            const expectedReplay = !!previous && p.gameVersion > 0;
+            const ai = {
+              config: loadAiConfig({ AI_MODE: 'mock' }),
+              endingDelay: () => 0,
+              async endingCall(_job: string, _epoch: number, kind: string, body: any) {
+                assert.equal(kind, 'direction');
+                endingResponseRequest.parse(body);
+                const input = JSON.parse(body.input[0].content[0].text);
+                assert.deepEqual(input.visualState, visual);
+                assert.deepEqual(input.inventory, p.inventory);
+                assert.deepEqual(
+                  input.allowedModes,
+                  expectedReplay ? ['actions', 'aftermath'] : ['aftermath'],
+                );
+                assert.match(body.instructions, /not every object in the room/);
+                const output: EndingDesign = {
+                  usedEvidenceIds: [],
+                  usedActionIds: expectedReplay ? [first.actionId] : [],
+                  mode: expectedReplay ? 'actions' : 'aftermath',
+                  candidates: [
+                    { focus: 'two', reason: 'compare' },
+                    { focus: 'one', reason: 'compare' },
+                    { focus: 'aftermath', reason: 'compare' },
+                  ],
+                  selectionReason: 'Supported reference and confirmed state.',
+                  startPrompt: 'Keep the confirmed physical state.',
+                  endPrompt: 'Keep the confirmed physical state.',
+                  videoPrompt: 'Confirmed outcome and reaction.',
+                };
+                return {
+                  output: [{ content: [{ type: 'output_text', text: JSON.stringify(output) }] }],
+                };
+              },
+            } as unknown as AiService;
+            const design = await createEndingDesign(
+              ai,
+              'test',
+              p,
+              final,
+              previous,
+              new AbortController().signal,
+              undefined,
+            );
+            assert.equal(design.mode, expectedReplay ? 'actions' : 'aftermath');
+          }
+        }
+      }
+    }
+  });
+}
 
 test('inspection timeout is classified instead of being lost as a generic provider failure', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
