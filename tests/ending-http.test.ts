@@ -53,8 +53,26 @@ async function setup(t: TestContext, holdPreparation = false) {
       async createLiveSession() {
         throw new Error('NO_LIVE_CALL_EXPECTED');
       },
-      async createResponse() {
-        throw new Error('NO_RESPONSE_CALL_EXPECTED');
+      async createResponse(body) {
+        assert.equal((body as any).text.format.name, 'ending_text');
+        return {
+          output: [
+            {
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    title: prepared.story.title,
+                    story: prepared.story.text,
+                    evaluation: prepared.story.evaluation,
+                    tag: null,
+                    usedEvidenceIds: [],
+                  }),
+                },
+              ],
+            },
+          ],
+        };
       },
       async createImage() {
         throw new Error('SCENE_IMAGE_DISABLED_IN_HTTP_TEST');
@@ -64,10 +82,10 @@ async function setup(t: TestContext, holdPreparation = false) {
     ending: {
       graceMs: 0,
       pollMs: 1,
-      async prepare(_jobId, packet, signal, publishStory) {
+      async prepare(_jobId, packet, signal, publishedStory) {
         counts.prepare++;
         packets.push(packet);
-        publishStory(prepared.story);
+        assert.deepEqual(publishedStory, prepared.story);
         if (holdPreparation)
           await Promise.race([
             preparationGate,

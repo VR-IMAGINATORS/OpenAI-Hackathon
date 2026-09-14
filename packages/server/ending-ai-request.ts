@@ -63,4 +63,4 @@ export const endingImageRequest = z
   })
   .strict();
 
-export type EndingCallKind = 'extraction' | 'story' | 'frame' | 'inspection';
+export type EndingCallKind = 'extraction' | 'story' | 'direction' | 'frame' | 'inspection';

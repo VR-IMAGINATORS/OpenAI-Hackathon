@@ -29,6 +29,8 @@ const prepared: PreparedEnding = {
     title: 'The mark',
     text: 'The earlier mark remains by the closed door.',
     evaluation: 'Two restraints removed.',
+    tagId: null,
+    tagCatalogVersion: 1,
   },
 };
 const snapshot = new ScenarioCatalog({
@@ -260,8 +262,8 @@ test('video disabled still generates and retains text once without image prepara
 test('text is readable during preparation and survives an image failure', async (t) => {
   const gate = deferred<void>();
   const f = setup(t, {
-    prepare: async (_id, _packet, _signal, publish) => {
-      publish({ ...prepared.story, tagId: 'tableware_only', tagCatalogVersion: 1 });
+    prepare: async (_id, _packet, _signal, publishedStory) => {
+      assert.deepEqual(publishedStory, prepared.story);
       await gate.promise;
       throw new Error('ENDING_FRAME_REJECTED');
     },
@@ -269,7 +271,7 @@ test('text is readable during preparation and survives an image failure', async 
   const p = f.add();
   await until(() => p.view().storyStatus === 'ready');
   assert.equal(p.view().status, 'preparing');
-  assert.equal(p.view().story!.tagId, 'tableware_only');
+  assert.equal(p.view().story!.tagId, null);
   assert.equal(f.counts().submits, 0);
   gate.resolve();
   await until(() => p.view().status === 'failed');
@@ -290,6 +292,25 @@ test('text-only jobs do not wait for an occupied video slot or reserve video bud
   assert.equal(f.jobs.snapshot().reserved, 1);
   gate.resolve(prepared);
   await until(() => first.view().status === 'ready');
+});
+
+test('video-enabled plays publish text while another video occupies the only slot', async (t) => {
+  const gate = deferred<PreparedEnding>();
+  const f = setup(t, { budget: 3, concurrent: 1, prepare: () => gate.promise });
+  const first = f.add();
+  await until(() => f.counts().prepares === 1);
+  const second = f.add();
+  await until(() => second.view().storyStatus === 'ready');
+  assert.equal(first.view().status, 'preparing');
+  assert.equal(second.view().status, 'queued');
+  assert.equal(f.counts().prepares, 1, 'second video has not started');
+  assert.equal(second.view().story!.text, prepared.story.text);
+  f.jobs.cancelPlay(second.id, 'ENDING_TIMEOUT');
+  assert.equal(second.view().storyStatus, 'ready');
+  assert.equal(second.view().status, 'expired');
+  gate.resolve(prepared);
+  await until(() => first.view().status === 'ready');
+  assert.equal(f.counts().prepares, 1);
 });
 
 test('text-only failure and cancellation finish polling without changing disabled video status', async (t) => {

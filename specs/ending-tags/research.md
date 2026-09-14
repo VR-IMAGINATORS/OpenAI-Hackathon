@@ -1,6 +1,6 @@
 # 調査結果
 
-- 既存createEndingDesignは全行動と証拠を受け取るため再利用する。タグ専用呼び出し追加は不要。
+- 初期案はcreateEndingDesignでタグも同時生成していたが、脚本生成・検証失敗でタグが失われた。修正ではcreateEndingText→保存→createEndingDesignの順に分離する。後者は保存済み文章と同じ抽出済み証拠を使用し、伏線抽出を繰り返さない。
 - 現行EndingJobs.prepareは画像生成後に文章を返す。文章公開を画像生成前に移す必要がある。
 - EndingVideoはshowStoryで再生終了/操作待ち。これを自動表示にする。
 - 既存AiService.registerEndingはfal設定とは独立し、story最大1回・全体Responses予算を持つ。文章のみでも同じpermitを利用できる。

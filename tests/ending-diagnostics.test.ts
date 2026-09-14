@@ -116,6 +116,24 @@ for (const variant of [
   { name: 'only opening image at time limit', ready: [0], finalStatus: 'queued' },
   { name: 'images completing after cutoff', ready: [0], finalStatus: 'queued', late: true },
   { name: 'no completed scene at time limit', ready: [], finalStatus: 'queued', late: true },
+  {
+    name: 'direction API fails after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'network',
+  },
+  {
+    name: 'invalid film action after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'sources',
+  },
+  {
+    name: 'incomplete film response after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'incomplete',
+  },
 ] as const)
   test('default ending producer: ' + variant.name, async (t) => {
     const readyVersions: readonly number[] = variant.ready;
@@ -133,7 +151,11 @@ for (const variant of [
     let submits = 0;
     const design: EndingDesign = {
       title: 'The last mark',
-      tag: null,
+      tag: {
+        id: 'bare_hands',
+        evidenceActionIds: ['first'],
+        reason: 'The glass was wiped without items.',
+      },
       story: 'The mark from the first conversation remained on the glass.',
       evaluation: 'Two restraints were removed.',
       usedEvidenceIds: ['early'],
@@ -166,11 +188,13 @@ for (const variant of [
               title: design.title,
               story: design.story,
               evaluation: design.evaluation,
-              tag: null,
+              tag: design.tag,
               usedEvidenceIds: design.usedEvidenceIds,
             });
           }
           if (request.text.format.name === 'ending_design') {
+            assert.equal(results.ending('owner', playId).storyStatus, 'ready');
+            assert.equal(results.ending('owner', playId).story!.tagId, 'bare_hands');
             const input = JSON.parse(request.input[0].content[0].text!);
             assert.deepEqual(
               input.availableBeforeReferences.map((r: { gameVersion: number }) => r.gameVersion),
@@ -182,7 +206,16 @@ for (const variant of [
             assert.equal(input.actions.length, 2);
             assert.equal(input.outcome, 'normal');
             if (latestVersion! < 2) assert.match(input.references[0].role, /earlier/);
-            return response(design);
+            if ('directionFailure' in variant) {
+              if (variant.directionFailure === 'network')
+                throw new Error('simulated connection failure');
+              if (variant.directionFailure === 'incomplete')
+                return { status: 'incomplete', output: [] };
+            }
+            const { title, story, evaluation, tag, ...film } = design;
+            return response(
+              'directionFailure' in variant ? { ...film, usedActionIds: ['missing'] } : film,
+            );
           }
           return response({ verdict: 'pass', problems: [] });
         },
@@ -340,6 +373,17 @@ for (const variant of [
       i++
     )
       await new Promise((r) => setTimeout(r, 5));
+    if ('directionFailure' in variant) {
+      const view = results.ending('owner', playId);
+      assert.equal(view.status, 'failed');
+      assert.equal(view.storyStatus, 'ready');
+      assert.equal(view.story!.tagId, 'bare_hands');
+      assert.equal(view.story!.text, design.story);
+      assert.match(view.errorCode!, /^ENDING_DIRECTION_/);
+      assert.equal(submits, 0);
+      assert.equal(edits.length, 0);
+      return;
+    }
     if (latestVersion === undefined) {
       assert.equal(results.ending('owner', playId).status, 'failed');
       assert.deepEqual(failures, ['ENDING_REFERENCE_MISSING']);

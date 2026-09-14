@@ -7,7 +7,7 @@ Status: approved direction (2026-09-14)
 ## 実装
 
 1. `packages/shared/ending-tags.ts` に日英40タグのID・表示名・判定条件を定義。`apps/local-server/ending-tags.ts` にAI出力schemaと根拠検証を置く（T01,T06）。
-2. `apps/local-server/ending-ai.ts` のwriterを拡張。共通の文章schema・タグ指示を画像あり/なし双方で利用。画像ありは既存1回のdesign生成、画像なしはtextのみ1回。全行動入力は維持（T02,T06）。
+2. `apps/local-server/ending-ai.ts` のcreateEndingTextで全行動から文章・タグを先に生成。動画ありなら、保存済みのEndingNarrativeと抽出済み証拠をcreateEndingDesignへ渡し、映像用のschemaだけで別途directionを生成する。映像が文章・タグを再生成しない（T02,T06）。
 3. `packages/shared/ending.ts` に文章状態と任意のタグ情報を追加。`apps/server/ending-jobs.ts` は検証済み文章を即時保存。動画予約と文章実行を分け、動画disabled/素材なし/予算不足でも文章を生成。期限・重複防止・キャンセルを維持（T03〜T05,T07）。
 4. `apps/web/src/EndingVideo.tsx` はタグ・短文を解除数の直後に自動表示。文章の準備状態でもpollを継続し、再生終了待ちをなくす。`styles.css` にタグ表示を追加（T03,T07）。
 5. 関連仕様を同期し、サーバーテストとブラウザsmoke、check/test/buildで確認。実APIは呼ばない。
@@ -16,8 +16,10 @@ Status: approved direction (2026-09-14)
 
 既存の認証付きending APIを拡張し、新規エンドポイントは不要。providerの指示・タグ理由は公開せず、固定タグID・版・短文だけを渡す。ブラウザからタグや確定結果を指定しない。既存メモリ保持を継承。文章のみは最長120秒（既存設定が短ければその期限）とし、動画有効時の最大8分とは分ける。
 
-文章のみの実行枠と動画の実行枠は別々にENDING_CONCURRENT以下とする（既定それぞれ2）。動画の処理中・受理不明でも文章のみのジョブを進められる。API実行自体は既存の全体Responses同時数・予算を共有し、待機キューは合計10件まで。
+全プレイの文章フェーズと動画フェーズの実行枠を別々にENDING_CONCURRENT以下とする（既定それぞれ2）。文章生成・保存を完了したジョブだけを動画フェーズへ送る。動画有効のプレイでも他の動画の処理中・受理不明を待たず文章を生成する。API実行自体は既存の全体Responses同時数・予算を共有し、待機キューは合計10件まで。
 
 ## カバレッジ確認
 
-T01,T06→1,2、T02→2、T03→3,4、T04,T05→3、T07→3,4。追加AI分類呼び出し、永続図鑑、共有投稿は含まない。型と既存APIの変更点はdata-model.md参照。
+T01,T06→1,2、T02→2、T03→3,4、T04,T05→3、T07→3,4。通常動画経路はstoryとdirectionの2回に分割する。永続図鑑、共有投稿は含まない。型と既存APIの変更点はdata-model.md参照。
+
+ユーザーの失敗報告を受け、e7ab1ccの同時生成方式を修正した。映像API失敗・脚本不正・不完全応答・動画待機枠・待機中期限切れでも文章readyを維持する回帰テストを追加する。

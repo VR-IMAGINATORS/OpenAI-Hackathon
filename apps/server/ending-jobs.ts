@@ -14,6 +14,7 @@ import {
   abortableDelay,
   createEndingDesign,
   createEndingText,
+  type EndingNarrative,
   type EndingReference,
 } from '../local-server/ending-ai.js';
 import type { EndingPacket } from '../local-server/ending.js';
@@ -46,6 +47,9 @@ interface Job {
   before: EndingReference[];
   video: boolean;
   storyReady: boolean;
+  phase: 'text' | 'video';
+  narrative?: EndingNarrative;
+  sealedPacket?: EndingPacket;
 }
 interface UnconfirmedRequest {
   handle?: FalRequestHandle;
@@ -60,7 +64,7 @@ export interface EndingJobsOptions {
     jobId: string,
     packet: EndingPacket,
     signal: AbortSignal,
-    publishStory: (story: EndingStory) => void,
+    publishedStory: EndingStory,
   ) => Promise<PreparedEnding>;
   onFailure?: (playId: string, stage: EndingStage | 'admission', errorCode: string) => void;
 }
@@ -174,6 +178,7 @@ export class EndingJobs {
       before,
       video,
       storyReady: false,
+      phase: 'text',
     });
     // Defer until runtime has emitted its final scene and stored the ended result.
     queueMicrotask(() => this.pump());
@@ -186,12 +191,15 @@ export class EndingJobs {
     for (const job of this.jobs.values()) {
       if (job.running) continue;
       const running = [...this.jobs.values()].filter(
-        (other) => !!other.running && other.video === job.video,
+        (other) => !!other.running && other.phase === job.phase,
       ).length;
       // A slow or unconfirmed video must not prevent text-only results from being written.
-      if (running + (job.video ? this.unknown.size : 0) >= this.config.concurrent) continue;
+      if (running + (job.phase === 'video' ? this.unknown.size : 0) >= this.config.concurrent)
+        continue;
       // Set the marker synchronously before invoking any producer callbacks.
-      job.running = Promise.resolve().then(() => this.run(job));
+      job.running = Promise.resolve().then(() =>
+        job.phase === 'text' ? this.runStory(job) : this.run(job),
+      );
     }
   }
   private assertCurrent(job: Job): void {
@@ -204,23 +212,18 @@ export class EndingJobs {
     this.results.updateEnding(job.playId, { story, storyStatus: 'ready' });
     job.storyReady = true;
   }
-  private async prepare(job: Job, packet: EndingPacket): Promise<PreparedEnding | null> {
+  private async prepare(job: Job, packet: EndingPacket): Promise<PreparedEnding> {
     const signal = job.controller.signal;
+    const narrative = job.narrative!;
     if (this.options.prepare && job.video)
-      return this.options.prepare(job.id, packet, signal, (story) => this.publishStory(job, story));
+      return this.options.prepare(job.id, packet, signal, publicEndingStory(narrative));
     const scene = job.scene;
-    if (!job.video || !scene) {
-      job.stage = 'story';
-      const design = await createEndingText(this.ai, job.id, packet, signal);
-      this.publishStory(job, publicEndingStory(design));
-      if (job.video) {
-        job.stage = 'reference';
-        throw new Error('ENDING_REFERENCE_MISSING');
-      }
-      return null;
+    if (!scene) {
+      job.stage = 'reference';
+      throw new Error('ENDING_REFERENCE_MISSING');
     }
     const availableBefore = job.before;
-    job.stage = 'story';
+    job.stage = 'direction';
     const design = await createEndingDesign(
       this.ai,
       job.id,
@@ -228,10 +231,10 @@ export class EndingJobs {
       scene,
       availableBefore[0],
       signal,
+      narrative,
       availableBefore,
     );
     const story = publicEndingStory(design);
-    this.publishStory(job, story);
     const selected = packet.actions.find((action) => action.actionId === design.usedActionIds[0]);
     const before = availableBefore.find(
       (reference) => reference.gameVersion === selected?.beforeVersion,
@@ -254,22 +257,44 @@ export class EndingJobs {
       story,
     };
   }
+  private async runStory(job: Job): Promise<void> {
+    try {
+      this.assertCurrent(job);
+      job.stage = 'story';
+      this.update(job.playId, { storyStatus: 'generating' });
+      const graceUntil = job.packet.endedAt + (this.options.graceMs ?? 12_000);
+      if (this.now() < graceUntil)
+        await abortableDelay(graceUntil - this.now(), job.controller.signal);
+      this.assertCurrent(job);
+      const packet = job.seal();
+      const narrative = await createEndingText(this.ai, job.id, packet, job.controller.signal);
+      this.publishStory(job, publicEndingStory(narrative));
+      if (job.video) {
+        job.narrative = narrative;
+        job.sealedPacket = packet;
+        job.phase = 'video';
+      }
+    } catch (error) {
+      this.failJob(job, error);
+    } finally {
+      if (job.phase === 'video') {
+        job.running = undefined;
+        this.pump();
+      } else {
+        this.finish(job);
+      }
+    }
+  }
   private async run(job: Job): Promise<void> {
     const signal = job.controller.signal;
     try {
       this.assertCurrent(job);
       this.update(job.playId, {
-        ...(job.video ? { status: 'preparing' as const } : {}),
-        storyStatus: 'generating',
+        status: 'preparing',
       });
-      const graceUntil = job.packet.endedAt + (this.options.graceMs ?? 12_000);
-      if (this.now() < graceUntil) await abortableDelay(graceUntil - this.now(), signal);
-      this.assertCurrent(job);
-      const packet = job.seal();
+      const packet = job.sealedPacket!;
       const prepared = await this.prepare(job, packet);
       this.assertCurrent(job);
-      if (!prepared) return;
-      if (!job.storyReady) this.publishStory(job, prepared.story);
       // Reserve before download and before incurring a video charge.
       job.stage = 'storage';
       this.results.reserveVideo(job.playId);
@@ -339,41 +364,47 @@ export class EndingJobs {
         videoPath: '/api/play/ending/video?playId=' + encodeURIComponent(job.playId),
       });
     } catch (error) {
-      const cancelled = new Set([
-        'ENDING_TIMEOUT',
-        'ENDING_CANCELLED',
-        'ENDING_DRAINING',
-        'ENDING_RESULT_EXPIRED',
-      ]);
-      const errorCode = signal.aborted
-        ? typeof signal.reason === 'string' && cancelled.has(signal.reason)
-          ? signal.reason
-          : 'ENDING_CANCELLED'
-        : endingFailureCode(error, job.stage);
-      this.update(job.playId, {
-        ...(job.video
-          ? {
-              status:
-                signal.reason === 'ENDING_TIMEOUT' ? ('expired' as const) : ('failed' as const),
-            }
-          : {}),
-        storyStatus: job.storyReady ? 'ready' : 'failed',
-        errorCode,
-        videoPath: null,
-      });
-      this.reportFailure(job.playId, job.stage, errorCode);
+      this.failJob(job, error);
     } finally {
-      clearTimeout(job.timer);
-      this.ai.releaseMedia(job.id);
-      this.results.releaseVideoReservation(job.playId);
-      if (job.video && !job.submitted) this.reserved--;
-      if (job.upstreamPending) {
-        this.unknown.set(job.id, { handle: job.handle, checking: false });
-        void this.checkUnknown(job.id);
-      }
-      this.jobs.delete(job.playId);
-      this.pump();
+      this.finish(job);
     }
+  }
+  private failJob(job: Job, error: unknown): void {
+    const signal = job.controller.signal;
+    const cancelled = new Set([
+      'ENDING_TIMEOUT',
+      'ENDING_CANCELLED',
+      'ENDING_DRAINING',
+      'ENDING_RESULT_EXPIRED',
+    ]);
+    const errorCode = signal.aborted
+      ? typeof signal.reason === 'string' && cancelled.has(signal.reason)
+        ? signal.reason
+        : 'ENDING_CANCELLED'
+      : endingFailureCode(error, job.stage);
+    this.update(job.playId, {
+      ...(job.video
+        ? {
+            status: signal.reason === 'ENDING_TIMEOUT' ? ('expired' as const) : ('failed' as const),
+          }
+        : {}),
+      storyStatus: job.storyReady ? 'ready' : 'failed',
+      errorCode,
+      videoPath: null,
+    });
+    this.reportFailure(job.playId, job.stage, errorCode);
+  }
+  private finish(job: Job): void {
+    clearTimeout(job.timer);
+    this.ai.releaseMedia(job.id);
+    this.results.releaseVideoReservation(job.playId);
+    if (job.video && !job.submitted) this.reserved--;
+    if (job.upstreamPending) {
+      this.unknown.set(job.id, { handle: job.handle, checking: false });
+      void this.checkUnknown(job.id);
+    }
+    this.jobs.delete(job.playId);
+    this.pump();
   }
   cancelPlay(playId: string, reason = 'ENDING_RESULT_EXPIRED'): void {
     const job = this.jobs.get(playId);

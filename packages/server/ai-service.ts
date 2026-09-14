@@ -32,7 +32,14 @@ export interface MediaPermit {
   busy: number;
   cancelled: boolean;
   controllers: Set<AbortController>;
-  ending?: { extraction: number; story: number; start: number; end: number; inspection: number };
+  ending?: {
+    extraction: number;
+    story: number;
+    direction: number;
+    start: number;
+    end: number;
+    inspection: number;
+  };
 }
 interface LiveReservation {
   providerId?: string;
@@ -148,7 +155,7 @@ export class AiService {
       busy: 0,
       cancelled: false,
       controllers: new Set(),
-      ending: { extraction: 0, story: 0, start: 0, end: 0, inspection: 0 },
+      ending: { extraction: 0, story: 0, direction: 0, start: 0, end: 0, inspection: 0 },
     };
     this.media.set(jobId, permit);
     return permit;
@@ -202,7 +209,7 @@ export class AiService {
         )
           this.limit();
       } else if (
-        attempts[kind as 'story' | 'extraction'] >= (kind === 'story' ? 1 : 6) ||
+        attempts[kind as 'story' | 'direction' | 'extraction'] >= (kind === 'extraction' ? 6 : 1) ||
         this.responseAttempts >= this.config.globalResponseAttempts
       )
         this.limit();
@@ -223,7 +230,7 @@ export class AiService {
       this.inspectionAttempts++;
       this.inspectionBusy++;
     } else {
-      attempts[kind as 'story' | 'extraction']++;
+      attempts[kind as 'story' | 'direction' | 'extraction']++;
       this.responseAttempts++;
       this.responseBusy++;
     }

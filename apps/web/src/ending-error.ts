@@ -31,9 +31,11 @@ export function endingErrorText(code: string | null, locale: 'ja' | 'en'): strin
     );
   if (code.startsWith('ENDING_STORY_'))
     return t(
-      'このプレイの物語・演出を作る段階で失敗しました。',
-      'The story and direction for this play could not be prepared.',
+      'このプレイのタグ・結末文を作る段階で失敗しました。',
+      'The story and tag for this play could not be prepared.',
     );
+  if (code.startsWith('ENDING_DIRECTION_'))
+    return t('動画の演出を作る段階で失敗しました。', 'The video direction could not be prepared.');
   if (code.startsWith('ENDING_START_FRAME_'))
     return t(
       '動画の開始画像を作る段階で失敗しました。',

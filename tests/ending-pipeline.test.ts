@@ -6,6 +6,7 @@ import {
   createEndingText,
   endingClues,
   type EndingDesign,
+  type EndingNarrative,
   type EndingReference,
 } from '../apps/local-server/ending-ai.js';
 import type { EndingPacket } from '../apps/local-server/ending.js';
@@ -17,9 +18,16 @@ import type { EndingCallKind } from '../packages/server/ending-ai-request.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 
 const signal = () => new AbortController().signal;
-const response = (value: unknown) => ({
-  output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
-});
+const response = (value: unknown) => {
+  // Film API returns only film fields; the published narrative is supplied separately.
+  if (value && typeof value === 'object' && 'videoPrompt' in value) {
+    const { title, story, evaluation, tag, ...film } = value as EndingDesign;
+    value = film;
+  }
+  return {
+    output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+  };
+};
 interface RecordedCall {
   kind: EndingCallKind;
   body: any;
@@ -154,6 +162,15 @@ const before: EndingReference = {
   jpeg: Buffer.from('before-reference'),
 };
 const payloadOf = (call: RecordedCall) => JSON.parse(call.body.input[0].content[0].text);
+const textOutput = () => {
+  const { title, story, evaluation, tag, usedEvidenceIds } = design();
+  return { title, story, evaluation, tag, usedEvidenceIds };
+};
+const narrative = (p = packet(), patch: Partial<EndingNarrative> = {}): EndingNarrative => ({
+  ...textOutput(),
+  presentedEvidence: p.evidence.records,
+  ...patch,
+});
 
 test('ending writer receives early clues and every confirmed action, distinct per play without secret situations', async () => {
   const first = packet('The red mark meant a promise to return.');
@@ -161,15 +178,16 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   second.playId = 'second-play';
   second.actions[0].narrative = 'A different confirmed first action changed this play.';
   const f = fakeAi(() => response(design()));
-  await createEndingDesign(f.ai, 'job-first', first, final, before, signal());
-  await createEndingDesign(f.ai, 'job-second', second, final, before, signal());
+  await createEndingDesign(f.ai, 'job-first', first, final, before, signal(), narrative(first));
+  await createEndingDesign(f.ai, 'job-second', second, final, before, signal(), narrative(second));
   assert.deepEqual(
     f.calls.map((call) => call.kind),
-    ['story', 'story'],
+    ['direction', 'direction'],
   );
   const [a, b] = f.calls.map(payloadOf);
   assert.deepEqual(a.actions, first.actions);
-  assert.equal(a.tagCatalog.length, 40);
+  assert.equal(a.tagCatalog, undefined, 'film cannot choose tags again');
+  assert.equal(a.establishedEnding.text, narrative().story);
   assert.deepEqual(a.recentActionIds, ['action-3', 'action-4']);
   assert.equal(a.presentedEvidence[0].text, first.evidence.records[0].text);
   assert.equal(b.presentedEvidence[0].text, second.evidence.records[0].text);
@@ -194,7 +212,15 @@ test('tag evidence can use an early action outside the two film actions and text
     reason: 'An early improvised use.',
   };
   const f = fakeAi(() => response(design({ tag: chosen })));
-  const result = await createEndingDesign(f.ai, 'job', packet(), final, before, signal());
+  const result = await createEndingDesign(
+    f.ai,
+    'job',
+    packet(),
+    final,
+    before,
+    signal(),
+    narrative(packet(), { tag: chosen }),
+  );
   assert.deepEqual(result.tag, chosen);
   const textAi = fakeAi(() =>
     response({
@@ -210,7 +236,8 @@ test('tag evidence can use an early action outside the two film actions and text
   assert.equal(textAi.calls.length, 1);
   assert.equal(textAi.calls[0].body.input[0].content.length, 1);
   assert.deepEqual(payloadOf(textAi.calls[0]).actions, packet().actions);
-  assert.deepEqual(payloadOf(textAi.calls[0]).tagCatalog, payloadOf(f.calls[0]).tagCatalog);
+  assert.equal(payloadOf(textAi.calls[0]).tagCatalog.length, 40);
+  assert.equal(payloadOf(f.calls[0]).establishedEnding.tag.id, chosen.id);
 });
 
 test('writer rejects unknown tags, invented or duplicate tag evidence and overlong summaries', async () => {
@@ -220,8 +247,8 @@ test('writer rejects unknown tags, invented or duplicate tag evidence and overlo
     { tag: { id: 'tools', evidenceActionIds: ['action-1', 'action-1'], reason: 'duplicate' } },
     { story: 'x'.repeat(241) },
   ]) {
-    const f = fakeAi(() => response({ ...design(), ...patch }));
-    await assert.rejects(createEndingDesign(f.ai, 'job', packet(), final, before, signal()));
+    const f = fakeAi(() => response({ ...textOutput(), ...patch }));
+    await assert.rejects(createEndingText(f.ai, 'job', packet(), signal()));
     assert.equal(f.calls.length, 1);
   }
 });
@@ -235,7 +262,9 @@ test('ending writer rejects invented sources and non-recent, duplicate or revers
     { usedActionIds: ['action-2', 'action-3', 'action-4'] },
   ]) {
     const f = fakeAi(() => response(design(invalid)));
-    await assert.rejects(createEndingDesign(f.ai, 'job', packet(), final, before, signal()));
+    await assert.rejects(
+      createEndingDesign(f.ai, 'job', packet(), final, before, signal(), narrative()),
+    );
     assert.equal(f.calls.length, 1);
   }
 });
@@ -243,11 +272,19 @@ test('ending writer rejects invented sources and non-recent, duplicate or revers
 test('missing or wrong before-action references force aftermath; no-action endings invent no attempt', async () => {
   const f = fakeAi(() => response(design()));
   await assert.rejects(
-    createEndingDesign(f.ai, 'job', packet(), final, undefined, signal()),
+    createEndingDesign(f.ai, 'job', packet(), final, undefined, signal(), narrative()),
     /ENDING_INVALID_CONTINUITY/,
   );
   await assert.rejects(
-    createEndingDesign(f.ai, 'job', packet(), final, { ...before, gameVersion: 1 }, signal()),
+    createEndingDesign(
+      f.ai,
+      'job',
+      packet(),
+      final,
+      { ...before, gameVersion: 1 },
+      signal(),
+      narrative(),
+    ),
     /ENDING_INVALID_CONTINUITY/,
   );
   const aftermath = fakeAi(() => response(design({ mode: 'aftermath', usedActionIds: [] })));
@@ -256,7 +293,15 @@ test('missing or wrong before-action references force aftermath; no-action endin
   empty.outcome = 'bad';
   empty.clearedIds = [];
   empty.endReason = 'time_limit';
-  const result = await createEndingDesign(aftermath.ai, 'job', empty, final, undefined, signal());
+  const result = await createEndingDesign(
+    aftermath.ai,
+    'job',
+    empty,
+    final,
+    undefined,
+    signal(),
+    narrative(empty),
+  );
   assert.equal(result.mode, 'aftermath');
   const input = payloadOf(aftermath.calls[0]);
   assert.deepEqual(input.actions, []);
