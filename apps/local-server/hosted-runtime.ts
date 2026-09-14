@@ -206,13 +206,6 @@ export class GameRuntime {
             context.actionEpoch,
             context.controllerEpoch,
           );
-          this.enqueue({
-            ...factCommand(
-              this.words('わかった、それでやってみる！', 'Got it. I’ll try that!'),
-              delegation.id,
-            ),
-            type: 'session.commentary.append',
-          });
           this.recordDiagnostic('judgment_started');
           const judgmentStarted = now();
           const messageId = randomUUID();

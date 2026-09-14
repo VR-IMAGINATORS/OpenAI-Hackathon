@@ -106,6 +106,8 @@ test('core Live instructions delegate game questions and gate action claims on a
     snapshot,
   );
   assert.match(prompt, /必ずclientへ委譲/);
-  assert.match(prompt, /実行予約が成立する前/);
-  assert.match(prompt, /commentaryが届く前に成功を告げない/);
+  assert.match(prompt, /短い相づちを一度だけ伝える/);
+  assert.match(prompt, /アプリから受付の相づちは届かない/);
+  assert.match(prompt, /受付の返事は指示を聞いたことだけを示し、.*行動の開始を断言しない/);
+  assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
 });

@@ -42,6 +42,7 @@ async function setup(
   classify: (context: any) => unknown | Promise<unknown>,
   recognizeGate?: Promise<void>,
   traceEnabled = false,
+  judgeGate?: Promise<void>,
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0 };
@@ -65,6 +66,7 @@ async function setup(
         }
         if (context.proposal) {
           calls.judge++;
+          await judgeGate;
           return response({
             success: false,
             narrative: 'ロープは切れなかった。',
@@ -297,6 +299,46 @@ test('runtime consult consumes no action and a subsequent directive executes onc
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
   assert.equal(h.runtime.state().actionsRemaining, 3);
+});
+
+test('execution adds no server acknowledgement while judging and still delivers its result once', async (t) => {
+  const gate = deferred<void>();
+  const h = await setup(t, execute, undefined, false, gate.promise);
+  t.after(() => gate.resolve());
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  const before = h.runtime.pollCommands(h.generation, 0).commands;
+  const lastSeq = before.at(-1)?.seq ?? 0;
+  const newCommands = () =>
+    h.runtime.pollCommands(h.generation, 0).commands.filter((c) => c.seq > lastSeq);
+  await h.say('これでこじあけて');
+  await h.runtime.event(h.generation, {
+    type: 'session.output_transcript.delta',
+    event_id: randomUUID(),
+    delta: '受け取ったよ。',
+    start_ms: 100,
+    end_ms: 200,
+  });
+  const delegationId = randomUUID();
+  await h.delegate(delegationId);
+  await until(() => h.calls.judge === 1);
+  assert.equal(h.runtime.state().busy, true);
+  assert.equal(newCommands().filter((c) => c.type === 'session.commentary.append').length, 0);
+  gate.resolve();
+  await until(() =>
+    newCommands().some(
+      (c) => c.type === 'session.commentary.append' && c.content === 'ロープは切れなかった。',
+    ),
+  );
+  await h.delegate(delegationId);
+  for (let i = 0; i < 3; i++) await tick();
+  assert.equal(h.calls.judge, 1);
+  assert.equal(h.runtime.state().actionsRemaining, 3);
+  assert.deepEqual(
+    newCommands()
+      .filter((c) => c.type === 'session.commentary.append')
+      .map((c) => c.content),
+    ['ロープは切れなかった。', '現在の状況: ' + h.runtime.game.situation],
+  );
 });
 
 test('photo use question arrives only after recognition and an upload retry does not repeat it', async (t) => {
