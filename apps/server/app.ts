@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { ResultStore, ResultStoreError } from './result-store.js';
 import { SceneJobs } from './scene-jobs.js';
+import { EndingJobs, type EndingJobsOptions } from './ending-jobs.js';
 import express, { type Request, type ErrorRequestHandler } from 'express';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
@@ -64,6 +65,7 @@ export function createHostedApp(
     now?: () => number;
     wallNow?: () => number;
     log?: (event: OperationalEvent) => void;
+    ending?: Omit<EndingJobsOptions, 'now'>;
   } = {},
 ) {
   const now = options.now ?? (() => performance.now());
@@ -89,11 +91,27 @@ export function createHostedApp(
     wallOrigin = wallNow();
   const resultNow = () => wallOrigin + now() - clockOrigin;
   const sceneJobs = new SceneJobs(ai, { now });
+  let endingJobs: EndingJobs;
   const results = new ResultStore({
     now: resultNow,
     ttlMs: config.resultTtlMs ?? 300_000,
-    onEvict: (id) => sceneJobs.forgetPlay(id),
+    maxEntryBytes: config.ending?.enabled ? 32 * 1024 * 1024 : undefined,
+    onEvict: (id) => {
+      sceneJobs.forgetPlay(id);
+      endingJobs?.cancelPlay(id);
+    },
   });
+  endingJobs = new EndingJobs(
+    ai,
+    config.ending ?? {
+      enabled: false,
+      globalAttempts: 0,
+      timeoutMs: 480_000,
+      concurrent: 2,
+    },
+    results,
+    { ...options.ending, now },
+  );
   function safeDisplay(fn: () => void) {
     try {
       fn();
@@ -178,6 +196,7 @@ export function createHostedApp(
                   liveGeneration: input.generation,
                   imageSlot: slot,
                 });
+                results.bindScene(id, input.messageId, input.gameVersion);
                 const fail = () =>
                   safeDisplay(() =>
                     results.updateMessage(id, input.messageId, {
@@ -221,6 +240,7 @@ export function createHostedApp(
                   fail();
                 }
               }),
+            ending: (packet, seal) => safeDisplay(() => endingJobs.enqueue(packet, seal)),
             ended: (state) =>
               safeDisplay(() => {
                 results.end(id, state);
@@ -254,15 +274,16 @@ export function createHostedApp(
   const liveRequests = new WeakMap<GameRuntime, Set<string>>();
   function status() {
     const counts = ai.snapshot();
-    const remaining = Math.max(
-      registry.occupied,
-      counts.liveBusy +
-        counts.pendingCreates +
-        counts.responseBusy +
-        counts.unknownCreates +
-        (counts.imageBusy ?? 0) +
-        (counts.inspectionBusy ?? 0),
-    );
+    const remaining =
+      Math.max(
+        registry.occupied,
+        counts.liveBusy +
+          counts.pendingCreates +
+          counts.responseBusy +
+          counts.unknownCreates +
+          (counts.imageBusy ?? 0) +
+          (counts.inspectionBusy ?? 0),
+      ) + endingJobs.snapshot().remaining;
     return {
       readyToDeploy: registry.admission === 'draining' && remaining === 0,
       version: config.version,
@@ -275,7 +296,7 @@ export function createHostedApp(
     registry.admission = 'draining';
     sceneJobs.cancelAll();
     log({ event: 'drain_started', version: config.version });
-    draining = Promise.all([registry.drain(), ai.shutdown()]).then(() => {
+    draining = Promise.all([endingJobs.drain(), registry.drain(), ai.shutdown()]).then(() => {
       log({ event: 'drain_finished', version: config.version, count: status().remaining });
     });
     return draining;
@@ -290,6 +311,7 @@ export function createHostedApp(
       if (now() >= play.runtime.closingAt) work.push(registry.end(play));
     }
     results.sweep();
+    endingJobs.tick();
     sessions.sweep();
     const completion = Promise.all(work);
     if (waitForClose) await completion;
@@ -322,6 +344,7 @@ export function createHostedApp(
     queue.dispose();
     await drain();
     results.clear();
+    endingJobs.dispose();
   }
   function owner(req: Request) {
     return sessions.authorize(cookieToken(req));
@@ -498,6 +521,59 @@ export function createHostedApp(
     const asset = results.asset(auth.digest, playId(req), uuid.parse(req.params.assetId));
     res.type(asset.mime).send(asset.bytes);
   });
+  function endingPlayId(req: Request) {
+    const query = req.query.playId;
+    const header = req.get('X-Play-Id');
+    if (query !== undefined && header !== undefined && query !== header)
+      throw new SessionError('INVALID_PLAY_ID', 400);
+    return uuid.parse(query ?? header);
+  }
+  app.get('/api/play/ending', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req));
+    res.json(results.ending(auth.digest, endingPlayId(req)));
+  });
+  app.get('/api/play/ending/video', (req, res) => {
+    const auth = sessions.authorizeResult(cookieToken(req));
+    const bytes = results.endingVideo(auth.digest, endingPlayId(req));
+    res.set({ 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' });
+    const range = req.get('Range');
+    if (!range) {
+      res.set('Content-Length', String(bytes.length));
+      return res.send(bytes);
+    }
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    let start = 0,
+      end = bytes.length - 1;
+    if (
+      !match ||
+      (!match[1] && !match[2]) ||
+      [match[1], match[2]].some((n) => n && !Number.isSafeInteger(Number(n)))
+    ) {
+      res.set('Content-Range', `bytes */${bytes.length}`);
+      return res.status(416).end();
+    }
+    if (!match[1]) start = Math.max(0, bytes.length - Number(match[2]));
+    else {
+      start = Number(match[1]);
+      if (match[2]) end = Math.min(end, Number(match[2]));
+    }
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      start < 0 ||
+      start > end ||
+      start >= bytes.length ||
+      (!match[1] && Number(match[2]) <= 0)
+    ) {
+      res.set('Content-Range', `bytes */${bytes.length}`);
+      return res.status(416).end();
+    }
+    res.status(206).set({
+      'Content-Range': `bytes ${start}-${end}/${bytes.length}`,
+      'Content-Length': String(end - start + 1),
+    });
+    return res.send(bytes.subarray(start, end + 1));
+  });
   app.get('/api/play/state', (req, res) => {
     const auth = sessions.authorizeResult(cookieToken(req)),
       id = playId(req);
@@ -653,6 +729,7 @@ export function createHostedApp(
     if (!status().readyToDeploy || !ai.resume()) throw new SessionError('DRAIN_INCOMPLETE', 409);
     registry.resume();
     sceneJobs.resume();
+    endingJobs.resume();
     draining = undefined;
     drainRequestId = undefined;
     res.json(status());
@@ -720,5 +797,17 @@ export function createHostedApp(
     errorResponse(res, status, code, message);
   };
   app.use(errors);
-  return { app, registry, ai, sessions, results, sceneJobs, tick, drain, dispose, bootId };
+  return {
+    app,
+    registry,
+    ai,
+    sessions,
+    results,
+    sceneJobs,
+    endingJobs,
+    tick,
+    drain,
+    dispose,
+    bootId,
+  };
 }

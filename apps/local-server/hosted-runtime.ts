@@ -18,6 +18,8 @@ import type { Scenario } from '../../packages/shared/scenario.js';
 import type { LiveCommand } from '../../packages/shared/game.js';
 import type { AiService } from '../../packages/server/ai-service.js';
 import type { PhotoQueue } from '../server/photo-queue.js';
+import { StoryEvidenceLedger } from './story-evidence.js';
+import { endingOutcome, freezeEndingPacket, type EndingPacket } from './ending.js';
 
 export interface RuntimePresentation {
   transcript(fragment: import('../../packages/shared/conversation.js').TranscriptFragment): void;
@@ -27,10 +29,12 @@ export interface RuntimePresentation {
     text: string;
     commandSeq: number | null;
     generation: number;
+    gameVersion: number;
     facts: import('../../packages/shared/conversation.js').GameFacts;
     situation: string;
   }): void;
   notice?(text: string): void;
+  ending?(packet: EndingPacket, seal: () => EndingPacket): void;
   ended(state: import('../../packages/shared/game.js').PublicGameState): void;
 }
 type Cached<T> = { digest: string; epoch: number; promise: Promise<T> };
@@ -54,6 +58,11 @@ export class GameRuntime {
     if (this.diagnostics.length > 128) this.diagnostics.shift();
   }
   private actionInFlight = false;
+  private pendingScene: { messageId: string; beforeVersion: number } | null = null;
+  private readonly sceneMessages = new Map<number, string>();
+  private readonly story = new StoryEvidenceLedger();
+  private terminalPacket?: EndingPacket;
+  private sealedPacket?: EndingPacket;
   private stateVersion = 0;
   private previousState = '';
   private epoch = 1;
@@ -99,17 +108,40 @@ export class GameRuntime {
         this.intents?.stop();
         this.traceEntries = [];
         this.diagnostics = [];
-        if (['won', 'lost'].includes(this.game.status) && !this.actionInFlight) {
-          this.presentScene(this.game.situation);
-        }
-        this.presentation?.ended(this.state());
         this.closingAt = Math.min(
           deadline,
           now() + (['won', 'lost'].includes(this.game.status) ? 12_000 : 0),
         );
+        const finalActionCommitted =
+          this.actionInFlight &&
+          this.pendingScene &&
+          this.game.gameVersion > this.pendingScene.beforeVersion;
+        if (['won', 'lost'].includes(this.game.status)) {
+          if (finalActionCommitted) {
+            const messageId = this.pendingScene!.messageId;
+            this.sceneMessages.set(this.game.gameVersion, messageId);
+            this.recordSceneEvidence(
+              this.game.lastResult!.narrative + '\n' + this.currentSituation(),
+              messageId,
+            );
+          } else this.presentScene(this.game.situation);
+        }
+        this.story.end(now(), this.closingAt);
+        this.terminalPacket = this.captureEnding(now());
+        // The owner reserves ending AI authority synchronously, before Live retirement.
+        this.presentation?.ending?.(this.terminalPacket, () => this.sealEnding());
+        this.presentation?.ended(this.state());
       },
       coreSnapshot,
     );
+    this.story.startGeneration(this.game.generation, now());
+    this.story.append({
+      sourceId: 'briefing',
+      kind: 'briefing',
+      generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
+      text: scenario.playerBriefing,
+    });
     if (coreSnapshot) {
       this.game.controllerEpoch = this.epoch;
       this.ledger = new ConversationLedger({ generation: this.game.generation, now });
@@ -167,6 +199,8 @@ export class GameRuntime {
           });
           this.recordDiagnostic('judgment_started');
           const judgmentStarted = now();
+          const messageId = randomUUID();
+          this.pendingScene = { messageId, beforeVersion: this.game.gameVersion };
           this.actionInFlight = true;
           let result;
           try {
@@ -174,6 +208,7 @@ export class GameRuntime {
             this.recordDiagnostic('judgment_committed');
           } finally {
             this.actionInFlight = false;
+            this.pendingScene = null;
           }
           if (this.disposed || context.controllerEpoch !== this.epoch) return;
           this.syncCore();
@@ -191,7 +226,6 @@ export class GameRuntime {
             )
               this.traceEntries.shift();
           }
-          const messageId = randomUUID();
           this.sendFacts('確定結果: ' + result.narrative, delegation.id);
           this.sendFacts(this.currentSituation(), delegation.id);
           const command = this.speak(result.narrative, delegation.id, messageId);
@@ -287,7 +321,7 @@ export class GameRuntime {
     );
     this.game.error = text;
     this.speak(text);
-    this.presentation?.notice?.(text);
+    this.presentNotice(text);
   }
   /** Server-owned maintenance; also callable with the injected clock in tests. */
   tick() {
@@ -319,7 +353,7 @@ export class GameRuntime {
     for (const command of factCommands(warning.deliveryInstructions[locale]))
       this.enqueue({ ...command, type: 'session.instructions.append' });
     this.speak(text);
-    this.presentation?.notice?.(text);
+    this.presentNotice(text);
     this.recordDiagnostic('time_warning');
   }
   private syncCore(changed = false) {
@@ -362,15 +396,77 @@ export class GameRuntime {
   private words(ja: string, en: string) {
     return this.coreSnapshot?.locale === 'en' ? en : ja;
   }
+  private recordSceneEvidence(text: string, messageId: string) {
+    this.story.append({
+      sourceId: `scene:${messageId}`,
+      kind: this.game.lastResult ? 'action_result' : 'situation',
+      generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
+      text,
+    });
+  }
+  private presentNotice(text: string) {
+    if (this.presentation?.notice) {
+      this.story.append({
+        sourceId: `notice:${randomUUID()}`,
+        kind: 'situation',
+        generation: this.game.generation,
+        gameVersion: this.game.gameVersion,
+        text,
+      });
+      this.presentation.notice(text);
+    }
+  }
   private presentScene(text: string, messageId = randomUUID(), commandSeq: number | null = null) {
+    this.sceneMessages.set(this.game.gameVersion, messageId);
+    this.recordSceneEvidence(text, messageId);
     this.presentation?.scene({
       messageId,
       text,
       commandSeq,
       generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
       facts: structuredClone(this.game.facts),
       situation: this.game.situation,
     });
+  }
+  private captureEnding(endedAt: number): EndingPacket {
+    const reference = (gameVersion: number) => {
+      const messageId = this.sceneMessages.get(gameVersion);
+      return messageId ? { messageId, gameVersion } : null;
+    };
+    return freezeEndingPacket({
+      playId: this.id,
+      snapshot: this.coreSnapshot ?? null,
+      scenario: this.game.scenario,
+      locale: this.coreSnapshot?.locale ?? 'ja',
+      outcome: endingOutcome(this.game.status, this.game.clearedIds),
+      endReason: this.game.endReason!,
+      clearedIds: this.game.clearedIds,
+      remainingObstacles: this.game.scenario.obstacles
+        .filter((obstacle) => !this.game.clearedIds.includes(obstacle.id))
+        .map(({ id, title, situation }) => ({ id, title, situation })),
+      facts: this.game.facts,
+      inventory: this.game.inventory,
+      actions: this.game.committedActions,
+      evidence: this.story.snapshot(),
+      endedAt,
+      gameVersion: this.game.gameVersion,
+      finalMessageId: reference(this.game.gameVersion)?.messageId ?? null,
+      recentActionScenes: this.game.committedActions.slice(-2).map((action) => ({
+        actionId: action.actionId,
+        before: reference(action.beforeVersion),
+        after: reference(action.afterVersion),
+      })),
+    });
+  }
+  private sealEnding(): EndingPacket {
+    if (!this.terminalPacket) throw new Error('ENDING_NOT_TERMINAL');
+    this.sealedPacket ??= freezeEndingPacket({
+      ...this.terminalPacket,
+      evidence: this.story.seal(),
+    });
+    return this.sealedPacket;
   }
   state() {
     const state = {
@@ -461,6 +557,7 @@ export class GameRuntime {
           throw new GameError(410, '接続中にプレイが失効しました。');
         }
         this.game.generation++;
+        this.story.startGeneration(this.game.generation, this.now());
         this.syncCore();
         this.intents?.reset();
         this.outbox?.reset(this.game.generation, this.epoch);
@@ -553,20 +650,30 @@ export class GameRuntime {
             offsetMs: event.offset_ms,
           });
       } else {
-        const fragment = this.ledger!.append({
-          eventId: event.event_id,
-          generation,
-          speaker: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
-          delta: event.delta,
-          startMs: event.start_ms,
-          endMs: event.end_ms,
-        });
+        let fragment;
+        try {
+          fragment = this.ledger!.append({
+            eventId: event.event_id,
+            generation,
+            speaker: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
+            delta: event.delta,
+            startMs: event.start_ms,
+            endMs: event.end_ms,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === 'CONVERSATION_LIMIT')
+            this.story.markTruncated();
+          throw error;
+        }
         if (fragment?.speaker === 'user')
           this.recordDiagnostic(
             'user_transcript_received',
             fragment.executionEligible ? 'eligible' : 'ineligible',
           );
-        if (fragment) this.presentation?.transcript(fragment);
+        if (fragment) {
+          this.story.transcript(fragment, this.now());
+          this.presentation?.transcript(fragment);
+        }
         this.syncCore();
         if (!this.game.terminal) this.intents!.onContextChanged();
       }
@@ -579,6 +686,22 @@ export class GameRuntime {
     if (this.seen.size >= 10000) throw new GameError(429, '音声イベント上限です。');
     this.seen.add(event.event_id);
     const epoch = this.epoch;
+    if (event.type === 'session.output_transcript.delta') {
+      this.story.transcript(
+        {
+          eventId: event.event_id,
+          generation,
+          speaker: 'assistant',
+          delta: event.delta,
+          startMs: event.start_ms,
+          endMs: event.end_ms,
+          receivedGameVersion: this.game.gameVersion,
+          serverSeq: this.seen.size,
+          executionEligible: false,
+        },
+        this.now(),
+      );
+    }
     if (event.type === 'session.input_transcript.delta') {
       this.game.appendTranscript(event.delta);
       clearTimeout(this.transcriptTimer);
@@ -633,8 +756,23 @@ export class GameRuntime {
   async action(actionId: string, revision: number): Promise<LiveCommand[]> {
     if (this.coreSnapshot) throw new GameError(410, '音声で使い方を指示してください。');
     const epoch = this.epoch;
-    const result = await this.game.commit(actionId, revision);
+    const scene = { messageId: randomUUID(), beforeVersion: this.game.gameVersion };
+    if (!this.actionInFlight) {
+      this.pendingScene = scene;
+      this.actionInFlight = true;
+    }
+    let result;
+    try {
+      result = await this.game.commit(actionId, revision);
+    } finally {
+      if (this.pendingScene === scene) {
+        this.pendingScene = null;
+        this.actionInFlight = false;
+      }
+    }
     if (this.disposed || epoch !== this.epoch) throw new GameError(410, '操作権が失効しました。');
+    if (this.game.gameVersion > scene.beforeVersion)
+      this.presentScene(result.narrative + '\n' + this.currentSituation(), scene.messageId);
     return [
       factCommand(
         '確定した行動結果: ' + result.narrative + ' 現在の状況: ' + this.game.state().situation,

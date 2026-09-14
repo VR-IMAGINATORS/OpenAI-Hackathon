@@ -17,6 +17,7 @@
 | 種類 | 名前 | 内容 |
 | --- | --- | --- |
 | Secret | OPENAI_API_KEY | この環境用のOpenAIキー |
+| Secret | FAL_KEY | 動画有効化時に必要なfalキー。登録手順は[こちら](fal-ending-setup.md) |
 | Secret | APP_PASSPHRASE | 参加者へ伝える共通合言葉 |
 | Secret | OPS_TOKEN | 十分に長いランダムな運用専用token。参加用と別にする |
 | Variable | AWS_ACCOUNT_ID | 12桁の対象account |
@@ -29,10 +30,19 @@
 | Variable | AI_GLOBAL_RESPONSE_ATTEMPTS | 環境のResponses回数上限。例1000 |
 | Variable | LIVE_MODEL | 省略時 `gpt-live-1` |
 | Variable | RESPONSE_MODEL | 省略時 `gpt-5.6-terra`。運営が利用可能なモデルを設定 |
+| Variable | ENDING_VIDEO_ENABLED | 省略時`false`。`true`で終了時の動画生成を有効化 |
+| Variable | AI_GLOBAL_VIDEO_ATTEMPTS | 有効時に必須。1〜1,000の整数でプロセス全体の動画送信回数を制限 |
+| Variable | ENDING_JOB_TIMEOUT_SECONDS | 省略時480、60〜540秒。待機と準備を含む締切 |
+| Variable | ENDING_CONCURRENT | 省略時2、1〜2 |
+| Variable | RESULT_TTL_SECONDS | 動画有効時の省略値600、無効時300。動画締切+60秒以上、最大600 |
 
 例示回数は予算の推奨値ではない。運営の実予算と利用権限で決める。回数上限はプロセス再起動で戻り、金額上限ではない。合言葉やキーをコマンドに直書きせず、GitHubのSecret入力UI等で登録する。ローカルのルート`.env`は読み込まない。`.env.relay.local`からの移行が必要な場合は、運営が必要な値だけを新しい`.env.local`へ手動で移す。キー値をGitへ追加しない。
 
 環境変数はDocker buildへ渡さず、配信時だけLightsail deployment environmentに注入する。Lightsailのdeploymentを閲覧できるIAM権限では環境変数も見えるため、その閲覧者も秘密を扱う人として限定する。以前のdeployment履歴に古いキーが残ることを考慮し、ローテーションでは旧キーも失効させる。[AWS Container environment](https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_Container.html)
+
+動画用のSecret/Variablesを保存しても稼働中のサーバーは変わらない。動画を含むコードを明示的にリリースした際に両workflowのdeploy stepから反映する。すでに`RESULT_TTL_SECONDS=300`を設定した環境で動画を有効化する場合は600へ変更する。有効時のキー・動画回数の不足や締切と保持期間の不整合は、公開処理または起動時に拒否する。動画を無効にした公開では`FAL_KEY`をサーバーへ渡さない。
+
+脚本・開始/終了画像・検査には既存のOpenAI予算も消費する。`AI_GLOBAL_VIDEO_ATTEMPTS`は再起動で戻り、サービス全期間の料金上限にならない。動画は1プレイ1本で、送信の受理が不明な場合も消費済みとして保持し再送しない。状態確認や再読み込みから新たな動画を作らない。
 
 ## 配信の流れ
 
@@ -52,6 +62,8 @@
 
 自動resumeは行わない。まず対象account/region/serviceを確認し、AWSのcurrent/next deploymentと公開 `/healthz` のversion/bootIdを照合する。終了未確認のLiveがある場合は、予約を強制解放したりプロセスを再起動して隠したりしない。運営が上流の接続状態を確認する。
 
+動画もdrain時に新しい生成を止め、既知のfal要求をキャンセルする。キャンセル応答だけで完了とせず、上流の停止が未確認の動画や受理不明の送信はdrainのremainingに残る。120秒で停止を確認できない場合は配信を止め、運営がfal側の状態を確認する。結果を保持しているだけの状態と、進行中・停止未確認の要求を混同しない。
+
 旧版が残り、旧版へのdrainが完了していて、未確認Live・pending create等が0なら、運営の信頼された端末から同じOPS_TOKENで `POST /api/ops/resume` を行える。bodyは `{ "expectedVersion": "確認した40桁SHA", "expectedBootId": "確認したbootId" }`。tokenはAuthorization Bearerヘッダーに入れ、Originは送らない。プレイヤーcookie・合言葉では管理APIを操作できない。tokenをブラウザconsoleやshell履歴に貼らず、秘密を表示しない管理スクリプト等から呼ぶ。現在のversion/bootが変わった場合は再確認してから操作する。
 
 失敗した新版がactiveになった場合は、その版をdrainしてから確認済みのmain履歴SHAを審査workflowで指定する。開発環境では修正/revertをmainへ反映し、通常の自動更新を使う。直接の無条件rollbackや二重受付はしない。
@@ -66,6 +78,7 @@
 - 30秒程度の上流遅延とHTTP再試行でも二重行動・二重API作成にならないこと。
 - dev自動、judging手動、失敗配信、旧新切替中の受付と実音声停止。AWSのSIGTERM猶予とshutdown所要時間。
 - image・静的配信・Actions/AWSログにキー、合言葉、写真、会話、SDPが入らないこと。
+- 実falによる15秒768P動画、開始/終了画像と文字、提示済み伏線と確定行動に沿った物語、normal / bad分岐。実スマホの音声付き再生・期限切れ・再読み込みと、5人同時生成時のメモリを確認する。
 
 強制kill、OOM、プラットフォーム障害ではメモリのLive IDが失われるため、外部音声接続終了や課金停止を完全には保証しない。正常drainの確認と混同しない。上流側の独立期限・回収方法は実公開前に確認する。未確認のAPI仕様を保証として説明しない。
 

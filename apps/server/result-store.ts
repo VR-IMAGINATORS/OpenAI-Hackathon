@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import type { EndingView } from '../../packages/shared/ending.js';
+import type { EndingReference } from '../local-server/ending-ai.js';
+import { MAX_ENDING_VIDEO_BYTES } from '../../packages/server/ending-video-media.js';
 import {
   chatMessageSchema,
   type ChatMessage,
@@ -47,6 +50,10 @@ interface Entry {
   endedAt: number | null;
   retainUntil: number | null;
   result: unknown;
+  ending: EndingView | null;
+  video: Buffer | null;
+  videoReservation: number;
+  sceneVersions: Map<string, number>;
 }
 export class ResultStoreError extends Error {
   constructor(
@@ -85,6 +92,10 @@ export class ResultStore {
       endedAt: null,
       retainUntil: null,
       result: null,
+      ending: null,
+      video: null,
+      videoReservation: 0,
+      sceneVersions: new Map(),
     });
   }
   private entry(id: string): Entry {
@@ -276,10 +287,87 @@ export class ResultStore {
     if (!a) throw new ResultStoreError(404, 'ASSET_NOT_FOUND');
     return { bytes: Buffer.from(a.bytes), mime: a.mime };
   }
+  bindScene(playId: string, messageId: string, gameVersion: number): void {
+    const e = this.entry(playId);
+    if (!e.messages.has(messageId)) throw new ResultStoreError(404, 'MESSAGE_NOT_FOUND');
+    const old = e.sceneVersions.get(messageId);
+    if (old !== undefined && old !== gameVersion) throw new ResultStoreError(409, 'SCENE_VERSION');
+    e.sceneVersions.set(messageId, gameVersion);
+  }
+  sceneReference(playId: string, messageId: string, gameVersion: number): EndingReference | null {
+    const e = this.entry(playId);
+    const message = e.messages.get(messageId);
+    if (!message) return null; // The terminal callback runs before its scene callback.
+    if (e.sceneVersions.get(messageId) !== gameVersion)
+      throw new ResultStoreError(409, 'SCENE_VERSION');
+    if (message.imageSlot?.status === 'failed' || message.imageSlot?.status === 'cancelled')
+      throw new ResultStoreError(409, 'ENDING_REFERENCE_FAILED');
+    if (message.imageSlot?.status !== 'ready' || !message.imageSlot.assetId) return null;
+    const asset = e.assets.get(message.imageSlot.assetId);
+    if (!asset || asset.kind !== 'scene') throw new ResultStoreError(404, 'ASSET_NOT_FOUND');
+    return { messageId, gameVersion, jpeg: asset.bytes };
+  }
+  initializeEnding(playId: string, view: EndingView): boolean {
+    const e = this.entry(playId);
+    if (e.ending) return false;
+    this.makeRoom(e, Buffer.byteLength(JSON.stringify(view)));
+    e.ending = structuredClone(view);
+    return true;
+  }
+  updateEnding(
+    playId: string,
+    patch: Partial<Pick<EndingView, 'status' | 'errorCode' | 'story' | 'videoPath'>>,
+  ): void {
+    const e = this.entry(playId);
+    if (!e.ending) throw new ResultStoreError(404, 'ENDING_NOT_FOUND');
+    const next = { ...e.ending, ...structuredClone(patch) };
+    this.makeRoom(
+      e,
+      Math.max(
+        0,
+        Buffer.byteLength(JSON.stringify(next)) - Buffer.byteLength(JSON.stringify(e.ending)),
+      ),
+    );
+    e.ending = next;
+  }
+  ending(owner: string, playId: string): EndingView {
+    const e = this.owned(owner, playId);
+    if (!e.ending) throw new ResultStoreError(409, 'ENDING_NOT_STARTED');
+    return {
+      ...structuredClone(e.ending),
+      retainUntil: e.retainUntil === null ? null : new Date(e.retainUntil).toISOString(),
+    };
+  }
+  reserveVideo(playId: string): void {
+    const e = this.entry(playId);
+    if (e.videoReservation || e.video) return;
+    this.makeRoom(e, MAX_ENDING_VIDEO_BYTES);
+    e.videoReservation = MAX_ENDING_VIDEO_BYTES;
+  }
+  releaseVideoReservation(playId: string): void {
+    const e = this.entries.get(playId);
+    if (e) e.videoReservation = 0;
+  }
+  putVideo(playId: string, bytes: Buffer): void {
+    const e = this.entry(playId);
+    if (!e.videoReservation || bytes.length > e.videoReservation || !bytes.length)
+      throw new ResultStoreError(413, 'VIDEO_CAPACITY');
+    e.videoReservation = 0;
+    e.video = bytes;
+  }
+  endingVideo(owner: string, playId: string): Buffer {
+    const e = this.owned(owner, playId);
+    if (e.ending?.status !== 'ready' || !e.video)
+      throw new ResultStoreError(409, 'VIDEO_NOT_READY');
+    return e.video;
+  }
   private bytes(e: Entry): number {
     return (
       Buffer.byteLength(JSON.stringify([...e.messages.values()])) +
       Buffer.byteLength(JSON.stringify(e.result) ?? '') +
+      Buffer.byteLength(JSON.stringify(e.ending)) +
+      (e.video?.length ?? 0) +
+      e.videoReservation +
       [...e.assets.values()].reduce((n, a) => n + a.bytes.length, 0)
     );
   }

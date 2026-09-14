@@ -1,0 +1,287 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ending video API",
+    "version": "0.1.0",
+    "description": "Hosted ending results. Read-only endpoints never start generation."
+  },
+  "security": [
+    {
+      "playSession": []
+    }
+  ],
+  "paths": {
+    "/api/play/ending": {
+      "get": {
+        "operationId": "getEnding",
+        "summary": "Return the authenticated owner’s ending status.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/playId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status after an ending or interruption is recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EndingView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session is not authorized to read results."
+          },
+          "404": {
+            "description": "The retained result belongs to another owner."
+          },
+          "409": {
+            "description": "The game has not recorded an ending yet (ENDING_NOT_STARTED)."
+          },
+          "410": {
+            "description": "No retained result exists, or the session has expired."
+          }
+        }
+      }
+    },
+    "/api/play/ending/video": {
+      "get": {
+        "operationId": "getEndingVideo",
+        "summary": "Read the owner’s retained MP4, including a single byte range.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/playId"
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete retained MP4.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "const": "bytes"
+                }
+              }
+            },
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested byte range.",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "const": "bytes"
+                }
+              }
+            },
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session is not authorized to read results."
+          },
+          "404": {
+            "description": "The retained result belongs to another owner."
+          },
+          "409": {
+            "description": "Video is not ready."
+          },
+          "410": {
+            "description": "No retained result exists, or the session has expired."
+          },
+          "416": {
+            "description": "Invalid, multiple, or unsatisfiable range."
+          }
+        }
+      },
+      "head": {
+        "operationId": "headEndingVideo",
+        "summary": "Return the same ownership checks and video metadata, without body.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/playId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metadata for a ready MP4. No response body."
+          },
+          "401": {
+            "description": "Unauthorized."
+          },
+          "404": {
+            "description": "The retained result belongs to another owner."
+          },
+          "409": {
+            "description": "Video is not ready."
+          },
+          "410": {
+            "description": "No retained result exists, or the session has expired."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "playSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "play_session"
+      }
+    },
+    "parameters": {
+      "playId": {
+        "name": "playId",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "schemas": {
+      "EndingView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "playId",
+          "outcome",
+          "clearedCount",
+          "status",
+          "errorCode",
+          "retainUntil",
+          "videoPath",
+          "story"
+        ],
+        "properties": {
+          "playId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "happy",
+              "normal",
+              "bad",
+              null
+            ]
+          },
+          "clearedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "not_applicable",
+              "queued",
+              "preparing",
+              "generating",
+              "ready",
+              "failed",
+              "expired"
+            ]
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "retainUntil": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "videoPath": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Same-origin /api/play/ending/video?playId=... only when ready."
+          },
+          "story": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EndingStory"
+              }
+            ]
+          }
+        }
+      },
+      "EndingStory": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "text",
+          "evaluation"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "evaluation": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      }
+    }
+  }
+}

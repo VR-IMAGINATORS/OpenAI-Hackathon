@@ -1,4 +1,5 @@
 import type { PlayControl } from '../../../packages/shared/api.js';
+import type { EndingView } from '../../../packages/shared/ending.js';
 let apiLocale: 'ja' | 'en' = 'en';
 export function setApiLocale(locale: 'ja' | 'en') {
   apiLocale = locale;
@@ -55,8 +56,12 @@ export async function playRequest<T>(
   body?: unknown,
   method = 'POST',
   control?: PlayControl | { playId: string },
+  signal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', abort, { once: true });
   const timer = window.setTimeout(() => controller.abort(), 40000);
   try {
     const response = await fetch(path, {
@@ -97,7 +102,21 @@ export async function playRequest<T>(
     );
   } finally {
     window.clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
+}
+export function endingVideoPath(playId: string): string {
+  return '/api/play/ending/video?playId=' + encodeURIComponent(playId);
+}
+/** Reading an ending never creates or retries a generation job. */
+export function getEnding(playId: string, signal?: AbortSignal): Promise<EndingView> {
+  return playRequest(
+    '/api/play/ending?playId=' + encodeURIComponent(playId),
+    undefined,
+    'GET',
+    undefined,
+    signal,
+  );
 }
 export async function retryUncertain<T>(request: () => Promise<T>): Promise<T> {
   try {

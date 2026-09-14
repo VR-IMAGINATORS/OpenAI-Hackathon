@@ -102,6 +102,11 @@ jobs:
           PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
           INITIAL_DEPLOYMENT: ${{ vars.INITIAL_DEPLOYMENT }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FAL_KEY: ${{ secrets.FAL_KEY }}
+          ENDING_VIDEO_ENABLED: ${{ vars.ENDING_VIDEO_ENABLED }}
+          AI_GLOBAL_VIDEO_ATTEMPTS: ${{ vars.AI_GLOBAL_VIDEO_ATTEMPTS }}
+          ENDING_JOB_TIMEOUT_SECONDS: ${{ vars.ENDING_JOB_TIMEOUT_SECONDS }}
+          ENDING_CONCURRENT: ${{ vars.ENDING_CONCURRENT }}
           APP_PASSPHRASE: ${{ secrets.APP_PASSPHRASE }}
           OPS_TOKEN: ${{ secrets.OPS_TOKEN }}
           AI_GLOBAL_LIVE_ATTEMPTS: ${{ vars.AI_GLOBAL_LIVE_ATTEMPTS }}

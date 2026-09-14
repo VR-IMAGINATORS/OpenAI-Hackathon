@@ -1776,6 +1776,96 @@ h1 span {
   background: #244941;
   color: #b8eedc;
 }
+.messenger-app.messenger-complete {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+.messenger-complete .chat-panel {
+  flex: none;
+  height: 60dvh;
+  min-height: 280px;
+}
+.ending-video {
+  flex-shrink: 0;
+  padding: 24px 20px;
+  margin-block: 16px;
+  color: #edf4f1;
+  background: #14212b;
+  border: 1px solid #344b54;
+  border-radius: 16px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.messenger-complete .ending-video {
+  margin: 0;
+  border-inline: 0;
+  border-radius: 0;
+}
+.ending-eyebrow {
+  color: #9eead6;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  margin: 0;
+}
+.ending-video h2 {
+  font-size: 23px;
+  margin: 6px 0 14px;
+}
+.ending-summary,
+.ending-story p {
+  white-space: pre-wrap;
+}
+.ending-status {
+  color: #c6ded8;
+}
+.ending-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 8px;
+  border: 2px solid #344b54;
+  border-top-color: #9eead6;
+  border-radius: 50%;
+  animation: ending-spin 1s linear infinite;
+}
+@keyframes ending-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ending-spinner {
+    animation: none;
+  }
+}
+.ending-note {
+  color: #99afb7;
+  font-size: 13px;
+}
+.ending-video video {
+  display: block;
+  width: 100%;
+  max-height: 65dvh;
+  margin-block: 16px;
+  background: #030809;
+  border-radius: 10px;
+}
+.ending-reveal {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid #769e8f;
+  border-radius: 10px;
+  color: #122f26;
+  background: #a4e1c9;
+  font: inherit;
+  cursor: pointer;
+}
+.ending-story {
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: 1px solid #344b54;
+}
 @media (min-width: 800px) {
   .messenger-app {
     height: calc(100dvh - 40px);

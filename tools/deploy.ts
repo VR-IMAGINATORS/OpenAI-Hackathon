@@ -53,6 +53,21 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     !url.hostname.endsWith('.cs.amazonlightsail.com')
   )
     throw new Error('Standard Lightsail HTTPS origin required');
+  // Keep this script dependency-free: Actions runs it with Node's native type stripping.
+  const endingFlag = env.ENDING_VIDEO_ENABLED || 'false';
+  if (endingFlag !== 'true' && endingFlag !== 'false')
+    throw new Error('ENDING_VIDEO_ENABLED invalid');
+  const bounded = (name: string, fallback: string, min: number, max: number) => {
+    const value = env[name] || fallback;
+    if (!/^[1-9]\d*$/.test(value) || Number(value) < min || Number(value) > max)
+      throw new Error(name + ' invalid');
+    return value;
+  };
+  const endingTimeout = bounded('ENDING_JOB_TIMEOUT_SECONDS', '480', 60, 540);
+  const endingConcurrent = bounded('ENDING_CONCURRENT', '2', 1, 2);
+  const resultTtl = bounded('RESULT_TTL_SECONDS', endingFlag === 'true' ? '600' : '300', 150, 600);
+  if (endingFlag === 'true' && Number(resultTtl) < Number(endingTimeout) + 60)
+    throw new Error('RESULT_TTL_SECONDS must cover the ending deadline plus 60 seconds');
   const environment: Record<string, string> = {
     NODE_ENV: 'production',
     HOST: '0.0.0.0',
@@ -76,10 +91,22 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     IMAGE_CONCURRENT: env.IMAGE_CONCURRENT || '2',
     IMAGE_INSPECTION_CONCURRENT: env.IMAGE_INSPECTION_CONCURRENT || '2',
     IMAGE_JOB_TIMEOUT_SECONDS: env.IMAGE_JOB_TIMEOUT_SECONDS || '150',
-    RESULT_TTL_SECONDS: env.RESULT_TTL_SECONDS || '300',
+    RESULT_TTL_SECONDS: resultTtl,
+    ENDING_VIDEO_ENABLED: endingFlag,
+    ENDING_JOB_TIMEOUT_SECONDS: endingTimeout,
+    ENDING_CONCURRENT: endingConcurrent,
     AI_RESPONSES_PER_PLAY: env.AI_RESPONSES_PER_PLAY || '80',
     ENABLE_GAME_TRACE: '0',
   };
+  if (endingFlag === 'true') {
+    environment.FAL_KEY = required('FAL_KEY');
+    environment.AI_GLOBAL_VIDEO_ATTEMPTS = bounded(
+      'AI_GLOBAL_VIDEO_ATTEMPTS',
+      required('AI_GLOBAL_VIDEO_ATTEMPTS'),
+      1,
+      1000,
+    );
+  }
   for (const name of [
     'AI_GLOBAL_LIVE_ATTEMPTS',
     'AI_GLOBAL_RESPONSE_ATTEMPTS',

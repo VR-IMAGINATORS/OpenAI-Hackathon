@@ -1,4 +1,5 @@
 import ChatFeed, { type Locale } from './ChatFeed.js';
+import EndingVideo from './EndingVideo.js';
 import type { CoreLiveCommand } from '../../../packages/shared/conversation.js';
 import type { HostedPlayState, ControlledPlay, PlayControl } from '../../../packages/shared/api.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -585,7 +586,10 @@ export default function PlayScreen({
       !!draftPhoto ||
       !!retryPhotos;
     return (
-      <main className="messenger-app" aria-label={t('未来とのメッセンジャー', 'Future messenger')}>
+      <main
+        className={'messenger-app' + (ended ? ' messenger-complete' : '')}
+        aria-label={t('未来とのメッセンジャー', 'Future messenger')}
+      >
         <header className="messenger-header">
           <div className="messenger-avatar" aria-hidden="true">
             AI
@@ -697,6 +701,16 @@ export default function PlayScreen({
             )}
           </div>
         </details>
+        {ended && (
+          <EndingVideo
+            key={playId}
+            playId={playId}
+            locale={locale}
+            outcome={state.endingOutcome}
+            clearedCount={state.clearedCount}
+            summary={state.lastResult?.narrative}
+          />
+        )}
         <ChatFeed
           embedded
           playId={playId}
@@ -934,6 +948,16 @@ export default function PlayScreen({
           </p>
         )}
       </section>
+      {ended && (
+        <EndingVideo
+          key={playId}
+          playId={playId}
+          locale={locale}
+          outcome={state.endingOutcome}
+          clearedCount={state.clearedCount}
+          summary={state.lastResult?.narrative}
+        />
+      )}
       {state.automaticActions && (
         <ChatFeed
           playId={playId}

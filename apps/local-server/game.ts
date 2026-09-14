@@ -22,6 +22,8 @@ import {
 import { GameClock } from './clock.js';
 import type { GamePhoto } from './photo.js';
 import type { GameAI, AIContext } from './game-ai.js';
+import type { GameEndReason } from '../../packages/shared/ending.js';
+import { endingOutcome, type CommittedEndingAction } from './ending.js';
 export class GameError extends Error {
   constructor(
     public status: number,
@@ -52,6 +54,9 @@ export class GameSession {
   status: PublicGameState['status'] = 'briefing';
   obstacleIndex = 0;
   actionsUsed = 0;
+  readonly clearedIds: string[] = [];
+  readonly committedActions: CommittedEndingAction[] = [];
+  endReason: GameEndReason | null = null;
   inventory: InventoryItem[] = [];
   photos: GamePhoto[] = [];
   proposal: Proposal | null = null;
@@ -95,7 +100,7 @@ export class GameSession {
     this.clock.tick();
     if (!this.terminal && this.status !== 'briefing') {
       if (this.clock.waitingRemainingMs <= 0) this.end('expired');
-      else if (this.clock.remainingMs <= 0) this.end('lost');
+      else if (this.clock.remainingMs <= 0) this.end('lost', 'time_limit');
     }
   }
   state(): PublicGameState {
@@ -104,6 +109,9 @@ export class GameSession {
       id: this.id,
       generation: this.generation,
       status: this.status,
+      endingOutcome: endingOutcome(this.status, this.clearedIds),
+      endReason: this.endReason,
+      clearedCount: this.clearedIds.length,
       title: this.scenario.title,
       briefing: this.scenario.playerBriefing,
       obstacle: {
@@ -148,9 +156,17 @@ export class GameSession {
     else this.clock.pause('recovery');
     this.check();
   }
-  end(status: 'won' | 'lost' | 'expired' = 'expired') {
+  end(status: 'won' | 'lost' | 'expired' = 'expired', reason?: GameEndReason) {
     if (this.terminal) return;
     this.status = status;
+    this.endReason =
+      status === 'expired'
+        ? 'interrupted'
+        : status === 'won'
+          ? 'escaped'
+          : reason === 'action_limit'
+            ? 'action_limit'
+            : 'time_limit';
     if (!this.coreSnapshot) this.generation++;
     this.invalidateCoreActions();
     for (const action of this.actions.values())
@@ -270,6 +286,41 @@ export class GameSession {
       if (ticket.status === 'pending') ticket.status = 'invalid';
       context.photos = [];
     }
+  }
+
+  private recordCommittedAction(
+    actionId: string,
+    context: AIContext,
+    proposal: Proposal,
+    result: { success: boolean; narrative: string },
+    beforeInventory = context.inventory,
+  ) {
+    const obstacleId = this.scenario.obstacles[context.obstacleIndex].id;
+    const cleared = result.success && !this.clearedIds.includes(obstacleId);
+    if (cleared) this.clearedIds.push(obstacleId);
+    this.committedActions.push({
+      actionId,
+      order: this.actionsUsed,
+      obstacleId,
+      usage: proposal.usage,
+      items: proposal.items.map((item) => {
+        const before = beforeInventory.find((entry) => entry.id === item.inventoryId)!;
+        const after = this.inventory.find((entry) => entry.id === item.inventoryId)!;
+        return {
+          id: before.id,
+          name: before.name,
+          beforeStatus: before.status,
+          afterStatus: after.status,
+        };
+      }),
+      beforeVersion: this.gameVersion - 1,
+      afterVersion: this.gameVersion,
+      beforeFacts: structuredClone(context.facts!),
+      afterFacts: structuredClone(this.facts),
+      success: result.success,
+      narrative: result.narrative,
+      cleared,
+    });
   }
 
   /** Reserves a fixed instruction synchronously, before any paid judgment begins. */
@@ -457,11 +508,12 @@ export class GameSession {
       this.invalidate();
       ticket.status = 'committed';
       record.result = result;
+      this.recordCommittedAction(ticket.id, context, proposal, result);
       this.pending = null;
       this.status = 'playing';
       if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
         this.end('won');
-      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost');
+      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost', 'action_limit');
       else if (judgment.success) {
         this.obstacleIndex++;
         this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
@@ -559,9 +611,11 @@ export class GameSession {
         ids.add(change.id);
       }
       if (context.inventory.length > 40) throw new Error('Inventory limit');
+      const beforeInventory = structuredClone(context.inventory);
       for (const change of result.inventoryChanges)
         Object.assign(context.inventory.find((i) => i.id === change.id)!, change);
       this.inventory = context.inventory;
+      this.gameVersion++;
       this.actionsUsed++;
       this.lastResult = { success: result.success, narrative: result.narrative };
       this.situation = result.situation;
@@ -570,13 +624,15 @@ export class GameSession {
       this.invalidate();
       record.status = 'complete';
       record.result = result;
+      this.recordCommittedAction(actionId, context, proposal, result, beforeInventory);
       this.pending = null;
       this.status = 'playing';
       if (result.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
         this.end('won');
-      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost');
+      else if (this.actionsUsed >= this.scenario.rules.maxActions) this.end('lost', 'action_limit');
       else if (result.success) {
         this.obstacleIndex++;
+        this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
         this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
       }
       return result;

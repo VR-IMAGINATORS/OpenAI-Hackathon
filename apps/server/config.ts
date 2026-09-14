@@ -8,6 +8,7 @@ import {
   readEnvironment,
 } from '../../packages/server/config.js';
 import { loadAiConfig, type AiConfig } from '../../packages/server/ai-config.js';
+import { loadEndingConfig, type EndingConfig } from '../../packages/server/ending-config.js';
 import {
   localizeScenario,
   parseScenarioV2,
@@ -35,6 +36,7 @@ export interface HostedConfig {
   recoveryMs: number;
   authAttempts: number;
   ai: AiConfig;
+  ending?: EndingConfig;
 }
 export function loadHostedConfig(
   env: NodeJS.ProcessEnv = process.env,
@@ -79,9 +81,13 @@ export function loadHostedConfig(
   });
   scenarioCatalog.current('ja');
   const ai = loadAiConfig(values);
-  const resultTtlMs = positiveInteger(values, 'RESULT_TTL_SECONDS', 300, 600) * 1000;
+  const ending = loadEndingConfig(values);
+  const resultTtlMs =
+    positiveInteger(values, 'RESULT_TTL_SECONDS', ending.enabled ? 600 : 300, 600) * 1000;
   if (resultTtlMs < 150_000 || resultTtlMs < ai.imageJobTimeoutMs)
     throw new Error('RESULT_TTL_SECONDS must cover the image job deadline (at least 150 seconds)');
+  if (ending.enabled && resultTtlMs < ending.timeoutMs + 60_000)
+    throw new Error('RESULT_TTL_SECONDS must cover the ending deadline plus 60 seconds');
   const capacity = positiveInteger(values, 'MAX_PLAYERS', 5, 100);
   if (ai.liveConcurrentGlobal < capacity)
     throw new Error('AI live concurrency must cover MAX_PLAYERS');
@@ -108,5 +114,6 @@ export function loadHostedConfig(
     recoveryMs: positiveInteger(values, 'RECOVERY_GRACE_SECONDS', 60, 60) * 1000,
     authAttempts: positiveInteger(values, 'AUTH_ATTEMPTS_PER_MINUTE', 100, 10000),
     ai,
+    ending,
   };
 }

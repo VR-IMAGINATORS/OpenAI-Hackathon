@@ -81,7 +81,17 @@ export interface OpenAITransport {
   createLiveSession(body: unknown): Promise<z.infer<typeof liveAnswer>>;
   createResponse(body: unknown, signal?: AbortSignal): Promise<unknown>;
   createImage?(body: unknown, signal?: AbortSignal): Promise<unknown>;
+  createImageEdit?(body: ImageEditRequest, signal?: AbortSignal): Promise<unknown>;
   hangup(id: string): Promise<void>;
+}
+export interface ImageEditRequest {
+  model: string;
+  prompt: string;
+  images: Buffer[];
+  n: 1;
+  size: '1024x1024';
+  quality: 'low';
+  output_format: 'jpeg';
 }
 export class UpstreamError extends Error {
   constructor(public readonly status: number) {
@@ -100,17 +110,17 @@ export function createOpenAITransport(
     maxBytes = 256 * 1024,
   ): Promise<unknown> {
     const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      path === 'images/generations' ? 60000 : 30000,
-    );
+    const timer = setTimeout(() => controller.abort(), path.startsWith('images/') ? 60000 : 30000);
     try {
       const result = await request('https://api.openai.com/v1/' + path, {
         method: 'POST',
         redirect: 'error',
         signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
-        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        headers: {
+          Authorization: 'Bearer ' + apiKey,
+          ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        },
+        body: body instanceof FormData ? body : JSON.stringify(body),
       });
       if (!result.ok) {
         await result.body?.cancel();
@@ -143,6 +153,18 @@ export function createOpenAITransport(
     createLiveSession: async (body) => liveAnswer.parse(await post('live/sessions', body)),
     createResponse: (body, signal) => post('responses', body, false, signal),
     createImage: (body, signal) => post('images/generations', body, false, signal, 8 * 1024 * 1024),
+    createImageEdit: (body, signal) => {
+      const form = new FormData();
+      const { images, ...fields } = body;
+      for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
+      for (const [index, bytes] of images.entries())
+        form.append(
+          'image[]',
+          new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }),
+          `reference-${index}.jpg`,
+        );
+      return post('images/edits', form, false, signal, 8 * 1024 * 1024);
+    },
     hangup: async (id) => {
       liveId.parse(id);
       await post('live/sessions/' + encodeURIComponent(id) + '/hangup', {}, true);

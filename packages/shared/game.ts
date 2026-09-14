@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { EndingOutcome, GameEndReason } from './ending.js';
 const short = z.string().max(1000);
 export const itemStatus = z.enum(['available', 'damaged', 'consumed']);
 export const proposalSchema = z
@@ -48,6 +49,9 @@ export interface LiveCommand {
   content: string;
 }
 export interface PublicGameState {
+  endingOutcome?: EndingOutcome | null;
+  endReason?: GameEndReason | null;
+  clearedCount?: number;
   automaticActions?: boolean;
   diagnosticsAvailable?: boolean;
   locale?: 'ja' | 'en';
