@@ -27,7 +27,7 @@ export default function PlayScreen({
   initialEnvelope,
   initialControl,
   preparedConnection,
-  locale: selectedLocale = 'ja',
+  locale: selectedLocale = 'en',
   onExit,
   onReplay,
 }: {

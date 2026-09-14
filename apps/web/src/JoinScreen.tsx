@@ -11,10 +11,12 @@ import { clientId, playRequest, PlayApiError, retryUncertain, setApiLocale } fro
 import { LiveConnection } from './live.js';
 import PlayScreen from './PlayScreen.js';
 export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }) {
-  const [locale, setLocale] = useState<'ja' | 'en'>('ja');
+  const [locale, setLocale] = useState<'ja' | 'en'>('en');
   useEffect(() => {
     setApiLocale(locale);
     document.documentElement.lang = locale;
+    document.title =
+      locale === 'ja' ? 'Call to Past — 接続準備' : 'Call to Past — Ready to connect';
   }, [locale]);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
   const [showOpening, setShowOpening] = useState(false);
@@ -37,6 +39,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       const envelope = await playRequest<HostedPlayState>('/api/play/state', undefined, 'GET', {
         playId: session.playId,
       });
+      if (envelope.state.locale) setLocale(envelope.state.locale);
       setPlay({ id: session.playId, envelope });
     }
   }
@@ -58,7 +61,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       setPassphrase('');
       await restore();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '参加できませんでした。');
+      setError(e instanceof Error ? e.message : t('参加できませんでした。', 'Unable to join.'));
     } finally {
       locked.current = false;
       setLoading(false);
@@ -93,7 +96,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
     } catch (e) {
       connection.close();
       if (e instanceof PlayApiError && e.status !== 0) createId.current = null;
-      setError(e instanceof Error ? e.message : '開始できませんでした。');
+      setError(e instanceof Error ? e.message : t('開始できませんでした。', 'Unable to start.'));
       if (e instanceof PlayApiError && e.code === 'PLAY_ALREADY_ACTIVE') await restore();
     } finally {
       locked.current = false;
@@ -160,8 +163,8 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
             createId.current = null;
           }}
         >
-          <option value="ja">日本語</option>
           <option value="en">English</option>
+          <option value="ja">日本語</option>
         </select>
       </label>
       {!authenticated ? (

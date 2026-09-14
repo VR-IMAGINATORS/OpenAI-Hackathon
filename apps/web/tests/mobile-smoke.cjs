@@ -102,6 +102,7 @@ const fs = require('node:fs');
     const actionIds = [];
     let state = {
       id: 'test',
+      locale: 'ja',
       generation: 0,
       status: 'briefing',
       title: '閉ざされた研究室',
@@ -169,6 +170,10 @@ const fs = require('node:fs');
         hasPlay = true;
         controller = body.clientId;
         return respond(route, { ...envelope(), playId: 'play-one', controlEpoch: epoch }, 201);
+      }
+      if (url.pathname === '/api/play/ending') {
+        assert.equal(url.searchParams.get('playId'), 'play-one');
+        return respond(route, { error: { code: 'ENDING_NOT_FOUND' } }, 404);
       }
       assert.equal(route.request().headers()['x-play-id'], 'play-one');
       if (url.pathname === '/api/play/control') {
@@ -267,6 +272,7 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
+    await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
     await page.getByRole('button', { name: '合言葉で参加' }).click();
     await page.evaluate(() => (window.__denyMic = true));
@@ -408,7 +414,7 @@ const fs = require('node:fs');
     await page.getByRole('button', { name: 'もう一度プレイ' }).waitFor();
     owner = false;
     await page.reload();
-    await page.getByRole('button', { name: '合言葉で参加' }).waitFor();
+    await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
     assert.deepEqual(pageErrors, []);
     console.log(
       'PASS: fake Live connect/reconnect/reload, passphrase authentication, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',

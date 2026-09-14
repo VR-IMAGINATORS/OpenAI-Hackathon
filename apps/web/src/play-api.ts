@@ -1,5 +1,5 @@
 import type { PlayControl } from '../../../packages/shared/api.js';
-let apiLocale: 'ja' | 'en' = 'ja';
+let apiLocale: 'ja' | 'en' = 'en';
 export function setApiLocale(locale: 'ja' | 'en') {
   apiLocale = locale;
 }

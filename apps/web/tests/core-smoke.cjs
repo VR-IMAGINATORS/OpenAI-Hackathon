@@ -11,6 +11,7 @@ const fs = require('node:fs');
       viewport: { width: 390, height: 844 },
       isMobile: true,
       hasTouch: true,
+      locale: 'ja-JP',
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
@@ -196,6 +197,10 @@ const fs = require('node:fs');
         controller = body.clientId;
         return respond(route, { ...envelope(), playId: 'play-one', controlEpoch: epoch }, 201);
       }
+      if (url.pathname === '/api/play/ending') {
+        assert.equal(url.searchParams.get('playId'), 'play-one');
+        return respond(route, { error: { code: 'ENDING_NOT_FOUND' } }, 404);
+      }
       assert.equal(route.request().headers()['x-play-id'], 'play-one');
       if (url.pathname === '/api/play/assets/scene-1') {
         assetReads++;
@@ -342,6 +347,16 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
+    await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole('combobox').inputValue(),
+      'en',
+      'English is the default even in a Japanese browser',
+    );
+    assert.equal(await page.locator('html').getAttribute('lang'), 'en');
+    await page.getByRole('combobox').selectOption('ja');
+    await page.getByRole('button', { name: '合言葉で参加', exact: true }).waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'), 'ja');
     await page.getByRole('combobox').selectOption('en');
     await page.getByRole('button', { name: 'Join', exact: true }).waitFor();
     await page.getByRole('combobox').selectOption('ja');
@@ -542,6 +557,9 @@ const fs = require('node:fs');
     );
     fs.mkdirSync('artifacts', { recursive: true });
     await page.screenshot({ path: 'artifacts/core-p2-mobile.png', fullPage: true });
+    await page.reload();
+    await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'), 'ja', 'Japanese play restored');
     await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).click();
     state = {
       ...state,
