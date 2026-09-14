@@ -11,3 +11,5 @@
 - EndingDesignは映像フィールドのみ。EndingNarrativeは映像生成の任意入力で、失敗時はestablishedEnding=null、presentedEvidence=[]、evidenceIncomplete=true。確定した結末・行動・事実・所持品は維持する。
 
 新規APIはなく、厳密なTypeScript契約はpackages/shared/ending.tsを参照。
+
+長いenumはリクエスト単位の参照表でe1/e2（証拠）、a1/a2（タグ根拠行動）へ変換する。変換表はサーバー内だけで保持し、入力の対応フィールドとschemaを同時に置換。返答の参照は元IDへ復元し、未知の参照は拒否する。保存済みEndingPacket/EndingNarrativeに短縮IDを混ぜない。送信前のEndingRequestErrorは値やZodの入力詳細を保持せず、固定のrequest_schema/request_input/request_instructions/request項目名だけを診断へ渡す。

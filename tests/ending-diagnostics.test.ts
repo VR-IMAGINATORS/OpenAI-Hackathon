@@ -10,6 +10,7 @@ import { ResultStore } from '../apps/server/result-store.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import {
   responseObject,
+  responseBody,
   type EndingDesign,
   type EndingNarrative,
 } from '../apps/local-server/ending-ai.js';
@@ -26,9 +27,77 @@ import {
 import { FalSubmitError } from '../packages/server/fal.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
+import {
+  parseEndingResponseRequest,
+  EndingRequestError,
+} from '../packages/server/ending-ai-request.js';
 
 const response = (value: unknown) => ({
   output: [{ content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+});
+
+test('oversized outgoing schema is diagnosed as a request error, never an invalid AI response', async () => {
+  const config = loadAiConfig({ AI_MODE: 'mock' });
+  let calls = 0;
+  const ai = new AiService(
+    config,
+    {
+      async createLiveSession() {
+        throw new Error('unexpected');
+      },
+      async createResponse() {
+        calls++;
+        return {};
+      },
+      async hangup() {},
+    },
+    () => 0,
+  );
+  ai.register('play', 600000);
+  ai.registerEnding('play', 'ending', 60000);
+  const body = responseBody(
+    config.responseModel,
+    'ending_text',
+    z.object({
+      source: z.enum(Array.from({ length: 140 }, (_, i) => `PRIVATE_${i}` + 'x'.repeat(120))),
+    }),
+    'Test',
+    {},
+    2048,
+  );
+  assert(Buffer.byteLength(JSON.stringify(body.text.format.schema)) > 16384);
+  await assert.rejects(
+    ai.endingCall('ending', 0, 'story', body, new AbortController().signal),
+    (error) => {
+      assert(error instanceof EndingRequestError);
+      assert.equal(endingFailureCode(error, 'story'), 'ENDING_STORY_INVALID_REQUEST');
+      assert.equal(endingValidationFields(error), 'request_schema');
+      assert.doesNotMatch(JSON.stringify(error), /PRIVATE_/);
+      return true;
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(ai.snapshot().responseAttempts, 0);
+  const valid = responseBody(
+    config.responseModel,
+    'ending_text',
+    z.object({ text: z.string() }),
+    'Test',
+    {},
+    2048,
+  );
+  const inputText = valid.input[0].content[0];
+  assert('text' in inputText);
+  inputText.text = 'x'.repeat(128 * 1024 + 1);
+  assert.throws(
+    () => parseEndingResponseRequest(valid),
+    (error) => {
+      assert(error instanceof EndingRequestError);
+      assert.equal(endingValidationFields(error), 'request_input');
+      return true;
+    },
+  );
+  await ai.shutdown();
 });
 
 test('text diagnostics retain numeric play context and schema fields without private validation values', () => {

@@ -64,3 +64,29 @@ export const endingImageRequest = z
   .strict();
 
 export type EndingCallKind = 'extraction' | 'story' | 'direction' | 'frame' | 'inspection';
+
+/** Preflight rejection: distinguish our outgoing request from an AI response. */
+export class EndingRequestError extends Error {
+  readonly validationFields: string;
+  constructor(error: z.ZodError) {
+    super('ENDING_INVALID_REQUEST');
+    this.validationFields = [
+      ...new Set(
+        error.issues.map((issue) => {
+          if (issue.path[0] === 'text') return 'request_schema';
+          if (issue.path[0] === 'input' || issue.path.length === 0) return 'request_input';
+          if (issue.path[0] === 'instructions') return 'request_instructions';
+          return 'request';
+        }),
+      ),
+    ]
+      .sort()
+      .join(',');
+  }
+}
+
+export function parseEndingResponseRequest(body: unknown) {
+  const parsed = endingResponseRequest.safeParse(body);
+  if (!parsed.success) throw new EndingRequestError(parsed.error);
+  return parsed.data;
+}

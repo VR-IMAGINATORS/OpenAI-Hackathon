@@ -1,7 +1,7 @@
 import type { AiConfig } from './ai-config.js';
 import {
   endingImageRequest,
-  endingResponseRequest,
+  parseEndingResponseRequest,
   type EndingCallKind,
 } from './ending-ai-request.js';
 import {
@@ -192,7 +192,7 @@ export class AiService {
     )
       throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
     const frameRequest = kind === 'frame' ? endingImageRequest.parse(body) : undefined;
-    const response = kind !== 'frame' ? endingResponseRequest.parse(body) : undefined;
+    const response = kind !== 'frame' ? parseEndingResponseRequest(body) : undefined;
     const inspection = kind === 'inspection';
     if (frameRequest) {
       if (frameRequest.model !== this.config.imageModel || !this.transport.createImageEdit)

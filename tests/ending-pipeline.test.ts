@@ -16,6 +16,7 @@ import { createEndingFrames } from '../packages/server/ending-image-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import type { AiService } from '../packages/server/ai-service.js';
 import type { EndingCallKind } from '../packages/server/ending-ai-request.js';
+import { parseEndingResponseRequest } from '../packages/server/ending-ai-request.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 
 const signal = () => new AbortController().signal;
@@ -173,6 +174,97 @@ const narrative = (p = packet(), patch: Partial<EndingNarrative> = {}): EndingNa
   ...textOutput(),
   presentedEvidence: p.evidence.records,
   ...patch,
+});
+
+function manyReferences(): EndingPacket {
+  const p = packet();
+  p.evidence.records = Array.from({ length: 140 }, (_, i) => ({
+    sourceId: `voice:1:${String(i).padStart(4, '0')}` + 'x'.repeat(120),
+    kind: 'assistant_transcript' as const,
+    order: i + 1,
+    generation: 1,
+    gameVersion: 0,
+    text: 'A known clue.',
+  }));
+  p.actions = Array.from({ length: 40 }, (_, i) => ({
+    ...p.actions[0],
+    actionId: `action-${i}-` + 'a'.repeat(120),
+    order: i + 1,
+  }));
+  p.clearedIds = ['first'];
+  return p;
+}
+
+test('large reference enums fit the real request limit and preserve every story/tag/film source', async () => {
+  const p = manyReferences();
+  assert(Buffer.byteLength(JSON.stringify(p.evidence.records)) < 48 * 1024);
+  const f = fakeAi((call) => {
+    parseEndingResponseRequest(call.body); // The previous implementation failed here, before AI.
+    assert(Buffer.byteLength(JSON.stringify(call.body.text.format.schema)) <= 16384);
+    const input = payloadOf(call);
+    assert.equal(input.presentedEvidence.length, 140);
+    const ids = [input.presentedEvidence[0].sourceId, input.presentedEvidence.at(-1).sourceId];
+    assert.deepEqual(ids, ['e1', 'e140']);
+    if (call.kind === 'story') {
+      assert.equal(input.actions.length, 40);
+      assert.equal(input.actions[0].actionId, 'a1');
+      return response({
+        ...textOutput(),
+        usedEvidenceIds: ids,
+        tag: {
+          id: 'tools',
+          evidenceActionIds: [input.actions[0].actionId, input.actions.at(-1).actionId],
+          reason: 'Confirmed tool use.',
+        },
+      });
+    }
+    return response(design({ usedEvidenceIds: ids, mode: 'aftermath', usedActionIds: [] }));
+  });
+  const story = await createEndingText(f.ai, 'job', p, signal());
+  const expectedSources = [p.evidence.records[0].sourceId, p.evidence.records.at(-1)!.sourceId];
+  assert.deepEqual(story.usedEvidenceIds, expectedSources);
+  assert.deepEqual(story.tag!.evidenceActionIds, [
+    p.actions[0].actionId,
+    p.actions.at(-1)!.actionId,
+  ]);
+  assert.deepEqual(story.presentedEvidence, p.evidence.records);
+  const film = await createEndingDesign(f.ai, 'job', p, final, undefined, signal(), story);
+  assert.deepEqual(film.usedEvidenceIds, expectedSources);
+  assert.equal(f.calls.length, 2, 'one story and one film call; no extra extraction or repair');
+});
+
+test('long extraction IDs map back to exact original quotes without growing the schema', async () => {
+  const p = manyReferences();
+  for (const record of p.evidence.records) record.text += ' Observation.'.repeat(35);
+  assert(Buffer.byteLength(JSON.stringify(p.evidence.records)) > 48 * 1024);
+  const f = fakeAi((call) => {
+    parseEndingResponseRequest(call.body);
+    const part = payloadOf(call);
+    assert(part[0].sourceId.startsWith('e'));
+    return response({
+      clues: [part[0], part.at(-1)].map((record) => ({
+        sourceId: record.sourceId,
+        quote: record.text.slice(0, 30),
+      })),
+    });
+  });
+  const clues = await endingClues(f.ai, 'job', p, signal());
+  for (const clue of clues) {
+    const original = p.evidence.records.find((record) => record.sourceId === clue.sourceId);
+    assert(original);
+    assert('quote' in clue && original.text.includes(clue.quote));
+  }
+  assert.equal(clues[0].sourceId, p.evidence.records[0].sourceId);
+  assert.equal(clues.at(-1)!.sourceId, p.evidence.records.at(-1)!.sourceId);
+});
+
+test('aliasing never accepts invented aliases or original IDs absent from the model reference list', async () => {
+  const p = manyReferences();
+  for (const id of ['e999', p.evidence.records[0].sourceId]) {
+    const f = fakeAi(() => response({ ...textOutput(), usedEvidenceIds: [id] }));
+    await assert.rejects(createEndingText(f.ai, 'job', p, signal()), /ENDING_INVALID_SOURCES/);
+    assert.equal(f.calls.length, 2);
+  }
 });
 
 test('writer response schema separates evidence and action ID namespaces, including empty plays', async () => {

@@ -12,6 +12,7 @@
 | --- | --- |
 | INVALID_TAG_EVIDENCE | タグの根拠が機械的な条件を満たさない。例：失敗後の解除がないのに「学習」タグを選択。解除0個自体は禁止していない。 |
 | INVALID_RESPONSE | JSON形式・必須項目・文字数・タグIDなどの検証に失敗。更新後のログのvalidationFieldsでstory/tagなど対象項目を確認。 |
+| INVALID_REQUEST | AIへの送信前にリクエスト検証が失敗。validationFieldsのrequest_schemaは出力形式、request_inputは入力本文等、request_instructionsは指示の制限。AI応答の不正とは区別する。 |
 | INVALID_SOURCES / INVALID_EVIDENCE | 存在しない出典ID、または原文と一致しない証拠。 |
 | EVIDENCE_TOO_LARGE | 証拠が抽出処理の入力上限を超えた。 |
 | RESPONSE_INCOMPLETE | AI応答が未完了。これだけではトークン上限などの詳細理由を断定できない。 |
@@ -48,3 +49,11 @@
 いずれも数値のみで、実際のIDや出力本文は記録しない。0件以外の混同があれば原因を区別できる。その他の未知・短縮IDはinvalidSourceCountだけが増える。
 
 今回の画像ではPlay ID `7e52d52a-3b35-4c14-8656-c510bddc41e2`、解除1個、`ENDING_STORY_INVALID_SOURCES`を確認。このコードは文章のusedEvidenceIdsが出典照合で不一致だったことを示す。実際の不一致IDは旧ログにないため、行動ID混同か架空IDかまでは断定できない。
+
+## INVALID_RESPONSE / validationFields=response の追加調査
+
+Play ID `3e8190fe-5ed3-421a-873e-03409d5f9bd0` のログは解除1個・行動1回・失敗行動0回で、INVALID_RESPONSE / responseだった。この値は旧版では「AI応答全体の不正」と「送信前の入力・schema検証失敗」を区別できない。タグ項目の不正とも断定できない。同時に提示されたPLAY_EXPIREDには相関IDがなく、文章失敗との因果関係は不明。
+
+再現調査で、長い出典ID140件をenumにすると、証拠本文は48 KiB以内でもschemaが16 KiBを超え、AI呼び出し前に上記と同じコード・項目名で失敗することを確認。更新後はID一覧が4 KiBを超える場合、または1つのIDが200文字を超える場合に、リクエスト内だけの短いIDへ変換する。本文や確定記録は削除せず、返答IDを元のIDへ戻して検証する。証拠抽出・文章・動画の出典、タグ根拠の行動IDに適用。16 KiBのschema上限は維持。
+
+この経路は修正・模擬API検証済みだが、当該実プレイの入力サイズは旧ログにないため、当該プレイが同じ原因だったかは未確定。新しいログではINVALID_REQUESTとrequest_schema/request_input等で区別する。サーバーの更新後も失敗する場合は、そのコードと項目名で次の経路を調べる。

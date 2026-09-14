@@ -4,6 +4,7 @@ import { UpstreamError } from '../../packages/server/openai.js';
 import { FalSubmitError, FalTransportError } from '../../packages/server/fal.js';
 import { EndingVideoMediaError } from '../../packages/server/ending-video-media.js';
 import { EndingSourceError } from '../local-server/ending-ai.js';
+import { EndingRequestError } from '../../packages/server/ending-ai-request.js';
 
 export type EndingStage =
   | 'reference'
@@ -37,6 +38,7 @@ export function endingSourceCounts(error: unknown) {
 
 /** Only schema-owned field names; never include issues, inputs or upstream text. */
 export function endingValidationFields(error: unknown): string | undefined {
+  if (error instanceof EndingRequestError) return error.validationFields;
   if (!(error instanceof ZodError)) return undefined;
   const allowed = new Set([
     'title',
@@ -69,7 +71,9 @@ export function endingValidationFields(error: unknown): string | undefined {
 /** Only fixed categories and HTTP status codes are public; never stringify an upstream error. */
 export function endingFailureCode(error: unknown, stage: EndingStage): string {
   const prefix = 'ENDING_' + stage.toUpperCase() + '_';
+  if (error instanceof EndingRequestError) return prefix + 'INVALID_REQUEST';
   if (error instanceof AiServiceError) {
+    if (error.code === 'INVALID_REQUEST') return prefix + 'INVALID_REQUEST';
     if (error.code === 'REQUEST_LIMIT') return 'ENDING_AI_BUDGET_EXHAUSTED';
     if (error.code === 'ENDING_EXPIRED') return prefix + 'TIMEOUT';
   }
