@@ -1,5 +1,10 @@
 import type { AiConfig } from './ai-config.js';
 import {
+  endingImageRequest,
+  parseEndingResponseRequest,
+  type EndingCallKind,
+} from './ending-ai-request.js';
+import {
   createOpenAITransport,
   liveAnswer,
   liveRequest,
@@ -27,6 +32,14 @@ export interface MediaPermit {
   busy: number;
   cancelled: boolean;
   controllers: Set<AbortController>;
+  ending?: {
+    extraction: number;
+    story: number;
+    direction: number;
+    start: number;
+    end: number;
+    inspection: number;
+  };
 }
 interface LiveReservation {
   providerId?: string;
@@ -92,19 +105,27 @@ export class AiService {
     });
   }
 
-  registerMedia(playId: string, jobId: string, expiresAt: number, maxActions: number): MediaPermit {
+  registerMedia(
+    playId: string,
+    jobId: string,
+    expiresAt: number,
+    sceneActionBudget: number,
+  ): MediaPermit {
     this.active(playId);
     if (
       this.media.has(jobId) ||
       !Number.isFinite(expiresAt) ||
       expiresAt <= this.now() ||
       expiresAt > this.now() + this.config.imageJobTimeoutMs ||
-      !Number.isInteger(maxActions) ||
-      maxActions < 1 ||
-      maxActions > 100
+      !Number.isInteger(sceneActionBudget) ||
+      sceneActionBudget < 1 ||
+      sceneActionBudget > 100
     )
       throw new AiServiceError(400, 'INVALID_MEDIA_PERMIT', 'Invalid media permit');
-    this.mediaPlayLimits.set(playId, 2 * (maxActions + 2));
+    this.mediaPlayLimits.set(
+      playId,
+      Math.max(this.mediaPlayLimits.get(playId) ?? 0, 2 * (sceneActionBudget + 2)),
+    );
     const permit: MediaPermit = {
       jobId,
       ownerPlayId: playId,
@@ -118,6 +139,142 @@ export class AiService {
     };
     this.media.set(jobId, permit);
     return permit;
+  }
+  registerEnding(playId: string, jobId: string, expiresAt: number): MediaPermit {
+    this.active(playId);
+    if (
+      this.media.has(jobId) ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= this.now() ||
+      expiresAt > this.now() + 540_000 ||
+      [...this.media.values()].some((p) => p.ownerPlayId === playId && p.ending)
+    )
+      throw new AiServiceError(400, 'INVALID_ENDING_PERMIT', 'Invalid ending permit');
+    const permit: MediaPermit = {
+      jobId,
+      ownerPlayId: playId,
+      expiresAt,
+      cancellationEpoch: 0,
+      generationAttempts: 0,
+      inspectionAttempts: 0,
+      busy: 0,
+      cancelled: false,
+      controllers: new Set(),
+      ending: { extraction: 0, story: 0, direction: 0, start: 0, end: 0, inspection: 0 },
+    };
+    this.media.set(jobId, permit);
+    return permit;
+  }
+  endingDelay(kind: EndingCallKind): number {
+    if (this.draining) return Infinity;
+    if (kind === 'frame') return this.mediaDelay('generation');
+    if (kind === 'inspection') return this.mediaDelay('inspection');
+    return this.responseBusy < this.config.responseConcurrentGlobal ? 0 : 25;
+  }
+  async endingCall(
+    jobId: string,
+    epoch: number,
+    kind: EndingCallKind,
+    body: unknown,
+    signal: AbortSignal,
+    frame: 'start' | 'end' = 'start',
+  ): Promise<unknown> {
+    const permit = this.media.get(jobId),
+      attempts = permit?.ending;
+    if (
+      this.draining ||
+      !permit ||
+      !attempts ||
+      permit.cancelled ||
+      signal.aborted ||
+      permit.cancellationEpoch !== epoch ||
+      this.now() >= permit.expiresAt
+    )
+      throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
+    const frameRequest = kind === 'frame' ? endingImageRequest.parse(body) : undefined;
+    const response = kind !== 'frame' ? parseEndingResponseRequest(body) : undefined;
+    const inspection = kind === 'inspection';
+    if (frameRequest) {
+      if (frameRequest.model !== this.config.imageModel || !this.transport.createImageEdit)
+        throw new AiServiceError(400, 'INVALID_REQUEST', 'Invalid ending image request');
+      if (attempts[frame] >= 2 || this.imageAttempts >= this.config.globalImageAttempts)
+        this.limit();
+    } else {
+      if (
+        response!.model !==
+          (inspection ? this.config.inspectionModel : this.config.responseModel) ||
+        (kind === 'extraction' && response!.max_output_tokens > 2048) ||
+        (inspection && response!.max_output_tokens > 1000)
+      )
+        throw new AiServiceError(400, 'INVALID_REQUEST', 'Invalid ending response request');
+      if (inspection) {
+        if (
+          attempts.inspection >= 4 ||
+          this.inspectionAttempts >= this.config.globalInspectionAttempts
+        )
+          this.limit();
+      } else if (
+        attempts[kind as 'story' | 'direction' | 'extraction'] >=
+          (kind === 'extraction' ? 6 : kind === 'story' ? 2 : 1) ||
+        this.responseAttempts >= this.config.globalResponseAttempts
+      )
+        this.limit();
+    }
+    if (this.endingDelay(kind) > 0 || permit.busy) this.limit();
+    const controller = new AbortController();
+    permit.controllers.add(controller);
+    permit.busy++;
+    if (frameRequest) {
+      attempts[frame]++;
+      permit.generationAttempts++;
+      this.imageAttempts++;
+      this.imageBusy++;
+      this.imageStarts.push(this.now());
+    } else if (inspection) {
+      attempts.inspection++;
+      permit.inspectionAttempts++;
+      this.inspectionAttempts++;
+      this.inspectionBusy++;
+    } else {
+      attempts[kind as 'story' | 'direction' | 'extraction']++;
+      this.responseAttempts++;
+      this.responseBusy++;
+    }
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.max(
+        1,
+        Math.min(
+          kind === 'frame' ? 60_000 : inspection ? 15_000 : 30_000,
+          permit.expiresAt - this.now(),
+        ),
+      ),
+    );
+    const combined = AbortSignal.any([signal, controller.signal]);
+    try {
+      const value = await (frameRequest
+        ? this.transport.createImageEdit!(frameRequest, combined)
+        : this.transport.createResponse(response, combined));
+      if (combined.aborted || permit.cancelled || this.now() >= permit.expiresAt)
+        throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
+      return value;
+    } catch (error) {
+      // Aborted fetches reject before returning a value, so the check above cannot classify them.
+      if (combined.aborted)
+        throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      permit.controllers.delete(controller);
+      permit.busy--;
+      if (frameRequest) this.imageBusy--;
+      else if (inspection) this.inspectionBusy--;
+      else this.responseBusy--;
+      if (permit.cancelled && !permit.busy) {
+        this.media.delete(jobId);
+        if (this.plays.get(permit.ownerPlayId)?.retired) this.forget(permit.ownerPlayId);
+      }
+    }
   }
   cancelMedia(jobId: string): void {
     const permit = this.media.get(jobId);
@@ -154,6 +311,7 @@ export class AiService {
     if (
       this.draining ||
       !permit ||
+      !!permit.ending ||
       permit.cancelled ||
       permit.cancellationEpoch !== epoch ||
       this.now() >= permit.expiresAt

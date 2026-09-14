@@ -18,19 +18,35 @@ import type { Scenario } from '../../packages/shared/scenario.js';
 import type { LiveCommand } from '../../packages/shared/game.js';
 import type { AiService } from '../../packages/server/ai-service.js';
 import type { PhotoQueue } from '../server/photo-queue.js';
+import { StoryEvidenceLedger } from './story-evidence.js';
+import { endingOutcome, freezeEndingPacket, type EndingPacket } from './ending.js';
+import type { IntentDecision } from '../../packages/shared/conversation.js';
+import {
+  storyClearCount,
+  storyContext,
+  storyNarration,
+  storyOpening,
+  requestsStoryHint,
+} from './story.js';
 
 export interface RuntimePresentation {
-  transcript(fragment: import('../../packages/shared/conversation.js').TranscriptFragment): void;
+  transcript(
+    fragment: import('../../packages/shared/conversation.js').TranscriptFragment,
+    messageId?: string,
+  ): void;
   photos(photos: import('./photo.js').GamePhoto[]): Promise<void>;
   scene(input: {
     messageId: string;
     text: string;
+    awaitTranscript?: boolean;
     commandSeq: number | null;
     generation: number;
+    gameVersion: number;
     facts: import('../../packages/shared/conversation.js').GameFacts;
     situation: string;
   }): void;
   notice?(text: string): void;
+  ending?(packet: EndingPacket, seal: () => EndingPacket): void;
   ended(state: import('../../packages/shared/game.js').PublicGameState): void;
 }
 type Cached<T> = { digest: string; epoch: number; promise: Promise<T> };
@@ -54,13 +70,20 @@ export class GameRuntime {
     if (this.diagnostics.length > 128) this.diagnostics.shift();
   }
   private actionInFlight = false;
+  private pendingScene: { messageId: string; beforeVersion: number } | null = null;
+  private readonly sceneMessages = new Map<number, string>();
+  private readonly story = new StoryEvidenceLedger();
+  private terminalPacket?: EndingPacket;
+  private sealedPacket?: EndingPacket;
   private stateVersion = 0;
   private previousState = '';
   private epoch = 1;
   private openingIssued = false;
+  private openingMessageId?: string;
   private seen = new Set<string>();
   private maintenanceTimer?: ReturnType<typeof setInterval>;
   private timeWarningSent = false;
+  private hintEvidence = new Map<string, Set<string>>();
   private transcriptTimer?: ReturnType<typeof setTimeout>;
   private liveRequests = new Map<
     string,
@@ -76,7 +99,7 @@ export class GameRuntime {
     readonly deadline: number,
     scenario: Scenario,
     private ai: AiService,
-    private models: { liveModel: string; responseModel: string },
+    private models: { liveModel: string; gameModel: string },
     private queue: PhotoQueue,
     private now = () => performance.now(),
     readonly coreSnapshot?: ScenarioSnapshot,
@@ -88,7 +111,7 @@ export class GameRuntime {
       scenario,
       createGameAI(
         { respond: (body) => ai.respond(id, body) },
-        () => models.responseModel,
+        () => models.gameModel,
         coreSnapshot,
       ),
       now,
@@ -99,17 +122,40 @@ export class GameRuntime {
         this.intents?.stop();
         this.traceEntries = [];
         this.diagnostics = [];
-        if (['won', 'lost'].includes(this.game.status) && !this.actionInFlight) {
-          this.presentScene(this.game.situation);
-        }
-        this.presentation?.ended(this.state());
         this.closingAt = Math.min(
           deadline,
           now() + (['won', 'lost'].includes(this.game.status) ? 12_000 : 0),
         );
+        const finalActionCommitted =
+          this.actionInFlight &&
+          this.pendingScene &&
+          this.game.gameVersion > this.pendingScene.beforeVersion;
+        if (['won', 'lost'].includes(this.game.status)) {
+          if (finalActionCommitted) {
+            const messageId = this.pendingScene!.messageId;
+            this.sceneMessages.set(this.game.gameVersion, messageId);
+            this.recordSceneEvidence(
+              this.game.lastResult!.narrative + '\n' + this.currentSituation(),
+              messageId,
+            );
+          } else this.presentScene(this.game.situation);
+        }
+        this.story.end(now(), this.closingAt);
+        this.terminalPacket = this.captureEnding(now());
+        // The owner reserves ending AI authority synchronously, before Live retirement.
+        this.presentation?.ending?.(this.terminalPacket, () => this.sealEnding());
+        this.presentation?.ended(this.state());
       },
       coreSnapshot,
     );
+    this.story.startGeneration(this.game.generation, now());
+    this.story.append({
+      sourceId: 'briefing',
+      kind: 'briefing',
+      generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
+      text: scenario.playerBriefing,
+    });
     if (coreSnapshot) {
       this.game.controllerEpoch = this.epoch;
       this.ledger = new ConversationLedger({ generation: this.game.generation, now });
@@ -129,7 +175,7 @@ export class GameRuntime {
           this.recordDiagnostic('classification_started');
           const decision = await classifyCoreIntent({
             respond: (body) => ai.respond(id, body),
-            model: models.responseModel,
+            model: models.gameModel,
             snapshot: coreSnapshot,
             conversation: context,
             game: {
@@ -143,6 +189,8 @@ export class GameRuntime {
               photos: this.game.photos.map((p) => ({ id: p.id })),
             },
             photos: this.game.photos,
+            obstacleIndex: this.game.obstacleIndex,
+            hintsAlreadyGiven: this.hintsAlreadyGiven(context),
           });
           this.recordDiagnostic('classification_returned', decision.kind);
           return decision;
@@ -158,15 +206,10 @@ export class GameRuntime {
             context.actionEpoch,
             context.controllerEpoch,
           );
-          this.enqueue({
-            ...factCommand(
-              this.words('わかった、それでやってみる！', 'Got it. I’ll try that!'),
-              delegation.id,
-            ),
-            type: 'session.commentary.append',
-          });
           this.recordDiagnostic('judgment_started');
           const judgmentStarted = now();
+          const messageId = randomUUID();
+          this.pendingScene = { messageId, beforeVersion: this.game.gameVersion };
           this.actionInFlight = true;
           let result;
           try {
@@ -174,6 +217,7 @@ export class GameRuntime {
             this.recordDiagnostic('judgment_committed');
           } finally {
             this.actionInFlight = false;
+            this.pendingScene = null;
           }
           if (this.disposed || context.controllerEpoch !== this.epoch) return;
           this.syncCore();
@@ -191,11 +235,28 @@ export class GameRuntime {
             )
               this.traceEntries.shift();
           }
-          const messageId = randomUUID();
           this.sendFacts('確定結果: ' + result.narrative, delegation.id);
           this.sendFacts(this.currentSituation(), delegation.id);
+          if (result.success && !this.game.terminal && coreSnapshot.scenarioV2.story) {
+            this.sendFacts(
+              'Updated story stage (direction, not newly established facts): ' +
+                JSON.stringify(
+                  storyNarration(coreSnapshot, storyClearCount(coreSnapshot, this.game.facts)),
+                ),
+              delegation.id,
+            );
+          }
           const command = this.speak(result.narrative, delegation.id, messageId);
-          if (!this.game.terminal) this.speak(this.currentSituation(), delegation.id);
+          if (!this.game.terminal)
+            this.speak(
+              result.success && coreSnapshot.scenarioV2.story
+                ? this.words(
+                    '確定結果と目に見えた手がかりを受け、今の物語段階に沿って一言だけ自然に反応してから、次の現在状況を伝えて。真相や解き方は明かさない。',
+                    'React in one short natural sentence to the confirmed result and observed clue, using the updated story stage. Then describe the following current situation. Do not reveal a mystery answer or solution. ',
+                  ) + this.currentSituation()
+                : this.currentSituation(),
+              delegation.id,
+            );
           this.presentScene(
             result.narrative + '\n' + this.currentSituation(),
             messageId,
@@ -205,6 +266,7 @@ export class GameRuntime {
         onDecision: (decision, delegation) => {
           this.recordDiagnostic('decision_accepted', decision.kind);
           if (decision.kind === 'consult') {
+            this.recordHintDecision(decision);
             this.sendFacts(this.currentSituation(), delegation.id);
             this.speak(decision.answer ?? this.currentSituation(), delegation.id);
           } else if (decision.kind === 'wait') {
@@ -232,8 +294,10 @@ export class GameRuntime {
               ),
               type: 'session.instructions.append',
             });
-          } else if (decision.kind === 'consult')
+          } else if (decision.kind === 'consult') {
+            this.recordHintDecision(decision);
             this.speak(decision.answer ?? this.currentSituation());
+          }
         },
         onRecoveryExpired: () => this.recoveryNotice('recovery_expired'),
         onError: (error) => {
@@ -257,8 +321,20 @@ export class GameRuntime {
   private publicContext() {
     return {
       status: this.game.status,
+      ...(this.coreSnapshot?.scenarioV2.story
+        ? {
+            story: storyContext(
+              this.coreSnapshot,
+              storyClearCount(this.coreSnapshot, this.game.facts),
+            ),
+            obstacle: {
+              id: this.game.facts.obstacleId,
+              title: this.game.scenario.obstacles[this.game.obstacleIndex].title,
+            },
+          }
+        : {}),
       situation: this.game.situation,
-      actionsRemaining: this.game.scenario.rules.maxActions - this.game.actionsUsed,
+      photoSendsRemaining: this.game.scenario.rules.maxPhotoSends - this.game.photoSendsUsed,
       lastResult: this.game.lastResult,
       recognizedItems: this.game.proposal?.items.map(({ name }) => name) ?? [],
       inventory: this.game.inventory.map(({ name, status }) => ({ name, status })),
@@ -266,6 +342,21 @@ export class GameRuntime {
   }
   private currentSituation() {
     return this.words('現在の状況: ', 'Current situation: ') + this.game.situation;
+  }
+  private hintsAlreadyGiven(context: import('./conversation.js').IntentContext) {
+    const evidence = this.hintEvidence.get(this.game.facts.obstacleId);
+    const key = `${context.generation}:${context.eligibleEvidenceSeq.join(',')}`;
+    return (evidence?.size ?? 0) - (evidence?.has(key) ? 1 : 0);
+  }
+  private recordHintDecision(decision: IntentDecision) {
+    if (decision.kind !== 'consult' || !this.ledger || !this.coreSnapshot?.scenarioV2.story) return;
+    const context = this.ledger.captureUnconsumedContext();
+    context.eligibleEvidenceSeq = decision.evidenceSeq;
+    if (!requestsStoryHint(context)) return;
+    const obstacleId = this.game.facts.obstacleId;
+    const evidence = this.hintEvidence.get(obstacleId) ?? new Set<string>();
+    evidence.add(`${context.generation}:${decision.evidenceSeq.join(',')}`);
+    this.hintEvidence.set(obstacleId, evidence);
   }
   private sendFacts(text: string, delegationId: string | null = null) {
     for (const command of factCommands(text, delegationId)) this.enqueue(command);
@@ -287,7 +378,7 @@ export class GameRuntime {
     );
     this.game.error = text;
     this.speak(text);
-    this.presentation?.notice?.(text);
+    this.presentNotice(text);
   }
   /** Server-owned maintenance; also callable with the injected clock in tests. */
   tick() {
@@ -319,7 +410,7 @@ export class GameRuntime {
     for (const command of factCommands(warning.deliveryInstructions[locale]))
       this.enqueue({ ...command, type: 'session.instructions.append' });
     this.speak(text);
-    this.presentation?.notice?.(text);
+    this.presentNotice(text);
     this.recordDiagnostic('time_warning');
   }
   private syncCore(changed = false) {
@@ -362,15 +453,84 @@ export class GameRuntime {
   private words(ja: string, en: string) {
     return this.coreSnapshot?.locale === 'en' ? en : ja;
   }
-  private presentScene(text: string, messageId = randomUUID(), commandSeq: number | null = null) {
+  private recordSceneEvidence(text: string, messageId: string) {
+    this.story.append({
+      sourceId: `scene:${messageId}`,
+      kind: this.game.lastResult ? 'action_result' : 'situation',
+      generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
+      text,
+    });
+  }
+  private presentNotice(text: string) {
+    if (this.presentation?.notice) {
+      this.story.append({
+        sourceId: `notice:${randomUUID()}`,
+        kind: 'situation',
+        generation: this.game.generation,
+        gameVersion: this.game.gameVersion,
+        text,
+      });
+      this.presentation.notice(text);
+    }
+  }
+  private presentScene(
+    text: string,
+    messageId = randomUUID(),
+    commandSeq: number | null = null,
+    awaitTranscript = false,
+  ) {
+    this.openingMessageId = undefined;
+    this.sceneMessages.set(this.game.gameVersion, messageId);
+    this.recordSceneEvidence(text, messageId);
     this.presentation?.scene({
       messageId,
       text,
+      awaitTranscript,
       commandSeq,
       generation: this.game.generation,
+      gameVersion: this.game.gameVersion,
       facts: structuredClone(this.game.facts),
       situation: this.game.situation,
     });
+  }
+  private captureEnding(endedAt: number): EndingPacket {
+    const reference = (gameVersion: number) => {
+      const messageId = this.sceneMessages.get(gameVersion);
+      return messageId ? { messageId, gameVersion } : null;
+    };
+    return freezeEndingPacket({
+      playId: this.id,
+      snapshot: this.coreSnapshot ?? null,
+      scenario: this.game.scenario,
+      locale: this.coreSnapshot?.locale ?? 'ja',
+      outcome: endingOutcome(this.game.status, this.game.clearedIds),
+      endReason: this.game.endReason!,
+      clearedIds: this.game.clearedIds,
+      remainingObstacles: this.game.scenario.obstacles
+        .filter((obstacle) => !this.game.clearedIds.includes(obstacle.id))
+        .map(({ id, title, situation }) => ({ id, title, situation })),
+      facts: this.game.facts,
+      inventory: this.game.inventory,
+      actions: this.game.committedActions,
+      evidence: this.story.snapshot(),
+      endedAt,
+      gameVersion: this.game.gameVersion,
+      finalMessageId: reference(this.game.gameVersion)?.messageId ?? null,
+      recentActionScenes: this.game.committedActions.slice(-2).map((action) => ({
+        actionId: action.actionId,
+        before: reference(action.beforeVersion),
+        after: reference(action.afterVersion),
+      })),
+    });
+  }
+  private sealEnding(): EndingPacket {
+    if (!this.terminalPacket) throw new Error('ENDING_NOT_TERMINAL');
+    this.sealedPacket ??= freezeEndingPacket({
+      ...this.terminalPacket,
+      evidence: this.story.seal(),
+    });
+    return this.sealedPacket;
   }
   state() {
     const state = {
@@ -418,6 +578,7 @@ export class GameRuntime {
     if (!this.valid(epoch)) throw new GameError(410, 'プレイまたは操作権が失効しました。');
   }
   async transferControl() {
+    this.openingMessageId = undefined;
     this.epoch++;
     this.game.changeController();
     this.syncCore();
@@ -450,7 +611,7 @@ export class GameRuntime {
         const answer = await this.ai.createLive(this.id, {
           session: {
             model: this.models.liveModel,
-            instructions: liveInstructions(this.game.state(), this.coreSnapshot),
+            instructions: liveInstructions(this.game.state(), this.coreSnapshot, this.game.facts),
             delegation: { type: 'client' },
             store: false,
           },
@@ -461,6 +622,8 @@ export class GameRuntime {
           throw new GameError(410, '接続中にプレイが失効しました。');
         }
         this.game.generation++;
+        this.openingMessageId = undefined;
+        this.story.startGeneration(this.game.generation, this.now());
         this.syncCore();
         this.intents?.reset();
         this.outbox?.reset(this.game.generation, this.epoch);
@@ -489,13 +652,14 @@ export class GameRuntime {
       return prior.promise;
     }
     if (this.photoRequests.size >= 100) throw new GameError(429, '写真送信の試行上限です。');
-    const ticket = this.game.beginPhotos();
+    const ticket = this.game.beginPhotos(images.length > 0);
+    this.openingMessageId = undefined;
     this.syncCore(true);
     const epoch = this.epoch;
     const promise = (async () => {
       try {
         const photos = await this.queue.run(
-          () => decodePhotos(images, this.game.scenario.rules.maxPhotosPerAction),
+          () => decodePhotos(images, this.game.scenario.rules.maxPhotosPerSend),
           () => this.valid(epoch),
           signal,
         );
@@ -545,6 +709,7 @@ export class GameRuntime {
       const event = liveEventSchema.parse(raw);
       this.syncCore();
       if (event.type === 'session.delegation.created') {
+        this.openingMessageId = undefined;
         this.recordDiagnostic('delegation_received');
         if (!this.game.terminal)
           this.intents!.acceptDelegation({
@@ -553,20 +718,35 @@ export class GameRuntime {
             offsetMs: event.offset_ms,
           });
       } else {
-        const fragment = this.ledger!.append({
-          eventId: event.event_id,
-          generation,
-          speaker: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
-          delta: event.delta,
-          startMs: event.start_ms,
-          endMs: event.end_ms,
-        });
+        let fragment;
+        try {
+          fragment = this.ledger!.append({
+            eventId: event.event_id,
+            generation,
+            speaker: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
+            delta: event.delta,
+            startMs: event.start_ms,
+            endMs: event.end_ms,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === 'CONVERSATION_LIMIT')
+            this.story.markTruncated();
+          throw error;
+        }
         if (fragment?.speaker === 'user')
           this.recordDiagnostic(
             'user_transcript_received',
             fragment.executionEligible ? 'eligible' : 'ineligible',
           );
-        if (fragment) this.presentation?.transcript(fragment);
+        if (fragment) {
+          this.story.transcript(fragment, this.now());
+          if (fragment.speaker === 'user' && fragment.delta.trim())
+            this.openingMessageId = undefined;
+          this.presentation?.transcript(
+            fragment,
+            fragment.speaker === 'assistant' ? this.openingMessageId : undefined,
+          );
+        }
         this.syncCore();
         if (!this.game.terminal) this.intents!.onContextChanged();
       }
@@ -579,6 +759,22 @@ export class GameRuntime {
     if (this.seen.size >= 10000) throw new GameError(429, '音声イベント上限です。');
     this.seen.add(event.event_id);
     const epoch = this.epoch;
+    if (event.type === 'session.output_transcript.delta') {
+      this.story.transcript(
+        {
+          eventId: event.event_id,
+          generation,
+          speaker: 'assistant',
+          delta: event.delta,
+          startMs: event.start_ms,
+          endMs: event.end_ms,
+          receivedGameVersion: this.game.gameVersion,
+          serverSeq: this.seen.size,
+          executionEligible: false,
+        },
+        this.now(),
+      );
+    }
     if (event.type === 'session.input_transcript.delta') {
       this.game.appendTranscript(event.delta);
       clearTimeout(this.transcriptTimer);
@@ -617,7 +813,19 @@ export class GameRuntime {
       if (evidence.length) this.ledger.consume(evidence);
     }
     this.game.start();
-    if (wasBriefing) this.presentScene(this.game.situation);
+    if (wasBriefing) {
+      const messageId = randomUUID();
+      this.presentScene(
+        this.coreSnapshot?.scenarioV2.story
+          ? storyOpening(this.coreSnapshot, this.game.situation)
+          : this.game.situation,
+        messageId,
+        null,
+        !!this.coreSnapshot,
+      );
+      // Live reads this scene aloud; its opening deltas update the same bubble.
+      this.openingMessageId = messageId;
+    }
     this.syncCore(true);
     return wasBriefing && !this.coreSnapshot
       ? [
@@ -633,8 +841,23 @@ export class GameRuntime {
   async action(actionId: string, revision: number): Promise<LiveCommand[]> {
     if (this.coreSnapshot) throw new GameError(410, '音声で使い方を指示してください。');
     const epoch = this.epoch;
-    const result = await this.game.commit(actionId, revision);
+    const scene = { messageId: randomUUID(), beforeVersion: this.game.gameVersion };
+    if (!this.actionInFlight) {
+      this.pendingScene = scene;
+      this.actionInFlight = true;
+    }
+    let result;
+    try {
+      result = await this.game.commit(actionId, revision);
+    } finally {
+      if (this.pendingScene === scene) {
+        this.pendingScene = null;
+        this.actionInFlight = false;
+      }
+    }
     if (this.disposed || epoch !== this.epoch) throw new GameError(410, '操作権が失効しました。');
+    if (this.game.gameVersion > scene.beforeVersion)
+      this.presentScene(result.narrative + '\n' + this.currentSituation(), scene.messageId);
     return [
       factCommand(
         '確定した行動結果: ' + result.narrative + ' 現在の状況: ' + this.game.state().situation,

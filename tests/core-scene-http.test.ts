@@ -186,6 +186,39 @@ test('two rejected generations fail the original slot without publishing assets'
   assert.equal(slot.errorCode, 'SCENE_RECEIVE_FAILED');
   assert.deepEqual(f.counts(), { imageCalls: 2, inspectionCalls: 2 });
 });
+
+test('scene stays checking while saving its asset and publishes ready with a readable image atomically', async (t) => {
+  const f = await setup(t);
+  const originalPutAsset = f.hosted.results.putAsset.bind(f.hosted.results);
+  let release!: () => void;
+  const saving = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered = false;
+  f.hosted.results.putAsset = async (playId, input) => {
+    entered = true;
+    await saving;
+    return originalPutAsset(playId, input);
+  };
+  try {
+    const play = await f.create();
+    await until(() => f.pending.length === 1);
+    f.resolve();
+    await until(() => entered);
+    const pending = (await f.messages(play)).find((m) => m.imageSlot)!.imageSlot!;
+    assert.equal(pending.status, 'checking');
+    assert.equal(pending.assetId, null);
+    assert.deepEqual(f.hosted.results.readySceneReferences(play.playId, 0), []);
+    release();
+    await until(async () => (await f.messages(play)).some((m) => m.imageSlot?.status === 'ready'));
+    const ready = (await f.messages(play)).find((m) => m.imageSlot?.status === 'ready')!.imageSlot!;
+    assert.ok(ready.assetId);
+    assert.equal((await f.request('/api/play/assets/' + ready.assetId, play)).status, 200);
+    assert.equal(f.hosted.results.readySceneReferences(play.playId, 0).length, 1);
+  } finally {
+    release();
+  }
+});
 test('started image survives manual end and stays out of the next play', async (t) => {
   const f = await setup(t),
     old = await f.create();

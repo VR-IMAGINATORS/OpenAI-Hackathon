@@ -1,7 +1,25 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { parseScenarioV2, type ScenarioV2 } from '../../packages/shared/scenario.js';
+import { SCENE_ACTION_BUDGET } from '../../packages/server/ai-config.js';
+import {
+  difficultySchema,
+  difficultyPresets,
+  type Difficulty,
+} from '../../packages/shared/difficulty.js';
+import {
+  localizeScenario,
+  parseScenarioV2,
+  publicScenario,
+  type PublicScenario,
+  type ScenarioV2,
+} from '../../packages/shared/scenario.js';
+import {
+  compileStoryScenario,
+  parseStoryCatalog,
+  storyCandidateCount,
+  type StoryCatalog,
+} from '../../packages/shared/story-catalog.js';
 import {
   parseCoreConfig,
   localeSchema,
@@ -10,7 +28,14 @@ import {
 } from '../../packages/shared/core-config.js';
 
 const MAX_CONFIG_BYTES = 256 * 1024;
+export const DEFAULT_SCENARIO_PATH = 'scenarios/story-catalog.json';
+export function parseScenarioSource(value: unknown): ScenarioV2 | StoryCatalog {
+  return (value as { version?: unknown } | null)?.version === 3
+    ? parseStoryCatalog(value)
+    : parseScenarioV2(value);
+}
 export interface ScenarioSnapshot {
+  readonly difficulty?: Difficulty;
   readonly digest: string;
   readonly locale: Locale;
   readonly scenarioV2: ScenarioV2;
@@ -63,27 +88,88 @@ export class ScenarioCatalog {
       scenarioPath: string;
       coreConfigPath: string;
       maxGenerationAttemptsPerPlay?: number;
+      randomIndex?: (candidateCount: number) => number;
+      playTtlMs?: number;
+      lifecycleReserveMs?: number;
       now?: () => number;
     },
   ) {
     this.scenarioPath = resolve(options.scenarioPath);
     this.coreConfigPath = resolve(options.coreConfigPath);
   }
-  /** Every new play gets a fresh parse. Old snapshots never change or fall back silently. */
-  current(locale: Locale): ScenarioSnapshot {
+  private validateBudgets(rules: ScenarioV2['rules']) {
+    const needed = 2 * (SCENE_ACTION_BUDGET + 2);
+    if (needed > (this.options.maxGenerationAttemptsPerPlay ?? 100))
+      throw new Error('IMAGE_BUDGET');
+    if (
+      this.options.playTtlMs !== undefined &&
+      rules.totalTimeSeconds * 1000 + (this.options.lifecycleReserveMs ?? 132_000) >
+        this.options.playTtlMs
+    )
+      throw new Error(
+        'SCENARIO_TIME_BUDGET: rules.totalTimeSeconds must fit PLAY_TTL_SECONDS with connection, waiting and closing allowances',
+      );
+  }
+  private read() {
+    const source = parseScenarioSource(readConfigJson(this.scenarioPath));
+    const coreConfig = parseCoreConfig(readConfigJson(this.coreConfigPath));
+    this.validateBudgets(source.rules);
+    return { source, coreConfig };
+  }
+  /** Startup validation keeps field-level errors visible to the planner. */
+  validate(): void {
+    this.read();
+  }
+  /** Public overview never draws a scene or exposes its clue/obstacles. */
+  preview(locale: Locale): PublicScenario {
     try {
       localeSchema.parse(locale);
-      const scenarioV2 = parseScenarioV2(readConfigJson(this.scenarioPath));
-      const coreConfig = parseCoreConfig(readConfigJson(this.coreConfigPath));
-      const needed = 2 * (scenarioV2.rules.maxActions + 2);
-      if (needed > (this.options.maxGenerationAttemptsPerPlay ?? 100))
-        throw new Error('IMAGE_BUDGET');
+      const { source } = this.read();
+      return source.version === 3
+        ? {
+            id: source.id,
+            title: source.title[locale],
+            playerBriefing: source.playerBriefing[locale],
+            rules: structuredClone(source.rules),
+            obstacleCount: 3,
+          }
+        : publicScenario(localizeScenario(source, locale));
+    } catch {
+      throw new ScenarioConfigError();
+    }
+  }
+  /** Every new play gets a fresh parse. Old snapshots never change or fall back silently. */
+  current(locale: Locale, difficulty?: Difficulty): ScenarioSnapshot {
+    try {
+      localeSchema.parse(locale);
+      const { source, coreConfig } = this.read();
+      let scenarioV2: ScenarioV2;
+      if (source.version === 3) {
+        const count = storyCandidateCount(source);
+        const selected = (this.options.randomIndex ?? randomInt)(count);
+        if (!Number.isInteger(selected) || selected < 0 || selected >= count)
+          throw new Error('INVALID_SCENARIO_SELECTION');
+        scenarioV2 = compileStoryScenario(source, selected);
+      } else scenarioV2 = source;
+      if (difficulty !== undefined) {
+        const preset = difficultyPresets[difficultySchema.parse(difficulty)];
+        scenarioV2 = parseScenarioV2({
+          ...scenarioV2,
+          rules: {
+            ...scenarioV2.rules,
+            totalTimeSeconds: preset.totalTimeSeconds,
+            maxPhotoSends: preset.maxPhotoSends,
+          },
+        });
+        this.validateBudgets(scenarioV2.rules);
+      }
       const digest = createHash('sha256')
-        .update(JSON.stringify({ locale, scenarioV2, coreConfig }))
+        .update(JSON.stringify({ locale, difficulty, scenarioV2, coreConfig }))
         .digest('hex');
       return freezeDeep({
         digest,
         locale,
+        ...(difficulty === undefined ? {} : { difficulty }),
         scenarioV2,
         coreConfig,
         createdAt: (this.options.now ?? Date.now)(),

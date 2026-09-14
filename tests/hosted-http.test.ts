@@ -291,7 +291,7 @@ test('HTTP photos and action retries charge once; another owner never receives t
   assert.equal(first.response.status, 200, first.raw);
   const retry = await f.request('/api/play/actions', action, c);
   assert.equal(retry.response.status, 200, retry.raw);
-  assert.equal(retry.data.state.actionsRemaining, first.data.state.actionsRemaining);
+  assert.equal(retry.data.state.photoSendsRemaining, first.data.state.photoSendsRemaining);
   assert.equal(f.counts().judgments, 1);
   const other = await f.auth();
   await f.create(other);

@@ -130,6 +130,53 @@ test('hosted deploy validates all target values and serializes secrets only into
   assert.throws(() => deploymentDocument(config(), ':other.sha.1'));
 });
 
+test('ending deployment settings are opt-in, bounded, and reach only the server environment', () => {
+  const disabled = deploymentConfig({ ...env, FAL_KEY: 'sentinel-fal-private' });
+  assert.equal(disabled.environment.ENDING_VIDEO_ENABLED, 'false');
+  assert.equal(disabled.environment.FAL_KEY, undefined);
+  assert.equal(disabled.environment.RESULT_TTL_SECONDS, '300');
+  const ending = {
+    ...env,
+    ENDING_VIDEO_ENABLED: 'true',
+    FAL_KEY: 'sentinel-fal-private',
+    AI_GLOBAL_VIDEO_ATTEMPTS: '10',
+  };
+  const configured = deploymentConfig(ending);
+  const runtime = deploymentDocument(configured, image).containers.app.environment;
+  assert.equal(runtime.FAL_KEY, ending.FAL_KEY);
+  assert.equal(runtime.AI_GLOBAL_VIDEO_ATTEMPTS, '10');
+  assert.equal(runtime.ENDING_JOB_TIMEOUT_SECONDS, '480');
+  assert.equal(runtime.ENDING_CONCURRENT, '2');
+  assert.equal(runtime.RESULT_TTL_SECONDS, '600');
+  for (const patch of [
+    { FAL_KEY: '' },
+    { AI_GLOBAL_VIDEO_ATTEMPTS: '' },
+    { AI_GLOBAL_VIDEO_ATTEMPTS: '1001' },
+    { AI_GLOBAL_VIDEO_ATTEMPTS: '0' },
+    { ENDING_VIDEO_ENABLED: 'yes' },
+    { ENDING_JOB_TIMEOUT_SECONDS: '59' },
+    { ENDING_JOB_TIMEOUT_SECONDS: '541' },
+    { ENDING_CONCURRENT: '3' },
+    { RESULT_TTL_SECONDS: '539' },
+  ])
+    assert.throws(() => deploymentConfig({ ...ending, ...patch }));
+});
+
+test('ending credentials are absent from deployment event logs', async () => {
+  const h = harness();
+  await deploy(
+    deploymentConfig({
+      ...env,
+      ENDING_VIDEO_ENABLED: 'true',
+      FAL_KEY: 'sentinel-fal-private',
+      AI_GLOBAL_VIDEO_ATTEMPTS: '1',
+    }),
+    h.deps,
+  );
+  assert.equal(JSON.stringify(h.logs).includes('sentinel-fal-private'), false);
+  for (const file of h.temporaryFiles) await assert.rejects(access(file));
+});
+
 test('hosted deploy confirms old drain before deploy and verifies registered image and SHA', async () => {
   const h = harness();
   await deploy(config(), h.deps);
@@ -190,6 +237,15 @@ test('hosted workflows isolate requested SHA from credential job and pin all act
       assert.match(match[1], /@[a-f0-9]{40}(?: |$)/);
     const [build, deployJob] = yaml.split(/\r?\n  deploy:\r?\n/);
     assert.doesNotMatch(build, /secrets\.|id-token: write|environment:/);
+    assert.doesNotMatch(build, /FAL_KEY|ENDING_VIDEO_ENABLED|AI_GLOBAL_VIDEO_ATTEMPTS/);
+    assert.match(deployJob, /FAL_KEY: \$\{\{ secrets.FAL_KEY \}\}/);
+    for (const name of [
+      'ENDING_VIDEO_ENABLED',
+      'AI_GLOBAL_VIDEO_ATTEMPTS',
+      'ENDING_JOB_TIMEOUT_SECONDS',
+      'ENDING_CONCURRENT',
+    ])
+      assert.ok(deployJob.includes(name + ': ${{ vars.' + name + ' }}'));
     assert.match(deployJob, /ref: \$\{\{ github.sha \}\}/);
     assert.doesNotMatch(deployJob, /npm (ci|install|run)|docker (build|run)/);
     assert.match(deployJob, /node --experimental-strip-types tools\/deploy.ts/);
@@ -202,7 +258,7 @@ test('hosted workflows isolate requested SHA from credential job and pin all act
   const docker = await readFile('Dockerfile', 'utf8');
   assert.match(docker, /USER node/);
   assert.match(docker, /@sha256:[a-f0-9]{64}/);
-  assert.doesNotMatch(docker, /OPENAI_API_KEY|APP_PASSPHRASE|OPS_TOKEN/);
+  assert.doesNotMatch(docker, /OPENAI_API_KEY|FAL_KEY|APP_PASSPHRASE|OPS_TOKEN/);
 });
 
 // Output format from aws/lightsailctl v1.0.8 internal/cs/pushimage.go.

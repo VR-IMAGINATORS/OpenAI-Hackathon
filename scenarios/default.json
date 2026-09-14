@@ -5,8 +5,8 @@
   "premise": "未来のあなたが薄暗い倉庫に監禁され、現代から送られる身近な物と指示で脱出を試みる。",
   "playerBriefing": "未来のあなたから、助けを求める電話。身近な物を撮り、使い方を伝えて、脱出の道をひらこう。",
   "rules": {
-    "maxActions": 4,
-    "maxPhotosPerAction": 2,
+    "maxPhotoSends": 4,
+    "maxPhotosPerSend": 2,
     "totalTimeSeconds": 300
   },
   "setting": {

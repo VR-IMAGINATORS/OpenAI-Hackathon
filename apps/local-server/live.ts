@@ -2,6 +2,8 @@ import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { LiveCommand, PublicGameState } from '../../packages/shared/game.js';
+import type { GameFacts } from '../../packages/shared/conversation.js';
+import { storyOpening, storyFromState } from './story.js';
 const base = { event_id: z.string().min(1).max(200) };
 const transcript = (type: 'session.input_transcript.delta' | 'session.output_transcript.delta') =>
   z
@@ -31,18 +33,32 @@ export const liveEventSchema = z.union([
     })
     .strict(),
 ]);
-export function liveInstructions(state: PublicGameState, snapshot?: ScenarioSnapshot) {
+export function liveInstructions(
+  state: PublicGameState,
+  snapshot?: ScenarioSnapshot,
+  facts?: GameFacts,
+) {
   if (snapshot)
     return [
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
-      '導入ではアプリの最初の呼びかけを待ち、openingMessageの内容を伝えて写真を待つ。接続後はそのまま本編で、開始ボタンや準備完了の確認はない。現在の状況画像はアプリが並行して生成・送信する。画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
-      '本編の用途相談・現在の状況や進捗への質問・実行指示・訂正は必ずclientへ委譲し、アプリの回答を待つ。委譲は作業依頼であり、行動成功を確定しない。自分やユーザーの会話だけを根拠に行動の開始・成功・状態変化を断言しない。実行予約が成立する前に「やってみる」と言わず、サーバーが確定した結果のcommentaryが届く前に成功を告げない。相談はアプリから届く回答を伝え、内部の分類理由を読み上げない。復唱や確認の質問、実行ボタンは挟まない。指示を受け付けた時の「やってみる」と結果の発話はアプリのcommentary通知に任せ、重ねて同じ相づちを話さない。',
+      state.status === 'briefing'
+        ? '初回の導入は呼びかけと説明を別のターンにする。アプリの最初の呼びかけを待ち、「聞こえる？ 聞こえたら返事をして」（英語では "Can you hear me? If you can, please answer."）とだけ話して止まり、ユーザーの実際の返事を待つ。無音や接続完了だけを返事とみなさず、自己紹介・状況説明・写真の依頼を続けて話さない。ユーザーが先に話した場合は呼びかけを重ねず、その発言へ応答する。「うん」「聞こえるよ」「もしもし」などの返事が来たら「よかった、つながった」（英語では "Good, we’re connected."）と一度だけ応じ、openingMessageの自己紹介・状況・協力方法へ自然に続ける。openingMessageの冒頭と同じ相づちは重複させない。聞こえない・待ってと言われたら短く応答して待ち、説明を押し通さない。'
+        : 'これは本編中の再接続。最初の呼びかけやopeningMessageの自己紹介を繰り返さず、現在の状況から短く自然に会話を再開する。',
+      '聞こえるかの確認や挨拶だけの返事はあなた自身が自然に受け答えし、clientへ委譲しない。ゲームの状況・世界設定・用途に関する質問や実行指示が含まれるときは、以下の本編ルールでclientへ委譲する。開始ボタンや準備完了の確認はない。状況画像はアプリが並行して生成・送信するので、画像到着を待たず会話を続ける。写真受信通知後に「これをどう使う？」と聞く。',
+      'あなたはゲーム内で道具を使って行動できる相棒。ゲーム内の行動はclientへの委譲を通じて実行する。本編の用途相談・現在の状況や進捗への質問・実行指示・訂正は必ずclientへ委譲し、アプリの回答を待つ。「実行して」「それでやって」「こじあけて」などの指示は、直前の道具や使い方の会話と合わせてclientへ委譲する。実行可否・成否・写真送信回数はサーバーが判断する。',
+      'photoSendsRemainingは新しい写真を送れる残り回数であり、行動回数ではない。送信0回でも失敗や終了ではなく、最後に届いた写真と使用可能な手持ちの道具で行動を続けられる。再利用に再撮影や送信は不要。0回になったら「もう新しい道具は送れない。届いた道具でなんとかしよう」と短く伝え、以後は新しい写真を要求しない。残り時間や障害の状態は公開状態に従い、確定した終了通知前にゲームを終えない。',
+      '実行指示にはまずclientへ委譲し、「受け取ったよ」など短い相づちを一度だけ伝える。相づちだけで処理を終えず、結果を待つ前に委譲を行う。アプリから受付の相づちは届かない。「AIだから実行できない」「操作権がない」など、自分に実行能力がないという理由でゲーム内の依頼を断らない。指示が不十分ならclientの回答に沿って不足する使い方を尋ねる。復唱や確認の質問、実行ボタンは挟まない。',
+      '受付の返事は依頼を聞いたことを示す。委譲しただけでは行動の開始・成功・状態変化は未確定。自分やユーザーの会話だけを根拠にそれらを確定した事実として話さない。結果の発話はサーバーが確定した結果のcommentary通知に任せ、それが届く前に結果を告げない。結果を伝えるときに受付の相づちを繰り返さない。相談はアプリから届く回答を伝え、内部の分類理由を読み上げない。',
       '途中の間や未完の発言で勝手に行動しない。質問と指示を区別する。判定中も会話できるが次の行動は予約せず、現在の結果後に指示を改めてもらう。攻略ヒントは尋ねられたときだけ段階的に出す。特殊能力を付与しない。',
+      'storyがある場合はそのaiNameの相棒として話す。物語の方向性は演出指示であり、起きた事実ではない。openingMessageの目に見える手がかりを省略しない。完全解除による物語段階の更新が届いたら、確定結果と既に見えた手がかりに結びつく短い自然な反応を加える。未確定の真相や後続障害、正解を勝手に明かさない。世界観や背景の質問もclientへ委譲する。',
       snapshot.coreConfig.conversation[snapshot.locale].liveInstructions,
       JSON.stringify({
-        openingMessage: snapshot.coreConfig.conversation[snapshot.locale].openingMessage,
+        openingMessage: storyOpening(snapshot, state.situation),
+        story: storyFromState(snapshot, state, facts),
         locale: snapshot.locale,
         status: state.status,
+        photoSendsRemaining: state.photoSendsRemaining,
+        remainingMs: state.remainingMs,
         title: state.title,
         briefing: state.briefing,
         situation: state.situation,
@@ -101,7 +117,9 @@ export function openingCommand(
   return {
     ...factCommand(
       snapshot
-        ? 'The call is connected and the game has begun. Deliver the configured openingMessage in the selected language, then wait for the user. The initial situation image is being sent by the app.'
+        ? locale === 'en'
+          ? 'Say only "Can you hear me? If you can, please answer." Then stop speaking and wait for the user’s reply. Do not deliver openingMessage yet. If the user has already spoken, respond to them instead of repeating the call check.'
+          : '最初は「聞こえる？ 聞こえたら返事をして」とだけ話して止まり、ユーザーの返事を待ってください。openingMessageはまだ話さないでください。相手が既に話していたら呼びかけを重ねず、その発言へ応答してください。'
         : locale === 'en'
           ? 'Open the call by saying: Can you hear me? I’m trapped here. If you can hear my voice, please answer. Then wait for their reply.'
           : '最初の呼びかけです。「聞こえる…？ よかった、誰かにつながった。閉じ込められているんだ。声が届いていたら、返事をしてくれる？」と短く話し、返事を待ってください。',

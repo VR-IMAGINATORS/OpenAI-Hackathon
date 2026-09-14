@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
@@ -14,18 +15,21 @@ const fs = require('node:fs');
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Begin experience' : '体験を始める',
+        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
         exact: true,
       });
       const answer = page.getByRole('button', {
         name: english ? 'Answer' : '応答する',
         exact: true,
       });
-      await begin.or(answer).first().waitFor();
-      if (await begin.isVisible()) {
+      const skip = page.getByRole('button', { name: 'Skip', exact: true });
+      const ready = begin.and(page.locator(':enabled'));
+      await ready.or(answer).or(skip).first().waitFor();
+      if (await ready.isVisible()) {
         await begin.click();
-        await page.getByRole('button', { name: 'Skip', exact: true }).click();
       }
+      await skip.or(answer).first().waitFor();
+      if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
         .click();
@@ -144,7 +148,8 @@ const fs = require('node:fs');
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: '動かない扉', index: 0, count: 3 },
       situation: 'ドアノブが外れ、扉を引くことができない。代わりにつかめるものはないだろうか。',
-      actionsRemaining: 4,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
       paused: false,
@@ -171,6 +176,8 @@ const fs = require('node:fs');
           ai: { mode: 'live' },
         });
       if (url.pathname === '/api/auth') {
+        if (body.passphrase !== 'demo')
+          return respond(route, { error: { code: 'AUTH_FAILED' } }, 401);
         assert.equal(body.passphrase, 'demo');
         owner = true;
         return respond(route, { ok: true });
@@ -196,6 +203,7 @@ const fs = require('node:fs');
             409,
           );
         assert.ok(['ja', 'en'].includes(body.locale));
+        assert.equal(body.difficulty, selectedDifficulty);
         state.locale = body.locale;
         createIds.push(body.requestId);
         if (createFailure) {
@@ -276,6 +284,7 @@ const fs = require('node:fs');
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
+        if (body.images.length) state.photoSendsRemaining--;
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -327,7 +336,7 @@ const fs = require('node:fs');
           failAction = false;
           return route.abort('failed');
         }
-        state.actionsRemaining--;
+        state.actionsUsed++;
         state.obstacle.index++;
         state.proposal = null;
         state.photoCount = 0;
@@ -351,9 +360,62 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
+    fs.mkdirSync('artifacts', { recursive: true });
+    for (const locale of ['en', 'ja']) {
+      await page.getByRole('combobox').selectOption(locale);
+      for (const size of [
+        { width: 390, height: 664 },
+        { width: 375, height: 600 },
+        { width: 320, height: 568 },
+        { width: 1280, height: 900 },
+      ]) {
+        await page.setViewportSize(size);
+        const buttons = page.locator('.difficulty-card');
+        assert.equal(await buttons.count(), 3);
+        assert.equal(await page.getByRole('radio').count(), 0);
+        assert.equal(await page.locator('.join-shell .primary-button').count(), 0);
+        for (const button of await buttons.all()) {
+          const bounds = await button.boundingBox();
+          assert.ok(
+            bounds.y >= 0 && bounds.y + bounds.height <= size.height,
+            `${locale} start button fits ${size.width}x${size.height}: ${JSON.stringify(bounds)}`,
+          );
+        }
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+          false,
+        );
+      }
+      await page.setViewportSize({ width: 390, height: 664 });
+      await page.screenshot({ path: `artifacts/join-difficulty-${locale}.png`, fullPage: true });
+      for (const button of await page.locator('.difficulty-card').all()) {
+        const popup = page.waitForEvent('dialog');
+        const click = button.click();
+        const dialog = await popup;
+        assert.equal(
+          dialog.message(),
+          locale === 'ja' ? '合言葉を入力してください。' : 'Please enter the passphrase.',
+        );
+        await dialog.accept();
+        await click;
+        assert.equal(
+          await page
+            .locator('input[type=password]')
+            .evaluate((input) => input === document.activeElement),
+          true,
+        );
+        assert.equal(owner, false);
+        assert.equal(createIds.length, 0);
+      }
+    }
+    await page.getByRole('combobox').selectOption('ja');
+    await page.getByLabel('参加の合言葉').fill('wrong');
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
+    await page.getByRole('alert').filter({ hasText: '合言葉が違います' }).waitFor();
+    assert.equal(await page.locator('video').count(), 0);
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: '合言葉で参加' }).click();
-    await page.getByRole('button', { name: '体験を始める', exact: true }).click();
+    await page.locator(`.difficulty-card[value="${selectedDifficulty}"]`).click();
     await page.waitForFunction(() => document.querySelector('video')?.readyState >= 1);
     const metadata = await page
       .locator('video')
@@ -382,8 +444,9 @@ const fs = require('node:fs');
     assert.equal(await page.locator('.incoming-overlay').count(), 0);
     hasPlay = false;
     await page.reload();
+    await page.getByRole('combobox').selectOption('ja');
     await page.evaluate(() => (window.__blockMedia = true));
-    await page.getByRole('button', { name: '体験を始める', exact: true }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信', exact: true }).click();
     await page.getByRole('button', { name: '動画を再生', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.getByRole('button', { name: '着信音を再生', exact: true }).waitFor();
@@ -399,7 +462,7 @@ const fs = require('node:fs');
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.screenshot({ path: 'artifacts/incoming-call-desktop.png', fullPage: true });
     console.log(
-      'PASS opening: actual MP4 metadata, ended/Skip, ringtone lifecycle, no mic/game/AI before Answer, autoplay fallback, mobile/desktop. Voice provider and media playback mocked.',
+      'PASS entry/opening: responsive difficulty selection in Japanese/English, empty-passphrase popup/focus, invalid auth, selected difficulty request, actual MP4 metadata, ended/Skip, ringtone lifecycle, no mic/game/AI before Answer, autoplay fallback. Voice provider and media playback mocked.',
     );
   } finally {
     await browser.close();

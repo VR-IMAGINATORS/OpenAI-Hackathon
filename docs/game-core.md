@@ -11,6 +11,8 @@ PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobil
 
 画像にはIMAGE_MODEL=gpt-image-2.5-flare、検査にはIMAGE_INSPECTION_MODEL=gpt-5.6-lunaを使う。実アカウントでの利用可否は実機確認が必要。画像だけが失敗した場合もゲームは続く。
 
+ユーザー写真の道具認識・行動の成否判定・相談/実行の意図分類には `GAME_MODEL=gpt-5.6-sol`（省略時も同値）と `reasoning.effort=low` を使う。エンディング文生成は `RESPONSE_MODEL`、音声は `LIVE_MODEL` で設定する。
+
 ## 確認する体験
 
 1. 参加時に日本語/英語を選択し「体験を始める」。導入動画の終了または右下のSkipでCalling画面へ進む。「応答する」を押すと着信音が止まり、マイク許可・プレイ作成・Live接続を行う。プレイ中の言語は固定。
@@ -26,7 +28,8 @@ PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobil
 ## 編集する場所
 
 - config/game-core.json: conversation.ja/en.openingMessageで着信応答直後の説明、liveInstructionsで役割・共通会話指示、分類例、物理判定・画像検査方針、表示グループ間隔。
-- scenarios/mobile-playtest.json: 日英シナリオ、factsと許可遷移、人物/画風、必須/禁止の画像条件。
+- scenarios/story-catalog.json: Web既定の6舞台・10障害・18構成。`gimmicks[].objective.ja/en` が「現在の目標」の表示文、`name` は障害名。詳しくは [シナリオの編集](planner-guide.md)。
+- scenarios/mobile-playtest.json: 明示指定する旧V2シナリオ。日英の目標は `obstacles[].title`、factsと許可遷移、人物/画風、必須/禁止の画像条件。
 - apps/local-server/hosted-runtime.ts: 音声受付→分類→一度だけ行動→表示への接続。
 - apps/server/result-store.ts: 履歴・サムネイル・検査済み画像・結果保持。
 - apps/server/scene-jobs.ts / packages/server/image-service.ts: 画像生成待機、生成、重大矛盾検査、再試行。
@@ -56,7 +59,7 @@ ENABLE_GAME_TRACE=1はローカル開発専用。自分のプレイのGET /api/p
 
 本編は1つのメッセンジャー画面内に表示する。上部は相手・通話状態・終了アイコン、中央は会話履歴、下部はカメラ・写真ライブラリ・音声案内・送信アイコン。撮影後のプレビューと取り消し、送信失敗時の再試行も下部に表示する。送信済み写真は入力欄に残さず、会話履歴に表示する。
 
-残り時間・行動回数は上部の情報欄、状況詳細と持ち物は同じ欄を開いて確認する。終了後の再プレイもアプリ内に表示する。AWSへの配置対応は保留中。
+残り時間・写真送信回数は上部の情報欄、状況詳細と持ち物は同じ欄を開いて確認する。終了後の再プレイもアプリ内に表示する。AWSへの配置対応は保留中。
 
 ## 行動しない場合の診断
 
@@ -85,7 +88,7 @@ config/game-core.json の timeWarning で通知を変更できる。新規プレ
 
 1. PCとスマホでハサミを送り「これで縄を切って」。一度の行動結果、状況の説明、結果画像の枠が出る。
 2. 「今どういう状況？」と聞く。分類理由ではなく、現在の状況を答える。
-3. 「切れるかな？」という相談や「いや、まだ切らない」という訂正だけでは行動回数が減らない。
+3. 「切れるかな？」という相談や「いや、まだ切らない」という訂正だけでは行動が確定しない。
 4. 残り1分を切るまで待つ。焦った口調の通知とチャット表示が一度出る。必要なら試遊用設定のthresholdSecondsを大きくして早めに確認する。
 5. 音声を再接続しても同じ時間通知を繰り返さない。
 

@@ -8,13 +8,13 @@ export default function App() {
   useEffect(() => {
     void playRequest<HostedBootstrap>('/api/bootstrap')
       .then(setBootstrap)
-      .catch(() => setError('画面を読み込めません。再読み込みしてください。'));
+      .catch(() => setError('Unable to load the page. Please reload.'));
   }, []);
   return bootstrap ? (
     <JoinScreen bootstrap={bootstrap} />
   ) : (
     <main className="play-shell">
-      <p role="status">{error || '読み込んでいます…'}</p>
+      <p role="status">{error || 'Loading…'}</p>
     </main>
   );
 }

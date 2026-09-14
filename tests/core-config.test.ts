@@ -127,7 +127,7 @@ test('v2 rejects duplicate identifiers and inconsistent fact or transition refer
       s.events[0].eligibleObstacleIds.push(s.events[0].eligibleObstacleIds[0]);
     },
     (s: any) => {
-      s.rules.maxActions = 1;
+      s.rules.maxPhotoSends = 0;
     },
   ];
   for (const mutate of cases) {

@@ -14,18 +14,21 @@ const fs = require('node:fs');
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Begin experience' : '体験を始める',
+        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
         exact: true,
       });
       const answer = page.getByRole('button', {
         name: english ? 'Answer' : '応答する',
         exact: true,
       });
-      await begin.or(answer).first().waitFor();
-      if (await begin.isVisible()) {
+      const skip = page.getByRole('button', { name: 'Skip', exact: true });
+      const ready = begin.and(page.locator(':enabled'));
+      await ready.or(answer).or(skip).first().waitFor();
+      if (await ready.isVisible()) {
         await begin.click();
-        await page.getByRole('button', { name: 'Skip', exact: true }).click();
       }
+      await skip.or(answer).first().waitFor();
+      if (await skip.isVisible()) await skip.click();
       await page
         .getByRole('button', { name: english ? 'Answer' : '応答する', exact: true })
         .click();
@@ -102,6 +105,7 @@ const fs = require('node:fs');
     const actionIds = [];
     let state = {
       id: 'test',
+      locale: 'ja',
       generation: 0,
       status: 'briefing',
       title: '閉ざされた研究室',
@@ -109,7 +113,8 @@ const fs = require('node:fs');
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: '動かない扉', index: 0, count: 3 },
       situation: 'ドアノブが外れ、扉を引くことができない。代わりにつかめるものはないだろうか。',
-      actionsRemaining: 4,
+      photoSendsRemaining: 4,
+      actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
       paused: false,
@@ -170,6 +175,10 @@ const fs = require('node:fs');
         controller = body.clientId;
         return respond(route, { ...envelope(), playId: 'play-one', controlEpoch: epoch }, 201);
       }
+      if (url.pathname === '/api/play/ending') {
+        assert.equal(url.searchParams.get('playId'), 'play-one');
+        return respond(route, { error: { code: 'ENDING_NOT_FOUND' } }, 404);
+      }
       assert.equal(route.request().headers()['x-play-id'], 'play-one');
       if (url.pathname === '/api/play/control') {
         assert.equal(body.takeover, true);
@@ -224,6 +233,7 @@ const fs = require('node:fs');
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
+        if (body.images.length) state.photoSendsRemaining--;
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -243,7 +253,7 @@ const fs = require('node:fs');
           failAction = false;
           return route.abort('failed');
         }
-        state.actionsRemaining--;
+        state.actionsUsed++;
         state.obstacle.index++;
         state.proposal = null;
         state.photoCount = 0;
@@ -267,8 +277,9 @@ const fs = require('node:fs');
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
+    await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: '合言葉で参加' }).click();
+    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
     await page.evaluate(() => (window.__denyMic = true));
     await enterCall();
     await page.getByRole('alert').filter({ hasText: 'マイクを許可' }).waitFor();
@@ -390,7 +401,7 @@ const fs = require('node:fs');
     await page.getByText('吸盤はしっかり張りついた。扉を開けて、次の部屋へ進めた！').waitFor();
     assert.equal(actionIds.length, 2);
     assert.equal(actionIds[0], actionIds[1], 'unknown transport result reuses action ID');
-    assert.equal(state.actionsRemaining, 3);
+    assert.equal(state.photoSendsRemaining, 3);
     assert.ok(
       (await page.evaluate(() => window.__sent)).some(
         (event) => event.type === 'session.commentary.append',
@@ -408,7 +419,7 @@ const fs = require('node:fs');
     await page.getByRole('button', { name: 'もう一度プレイ' }).waitFor();
     owner = false;
     await page.reload();
-    await page.getByRole('button', { name: '合言葉で参加' }).waitFor();
+    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
     assert.deepEqual(pageErrors, []);
     console.log(
       'PASS: fake Live connect/reconnect/reload, passphrase authentication, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',

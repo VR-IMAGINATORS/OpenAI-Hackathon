@@ -1,6 +1,8 @@
 Status: requirements approved (2026-09-12, grill-me Q16)
 # AWS公開と複数人試遊
 
+2026-09-14追記: 開始画面の難易度選択とプレイ作成時の上限固定は [difficulty-selection/spec.md](../difficulty-selection/spec.md) を参照。
+
 ## 1. 目的と優先順位
 審査員・知人・開発メンバーが公開URLから、スマホを中心に音声と写真の脱出ゲームを体験できるようにする。GitHubは実装確認用であり、審査員のローカル起動を要件にしない。
 根拠は proposal/server-structure-change/server-structure-change.md と .specworkflow/discussions/2026-09-12-hosted-multiplayer.md。本仕様はweb-foundation/mobile-playtestの配布・認証・単一プレイの前提を更新する。ゲームルール、シナリオ、GPT-Live/Responsesの役割、導入画像/会話の内容は維持する。

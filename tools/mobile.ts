@@ -6,7 +6,9 @@ import { createHostedApp } from '../apps/server/app.js';
 
 import { loadHostedConfig } from '../apps/server/config.js';
 import { readEnvironment } from '../packages/server/config.js';
+import { endingStartupSummary } from '../packages/server/ending-config.js';
 import { publicOrigin, startTunnel, stopTunnel } from './tunnel.js';
+import { waitForMobileHealth, type HealthFailure } from './mobile-readiness.js';
 
 const servers: Server[] = [];
 let child: ChildProcess | undefined;
@@ -52,11 +54,15 @@ async function main() {
     ...values,
     HOST: '127.0.0.1',
     HOSTED_NO_ENV_FILE: '1',
-    SCENARIO_PATH: values.SCENARIO_PATH ?? 'scenarios/mobile-playtest.json',
   });
   readFileSync(config.webRoot + '/index.html');
 
   runtime = createHostedApp(config);
+  if (config.ending) console.log(endingStartupSummary(config.ending, config.ai.mode));
+  if (!mock)
+    console.log(
+      'この試遊はPCの .env.local を使用します。GitHubのSecret・Variablesは自動反映されません。',
+    );
 
   await listen(runtime.app.listen(config.port, '127.0.0.1'));
 
@@ -85,26 +91,22 @@ async function main() {
   config.secureCookie = true;
   config.allowedHosts.add(new URL(origin).host);
   config.allowedOrigins.add(origin);
-  let ready = false;
-  const readinessDeadline = performance.now() + 45_000;
-  for (; performance.now() < readinessDeadline && !stopping; ) {
-    try {
-      const response = await fetch(origin + '/healthz', {
-        signal: AbortSignal.timeout(4000),
-        redirect: 'error',
-      });
-      const body = await response.text();
-      if (response.ok && body.length < 1024 && JSON.parse(body).bootId === runtime.bootId) {
-        ready = true;
-        break;
-      }
-    } catch {
-      /* DNS propagation and tunnel registration may take a moment. */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  if (!ready)
-    throw new Error('HTTPSの接続確認に失敗しました。トンネルを通せる回線を確認してください。');
+  const reasons: Record<HealthFailure, string> = {
+    dns: '発行されたURLのDNS反映待ち',
+    timeout: 'HTTPS応答待ち',
+    connection: 'HTTPS接続待ち',
+    http: 'トンネルの公開準備待ち',
+    'wrong-server': 'このPCのサーバー応答を確認できません',
+  };
+  const health = await waitForMobileHealth(origin, runtime.bootId, {
+    stopped: () => stopping,
+    progress: (reason) => console.log(`接続確認中: ${reasons[reason]}（最大120秒待ちます）`),
+  });
+  if (stopping) return;
+  if (!health.ready)
+    throw new Error(
+      `HTTPSの接続確認に失敗しました: ${reasons[health.reason]}。再実行しても続く場合は、別の回線でお試しください。`,
+    );
   console.log(await QRCode.toString(origin, { type: 'terminal', small: true }));
   console.log('スマホ参加URL: ' + origin);
   console.log('設定した共通の合言葉で参加してください。');

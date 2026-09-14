@@ -82,6 +82,51 @@ function privateResponse(response: Response) {
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
 }
 
+test('HTTP opening feed starts without text and streams into the same image bubble', async (t) => {
+  const f = await setup(t);
+  const cookie = await f.login();
+  const play = await f.create(cookie);
+  const control = { cookie, playId: play.playId, clientId: play.clientId };
+  const connected = await f.request('/api/play/heartbeat', {
+    ...control,
+    body: { generation: 1, voiceState: 'connected' },
+  });
+  assert.equal(connected.status, 200);
+  const feed = async () => {
+    const response = await f.request('/api/play/feed', control);
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const initial = await feed();
+  assert.equal(initial.upserts.length, 1);
+  const opening = initial.upserts[0];
+  assert.equal(opening.text, '');
+  assert.ok(opening.imageSlot);
+  let expected = '';
+  for (const [index, delta] of ['聞こえる？', '写真を送って。'].entries()) {
+    const response = await f.request('/api/play/events', {
+      ...control,
+      body: {
+        generation: 1,
+        event: {
+          type: 'session.output_transcript.delta',
+          event_id: randomUUID(),
+          delta,
+          start_ms: index * 1000,
+          end_ms: index * 1000 + 100,
+        },
+      },
+    });
+    assert.equal(response.status, 202);
+    expected += delta;
+    const current = await feed();
+    assert.equal(current.upserts.length, 1);
+    assert.equal(current.upserts[0].id, opening.id);
+    assert.equal(current.upserts[0].text, expected);
+    assert.ok(current.upserts[0].imageSlot);
+  }
+});
+
 test('HTTP feed/assets require owner but no control lease and expose only JPEG bytes', async (t) => {
   const f = await setup(t),
     alice = await f.login(),
