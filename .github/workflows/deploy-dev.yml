@@ -113,6 +113,7 @@ jobs:
           AI_GLOBAL_RESPONSE_ATTEMPTS: ${{ vars.AI_GLOBAL_RESPONSE_ATTEMPTS }}
           LIVE_MODEL: ${{ vars.LIVE_MODEL }}
           RESPONSE_MODEL: ${{ vars.RESPONSE_MODEL }}
+          GAME_MODEL: ${{ vars.GAME_MODEL }}
           IMAGE_MODEL: ${{ vars.IMAGE_MODEL }}
           IMAGE_INSPECTION_MODEL: ${{ vars.IMAGE_INSPECTION_MODEL }}
           AI_GLOBAL_IMAGE_ATTEMPTS: ${{ vars.AI_GLOBAL_IMAGE_ATTEMPTS }}

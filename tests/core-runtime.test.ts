@@ -58,6 +58,8 @@ async function setup(
       },
       async hangup() {},
       async createResponse(body) {
+        assert.equal((body as any).model, 'gpt-5.6-sol');
+        assert.deepEqual((body as any).reasoning, { effort: 'low' });
         const parts = (body as any).input[0].content;
         const context = JSON.parse(parts.find((part: any) => part.type === 'input_text').text);
         if (context.conversation) {

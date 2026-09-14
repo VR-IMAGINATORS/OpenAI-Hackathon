@@ -35,6 +35,7 @@ const inputText = z.object({ type: z.literal('input_text'), text: z.string().max
 export const responseRequest = z
   .object({
     model: z.string().max(100),
+    reasoning: z.object({ effort: z.literal('low') }).strict().optional(),
     instructions: z.string().max(16000),
     input: z
       .array(

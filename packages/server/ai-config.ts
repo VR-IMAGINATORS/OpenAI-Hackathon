@@ -8,6 +8,7 @@ export interface AiConfig {
   apiKey?: string;
   liveModel: string;
   responseModel: string;
+  gameModel: string;
   liveModels: string[];
   responseModels: string[];
   liveAttemptsPerPlay: number;
@@ -54,6 +55,7 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
   }
   const liveModel = model('LIVE_MODEL', 'gpt-live-1');
   const responseModel = model('RESPONSE_MODEL', 'gpt-5.6-terra');
+  const gameModel = model('GAME_MODEL', 'gpt-5.6-sol');
   const imageModel = model('IMAGE_MODEL', 'gpt-image-2.5-flare');
   const inspectionModel = model('IMAGE_INSPECTION_MODEL', 'gpt-5.6-luna');
   if (imageModel !== 'gpt-image-2.5-flare' || inspectionModel !== 'gpt-5.6-luna')
@@ -73,8 +75,9 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
     apiKey: mode === 'live' ? values.OPENAI_API_KEY : undefined,
     liveModel,
     responseModel,
+    gameModel,
     liveModels: [liveModel],
-    responseModels: [responseModel],
+    responseModels: [...new Set([responseModel, gameModel])],
     liveAttemptsPerPlay: positiveInteger(values, 'AI_LIVE_ATTEMPTS_PER_PLAY', 3, 100),
     responsesPerPlay: positiveInteger(values, 'AI_RESPONSES_PER_PLAY', 80, 1000),
     responseConcurrentPerPlay: positiveInteger(values, 'AI_RESPONSE_CONCURRENT_PER_PLAY', 1, 100),

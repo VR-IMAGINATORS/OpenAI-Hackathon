@@ -55,6 +55,8 @@ test('hosted AI config is fail-closed in live mode and has five-player defaults'
     /AI_GLOBAL_LIVE_ATTEMPTS required/,
   );
   assert.equal(config().liveConcurrentGlobal, 5);
+  assert.equal(config().gameModel, 'gpt-5.6-sol');
+  assert.equal(config().responseModel, 'gpt-5.6-terra');
   assert.throws(() => new AiService(config()), /injected/);
 });
 
@@ -72,6 +74,29 @@ test('hosted AI validates models and bodies before consuming attempts', async ()
   );
   assert.equal(ai.snapshot().liveAttempts, 0);
   assert.equal(ai.snapshot().responseAttempts, 0);
+});
+
+test('hosted game requests preserve low reasoning through validation and transport', async () => {
+  let received: unknown;
+  const ai = new AiService(
+    config(),
+    fake({
+      createResponse: async (body) => {
+        received = body;
+        return { output: [] };
+      },
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const body = { ...responseBody, model: config().gameModel, reasoning: { effort: 'low' } };
+  await ai.respond('one', body);
+  assert.deepEqual(received, body);
+  await assert.rejects(
+    ai.respond('one', { ...body, reasoning: { effort: 'invalid' } }),
+    code('INVALID_REQUEST'),
+  );
+  assert.equal(ai.snapshot().responseAttempts, 1);
 });
 
 test('hosted Live reserves all five slots before awaiting and isolates budgets', async () => {

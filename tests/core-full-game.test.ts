@@ -22,7 +22,7 @@ test('core voice instructions execute once through HTTP and deliver final-genera
     HOSTED_NO_ENV_FILE: '1',
     APP_PASSPHRASE: passphrase,
     AI_MODE: 'mock',
-    RESPONSE_MODEL: 'integration-vision',
+    GAME_MODEL: 'integration-vision',
     SCENARIO_PATH: 'scenarios/mobile-playtest.json',
   });
   const hosted = createHostedApp(config, {

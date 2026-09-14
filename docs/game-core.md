@@ -11,6 +11,8 @@ PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobil
 
 画像にはIMAGE_MODEL=gpt-image-2.5-flare、検査にはIMAGE_INSPECTION_MODEL=gpt-5.6-lunaを使う。実アカウントでの利用可否は実機確認が必要。画像だけが失敗した場合もゲームは続く。
 
+ユーザー写真の道具認識・行動の成否判定・相談/実行の意図分類には `GAME_MODEL=gpt-5.6-sol`（省略時も同値）と `reasoning.effort=low` を使う。エンディング文生成は `RESPONSE_MODEL`、音声は `LIVE_MODEL` で設定する。
+
 ## 確認する体験
 
 1. 参加時に日本語/英語を選択し「体験を始める」。導入動画の終了または右下のSkipでCalling画面へ進む。「応答する」を押すと着信音が止まり、マイク許可・プレイ作成・Live接続を行う。プレイ中の言語は固定。

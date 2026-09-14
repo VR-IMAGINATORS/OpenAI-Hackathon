@@ -29,7 +29,8 @@
 | Variable | AI_GLOBAL_LIVE_ATTEMPTS | 環境のLive作成回数上限。例50 |
 | Variable | AI_GLOBAL_RESPONSE_ATTEMPTS | 環境のResponses回数上限。例1000 |
 | Variable | LIVE_MODEL | 省略時 `gpt-live-1` |
-| Variable | RESPONSE_MODEL | 省略時 `gpt-5.6-terra`。運営が利用可能なモデルを設定 |
+| Variable | RESPONSE_MODEL | エンディング文生成用。省略時 `gpt-5.6-terra`。運営が利用可能なモデルを設定 |
+| Variable | GAME_MODEL | 写真認識・行動判定・意図分類用。省略時 `gpt-5.6-sol`、推論は `low` 固定 |
 | Variable | ENDING_VIDEO_ENABLED | 省略時`false`。`true`で終了時の動画生成を有効化 |
 | Variable | AI_GLOBAL_VIDEO_ATTEMPTS | 有効時に必須。1〜1,000の整数でプロセス全体の動画送信回数を制限 |
 | Variable | ENDING_JOB_TIMEOUT_SECONDS | 省略時480、60〜540秒。待機と準備を含む締切 |

@@ -80,6 +80,7 @@ export async function classifyCoreIntent(options: {
   if (instructions.length > 16000) return { kind: 'wait', reason: '会話設定が長すぎます。' };
   const response = await options.respond({
     model: options.model,
+    reasoning: { effort: 'low' },
     store: false,
     max_output_tokens: 1000,
     instructions,

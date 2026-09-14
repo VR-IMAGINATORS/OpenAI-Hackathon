@@ -99,7 +99,7 @@ export class GameRuntime {
     readonly deadline: number,
     scenario: Scenario,
     private ai: AiService,
-    private models: { liveModel: string; responseModel: string },
+    private models: { liveModel: string; gameModel: string },
     private queue: PhotoQueue,
     private now = () => performance.now(),
     readonly coreSnapshot?: ScenarioSnapshot,
@@ -111,7 +111,7 @@ export class GameRuntime {
       scenario,
       createGameAI(
         { respond: (body) => ai.respond(id, body) },
-        () => models.responseModel,
+        () => models.gameModel,
         coreSnapshot,
       ),
       now,
@@ -175,7 +175,7 @@ export class GameRuntime {
           this.recordDiagnostic('classification_started');
           const decision = await classifyCoreIntent({
             respond: (body) => ai.respond(id, body),
-            model: models.responseModel,
+            model: models.gameModel,
             snapshot: coreSnapshot,
             conversation: context,
             game: {
