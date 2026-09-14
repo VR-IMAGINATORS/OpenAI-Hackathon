@@ -254,6 +254,14 @@ export default function EndingVideo({
           </p>
         )}
       </div>
+      <div className="ending-continued">
+        <img
+          src="/images/to-be-continued.png"
+          alt="to be continued"
+          width={1536}
+          height={1024}
+        />
+      </div>
     </section>
   );
 }

@@ -2063,6 +2063,18 @@ h1 span {
   background: #030809;
   border-radius: 10px;
 }
+.ending-continued {
+  width: min(100%, 360px);
+  aspect-ratio: 4 / 1;
+  margin: 20px 0 4px auto;
+  overflow: hidden;
+}
+.ending-continued img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .ending-reveal {
   min-height: 44px;
   padding: 10px 18px;

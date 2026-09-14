@@ -55,6 +55,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     );
     await page.getByRole('heading', { name: 'ノーマルエンド', exact: true }).waitFor();
     await page.getByText('エンディング動画を生成しています。', { exact: true }).waitFor();
+    const arrow = page.getByRole('img', { name: 'to be continued', exact: true });
+    await arrow.waitFor();
+    assert(
+      await arrow.evaluate(async (img) => {
+        await img.decode();
+        return img.naturalWidth > 0;
+      }),
+    );
     assert.equal(await page.locator('video').count(), 0);
     await page.getByText('あなたらしい結末を振り返っています…', { exact: true }).waitFor();
     storyReady = true;
@@ -68,6 +76,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     status = 'failed';
     errorCode = 'ENDING_DIRECTION_INVALID_RESPONSE';
     await page.getByText('動画の演出を作る段階で失敗しました。', { exact: true }).waitFor();
+    assert(await arrow.isVisible(), 'the result footer remains visible when video generation fails');
     assert.equal(await page.getByText('食器縛り', { exact: true }).count(), 1);
     assert.equal(await page.locator('.ending-story').isVisible(), true);
     await page.reload();
@@ -101,6 +110,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     assert(bounds.tagBottom < bounds.videoTop, 'tag and text precede the video');
     assert(bounds.width <= 390, 'mobile result fits the viewport');
+    const footer = await page.evaluate(() => {
+      const ending = document.querySelector('.ending-video');
+      const arrow = ending.querySelector('.ending-continued');
+      return {
+        last: ending.lastElementChild === arrow,
+        top: arrow.getBoundingClientRect().top,
+        detailsBottom: ending.querySelector('.ending-details').getBoundingClientRect().bottom,
+      };
+    });
+    assert(footer.last && footer.top >= footer.detailsBottom, 'arrow follows all result content');
+    await page.getByRole('button', { name: /閉じて会話を見返す/ }).click();
+    assert(await arrow.isVisible(), 'collapsing video details keeps the result footer');
     status = 'failed';
     errorCode = 'ENDING_START_FRAME_HTTP_401';
     await page.evaluate((id) => window.renderEnding(id, 'en'), second);
