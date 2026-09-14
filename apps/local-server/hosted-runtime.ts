@@ -38,6 +38,7 @@ export interface RuntimePresentation {
   scene(input: {
     messageId: string;
     text: string;
+    awaitTranscript?: boolean;
     commandSeq: number | null;
     generation: number;
     gameVersion: number;
@@ -480,13 +481,19 @@ export class GameRuntime {
       this.presentation.notice(text);
     }
   }
-  private presentScene(text: string, messageId = randomUUID(), commandSeq: number | null = null) {
+  private presentScene(
+    text: string,
+    messageId = randomUUID(),
+    commandSeq: number | null = null,
+    awaitTranscript = false,
+  ) {
     this.openingMessageId = undefined;
     this.sceneMessages.set(this.game.gameVersion, messageId);
     this.recordSceneEvidence(text, messageId);
     this.presentation?.scene({
       messageId,
       text,
+      awaitTranscript,
       commandSeq,
       generation: this.game.generation,
       gameVersion: this.game.gameVersion,
@@ -820,6 +827,8 @@ export class GameRuntime {
           ? storyOpening(this.coreSnapshot, this.game.situation)
           : this.game.situation,
         messageId,
+        null,
+        !!this.coreSnapshot,
       );
       // Live reads this scene aloud; its opening deltas update the same bubble.
       this.openingMessageId = messageId;

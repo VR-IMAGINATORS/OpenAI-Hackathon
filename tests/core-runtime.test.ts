@@ -117,7 +117,7 @@ async function setup(
           id: input.messageId,
           side: 'assistant',
           kind: 'result',
-          text: input.text,
+          text: input.awaitTranscript ? '' : input.text,
           liveGeneration: input.generation,
           imageSlot: {
             status: 'queued',
@@ -180,7 +180,7 @@ async function setup(
 test('opening speech updates its image bubble across pauses and retries, then user replies start a new turn', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'waiting' }));
   const opening = h.feed().upserts[0]!;
-  assert.ok(opening.text);
+  assert.equal(opening.text, '');
   assert.ok(opening.imageSlot);
   const first = {
     type: 'session.output_transcript.delta',

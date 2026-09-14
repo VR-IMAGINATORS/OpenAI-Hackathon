@@ -205,7 +205,7 @@ export function createHostedApp(
                   id: input.messageId,
                   side: 'assistant',
                   kind: 'result',
-                  text: input.text.slice(0, 4000),
+                  text: input.awaitTranscript ? '' : input.text.slice(0, 4000),
                   relatedCommandSeq: input.commandSeq,
                   liveGeneration: input.generation,
                   imageSlot: slot,
