@@ -3,6 +3,7 @@ import type { EndingOutcome, EndingView } from '../../../packages/shared/ending.
 import type { Locale } from './ChatFeed.js';
 import { endingVideoPath, getEnding, PlayApiError } from './play-api.js';
 import { endingErrorText } from './ending-error.js';
+import { endingTagLabel } from '../../../packages/shared/ending-tags.js';
 
 type Unavailable = 'auth' | 'expired' | 'missing' | 'network' | null;
 const pending = new Set<EndingView['status']>(['queued', 'preparing', 'generating']);
@@ -23,7 +24,6 @@ export default function EndingVideo({
 }) {
   const [view, setView] = useState<EndingView | null>(null);
   const [unavailable, setUnavailable] = useState<Unavailable>(null);
-  const [showStory, setShowStory] = useState(false);
   const [mediaFailed, setMediaFailed] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const detailsId = useId();
@@ -38,7 +38,6 @@ export default function EndingVideo({
     const clientDeadline = Date.now() + 600_000;
     setView(null);
     setUnavailable(null);
-    setShowStory(false);
     setMediaFailed(false);
     setExpanded(true);
     const expire = () => {
@@ -66,7 +65,12 @@ export default function EndingVideo({
             expiryTimer = window.setTimeout(expire, deadline - Date.now());
           }
         }
-        if (pending.has(next.status)) timer = window.setTimeout(() => void poll(), 2000);
+        if (
+          pending.has(next.status) ||
+          next.storyStatus === 'queued' ||
+          next.storyStatus === 'generating'
+        )
+          timer = window.setTimeout(() => void poll(), 2000);
       } catch (error) {
         if (controller.signal.aborted) return;
         if (error instanceof PlayApiError) {
@@ -90,6 +94,9 @@ export default function EndingVideo({
   const finalOutcome = view?.outcome ?? outcome;
   const count = view?.clearedCount ?? clearedCount;
   const ready = view?.status === 'ready' && !unavailable;
+  const story = !unavailable || unavailable === 'network' ? view?.story : null;
+  const tagLabel = endingTagLabel(story?.tagId, locale);
+  const storyPending = view?.storyStatus === 'queued' || view?.storyStatus === 'generating';
   const failureText = view?.status === 'failed' ? endingErrorText(view.errorCode, locale) : null;
   let statusText = t('エンディングを確認しています…', 'Checking your ending…');
   if (unavailable) {
@@ -148,6 +155,31 @@ export default function EndingVideo({
           <p className="ending-count">{t(`解除：${count}個`, `Cleared: ${count}`)}</p>
         )}
       </div>
+      <div className="ending-result" aria-live="polite" aria-atomic="true">
+        {story ? (
+          <div className="ending-story">
+            {tagLabel && <p className="ending-tag">{tagLabel}</p>}
+            <p>{story.text}</p>
+          </div>
+        ) : !unavailable && storyPending ? (
+          <p className="ending-note">
+            {t('あなたらしい結末を振り返っています…', 'Finding the story of your play…')}
+          </p>
+        ) : !unavailable && view?.storyStatus === 'failed' ? (
+          <p className="ending-note">
+            {t(
+              '結末の文章を生成できませんでした。プレイの結果は確定しています。',
+              'The ending text could not be generated. Your game result is final.',
+            )}
+          </p>
+        ) : null}
+        {!story && !storyPending && !unavailable && summary && (
+          <p className="ending-summary">
+            {t('最後の行動：', 'Last action: ')}
+            {summary}
+          </p>
+        )}
+      </div>
       <p className="ending-status" role="status">
         {view && pending.has(view.status) && !unavailable && (
           <span className="ending-spinner" aria-hidden="true" />
@@ -172,7 +204,6 @@ export default function EndingVideo({
         <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
       </button>
       <div id={detailsId} className="ending-details" hidden={!expanded}>
-        {summary && <p className="ending-summary">{summary}</p>}
         {view && pending.has(view.status) && !unavailable && (
           <p className="ending-note">
             {t(
@@ -200,29 +231,16 @@ export default function EndingVideo({
             playsInline
             preload="metadata"
             aria-label={t('エンディング動画', 'Ending video')}
-            onEnded={() => setShowStory(true)}
             onError={() => setMediaFailed(true)}
           />
         )}
         {ready && mediaFailed && (
           <p role="status">
             {t(
-              '動画を再生できません。下のボタンから結末を確認できます。',
-              'The video could not be played. Use the button below to read your ending.',
+              '動画を再生できません。結末の文章は上に表示されています。',
+              'The video could not be played. Your ending text is shown above.',
             )}
           </p>
-        )}
-        {view?.story && !showStory && (
-          <button type="button" className="ending-reveal" onClick={() => setShowStory(true)}>
-            {t('結果を見る', 'Read the ending')}
-          </button>
-        )}
-        {view?.story && showStory && (
-          <div className="ending-story">
-            <h3>{view.story.title}</h3>
-            <p>{view.story.text}</p>
-            <p>{view.story.evaluation}</p>
-          </div>
         )}
       </div>
     </section>

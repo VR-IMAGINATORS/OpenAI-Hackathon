@@ -133,6 +133,7 @@ for (const variant of [
     let submits = 0;
     const design: EndingDesign = {
       title: 'The last mark',
+      tag: null,
       story: 'The mark from the first conversation remained on the glass.',
       evaluation: 'Two restraints were removed.',
       usedEvidenceIds: ['early'],
@@ -160,6 +161,15 @@ for (const variant of [
             text: { format: { name: string } };
             input: { content: { text?: string }[] }[];
           };
+          if (request.text.format.name === 'ending_text') {
+            return response({
+              title: design.title,
+              story: design.story,
+              evaluation: design.evaluation,
+              tag: null,
+              usedEvidenceIds: design.usedEvidenceIds,
+            });
+          }
           if (request.text.format.name === 'ending_design') {
             const input = JSON.parse(request.input[0].content[0].text!);
             assert.deepEqual(
@@ -177,6 +187,12 @@ for (const variant of [
           return response({ verdict: 'pass', problems: [] });
         },
         async createImageEdit(body) {
+          assert.equal(
+            results.ending('owner', playId).storyStatus,
+            'ready',
+            'text must be public before the first image call',
+          );
+          assert.equal(results.ending('owner', playId).story!.text, design.story);
           edits.push(body);
           return { data: [{ b64_json: source.toString('base64') }] };
         },
@@ -329,6 +345,8 @@ for (const variant of [
       assert.deepEqual(failures, ['ENDING_REFERENCE_MISSING']);
       assert.equal(submits, 0);
       assert.equal(edits.length, 0);
+      assert.equal(results.ending('owner', playId).storyStatus, 'ready');
+      assert.equal(results.ending('owner', playId).story!.text, design.story);
       return;
     }
     assert.deepEqual(failures, []);

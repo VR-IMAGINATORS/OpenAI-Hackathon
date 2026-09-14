@@ -362,7 +362,9 @@ export class ResultStore {
   }
   updateEnding(
     playId: string,
-    patch: Partial<Pick<EndingView, 'status' | 'errorCode' | 'story' | 'videoPath'>>,
+    patch: Partial<
+      Pick<EndingView, 'status' | 'errorCode' | 'story' | 'storyStatus' | 'videoPath'>
+    >,
   ): void {
     const e = this.entry(playId);
     if (!e.ending) throw new ResultStoreError(404, 'ENDING_NOT_FOUND');

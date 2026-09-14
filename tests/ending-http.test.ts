@@ -21,6 +21,8 @@ const prepared: PreparedEnding = {
     title: '残った赤い印',
     text: '扉は開かなかったが、最初に見た印を残せた。',
     evaluation: '試した工夫と確定結果を残した。',
+    tagId: null,
+    tagCatalogVersion: 1,
   },
 };
 
@@ -62,9 +64,10 @@ async function setup(t: TestContext, holdPreparation = false) {
     ending: {
       graceMs: 0,
       pollMs: 1,
-      async prepare(_jobId, packet, signal) {
+      async prepare(_jobId, packet, signal, publishStory) {
         counts.prepare++;
         packets.push(packet);
+        publishStory(prepared.story);
         if (holdPreparation)
           await Promise.race([
             preparationGate,
@@ -228,7 +231,11 @@ test('game timeout queues one ending, keeps factual results visible, then comple
   assert.equal(initial.clearedCount, 0);
   const waiting = await f.request(f.statusPath(playId), { cookie });
   assert.equal(waiting.status, 200);
-  assert.equal((await waiting.json()).status, 'preparing');
+  const early = (await waiting.json()) as EndingView;
+  assert.equal(early.status, 'preparing');
+  assert.equal(early.storyStatus, 'ready');
+  assert.deepEqual(early.story, prepared.story);
+  assert.equal(f.counts.submit, 0, 'owner can read text before video submission');
   assert.equal((await f.request(f.videoPath(playId), { cookie })).status, 409);
   const state = await f.request('/api/play/state', { cookie, headers: { 'X-Play-Id': playId } });
   assert.equal(state.status, 200);

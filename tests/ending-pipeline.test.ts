@@ -3,6 +3,7 @@ import test from 'node:test';
 import sharp from 'sharp';
 import {
   createEndingDesign,
+  createEndingText,
   endingClues,
   type EndingDesign,
   type EndingReference,
@@ -124,6 +125,7 @@ function packet(clue = 'The red mark was a signal left by the player.'): EndingP
 function design(overrides: Partial<EndingDesign> = {}): EndingDesign {
   return {
     title: 'The unfinished signal',
+    tag: null,
     story: 'The damaged rope rests beneath the mark. The last door remains closed.',
     evaluation: 'Your rope loosened two restraints; the final lock remained.',
     usedEvidenceIds: ['early-clue'],
@@ -167,6 +169,7 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   );
   const [a, b] = f.calls.map(payloadOf);
   assert.deepEqual(a.actions, first.actions);
+  assert.equal(a.tagCatalog.length, 40);
   assert.deepEqual(a.recentActionIds, ['action-3', 'action-4']);
   assert.equal(a.presentedEvidence[0].text, first.evidence.records[0].text);
   assert.equal(b.presentedEvidence[0].text, second.evidence.records[0].text);
@@ -182,6 +185,45 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.match(f.calls[0].body.instructions, /confirmed outcome and facts override/);
   assert.match(f.calls[0].body.instructions, /Normal\/bad means not escaped/);
   assert.match(f.calls[0].body.instructions, /No speech, narration, singing or music/);
+});
+
+test('tag evidence can use an early action outside the two film actions and text-only uses the same catalog', async () => {
+  const chosen = {
+    id: 'unexpected_use' as const,
+    evidenceActionIds: ['action-1'],
+    reason: 'An early improvised use.',
+  };
+  const f = fakeAi(() => response(design({ tag: chosen })));
+  const result = await createEndingDesign(f.ai, 'job', packet(), final, before, signal());
+  assert.deepEqual(result.tag, chosen);
+  const textAi = fakeAi(() =>
+    response({
+      title: result.title,
+      story: result.story,
+      evaluation: result.evaluation,
+      usedEvidenceIds: result.usedEvidenceIds,
+      tag: chosen,
+    }),
+  );
+  const textResult = await createEndingText(textAi.ai, 'text-job', packet(), signal());
+  assert.deepEqual(textResult.tag, chosen);
+  assert.equal(textAi.calls.length, 1);
+  assert.equal(textAi.calls[0].body.input[0].content.length, 1);
+  assert.deepEqual(payloadOf(textAi.calls[0]).actions, packet().actions);
+  assert.deepEqual(payloadOf(textAi.calls[0]).tagCatalog, payloadOf(f.calls[0]).tagCatalog);
+});
+
+test('writer rejects unknown tags, invented or duplicate tag evidence and overlong summaries', async () => {
+  for (const patch of [
+    { tag: { id: 'invented', evidenceActionIds: ['action-1'], reason: 'unknown' } },
+    { tag: { id: 'tools', evidenceActionIds: ['missing'], reason: 'unknown' } },
+    { tag: { id: 'tools', evidenceActionIds: ['action-1', 'action-1'], reason: 'duplicate' } },
+    { story: 'x'.repeat(241) },
+  ]) {
+    const f = fakeAi(() => response({ ...design(), ...patch }));
+    await assert.rejects(createEndingDesign(f.ai, 'job', packet(), final, before, signal()));
+    assert.equal(f.calls.length, 1);
+  }
 });
 
 test('ending writer rejects invented sources and non-recent, duplicate or reversed action selections', async () => {

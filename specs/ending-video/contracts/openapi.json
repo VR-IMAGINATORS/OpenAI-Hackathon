@@ -189,7 +189,8 @@
           "errorCode",
           "retainUntil",
           "videoPath",
-          "story"
+          "story",
+          "storyStatus"
         ],
         "properties": {
           "playId": {
@@ -197,16 +198,8 @@
             "format": "uuid"
           },
           "outcome": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "happy",
-              "normal",
-              "bad",
-              null
-            ]
+            "type": ["string", "null"],
+            "enum": ["happy", "normal", "bad", null]
           },
           "clearedCount": {
             "type": "integer",
@@ -227,25 +220,21 @@
             ]
           },
           "errorCode": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 64
           },
           "retainUntil": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "videoPath": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "description": "Same-origin /api/play/ending/video?playId=... only when ready."
+          },
+          "storyStatus": {
+            "type": "string",
+            "enum": ["queued", "generating", "ready", "failed", "disabled", "not_applicable"],
+            "description": "Text readiness, independent from video. Keep polling while queued/generating even when video is disabled or failed."
           },
           "story": {
             "oneOf": [
@@ -262,11 +251,7 @@
       "EndingStory": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "title",
-          "text",
-          "evaluation"
-        ],
+        "required": ["title", "text", "evaluation"],
         "properties": {
           "title": {
             "type": "string",
@@ -274,7 +259,58 @@
           },
           "text": {
             "type": "string",
-            "maxLength": 2000
+            "maxLength": 2000,
+            "description": "New tagged endings contain at most 240 characters; legacy stories may be longer."
+          },
+          "tagId": {
+            "type": ["string", "null"],
+            "enum": [
+              "tableware_only",
+              "outdoor_items",
+              "fantasy",
+              "firearms_only",
+              "verbal_override",
+              "stationery",
+              "tools",
+              "cleaning",
+              "appliances",
+              "wardrobe",
+              "food",
+              "plush",
+              "money",
+              "oversized",
+              "science_fiction",
+              "combination",
+              "one_tool",
+              "brute_force",
+              "unexpected_use",
+              "persistent_retry",
+              "sports",
+              "music",
+              "gardening",
+              "bathroom",
+              "packaging",
+              "rubber_band",
+              "adhesive",
+              "magnet",
+              "light",
+              "water",
+              "heat",
+              "leverage",
+              "reach",
+              "precision",
+              "cushion",
+              "disassembly",
+              "recycle",
+              "learning",
+              "bare_hands",
+              "variety",
+              null
+            ]
+          },
+          "tagCatalogVersion": {
+            "type": "integer",
+            "const": 1
           },
           "evaluation": {
             "type": "string",
