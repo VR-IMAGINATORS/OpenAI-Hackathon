@@ -16,3 +16,9 @@
 - スクリーンショット: `artifacts/image-download-smoke-20260915/scene-image-download-mobile.png`（Git管理外）。
 
 ブラウザ検証のAPI・画像・音声・動画はテスト用データ。実AIでの画像生成やスマートフォン実機での保存は今回未実施。
+
+## 上下余白の調整（2026-09-15）
+
+ユーザーの要望に合わせ、操作領域を幅44px・高さ28pxにし、上下の内側余白を12pxから4pxに縮小。画像との外側余白もなくした。
+
+`npm run check` と `core-smoke.cjs` が成功。画像直下への配置、20pxアイコン、JPEGの保存内容一致を確認した。画面は `artifacts/download-spacing-core-20260915/scene-image-download-mobile.png`（Git管理外）。API・画像はテスト用データ、スマートフォン実機は未検証。

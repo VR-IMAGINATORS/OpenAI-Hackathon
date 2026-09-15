@@ -2169,7 +2169,7 @@ h1 span {
   display: block;
   width: 100%;
   max-height: 65dvh;
-  margin-block: 16px;
+  margin-block: 16px 0;
   background: #030809;
   border: 2px solid #9eead6;
   border-radius: 10px;
@@ -2181,9 +2181,9 @@ h1 span {
   align-items: center;
   justify-content: center;
   width: 44px;
-  height: 44px;
-  margin: 4px 0 0 auto;
-  padding: 12px;
+  height: 28px;
+  margin: 0 0 0 auto;
+  padding: 4px 12px;
   border-radius: 8px;
   color: #99afb7;
   text-decoration: none;

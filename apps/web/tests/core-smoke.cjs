@@ -581,7 +581,7 @@ const scenario = {
     const imageBounds = await page.locator('.chat-image').boundingBox();
     const iconBounds = await imageDownload.locator('svg').boundingBox();
     assert.equal(downloadBounds.width, 44);
-    assert.equal(downloadBounds.height, 44);
+    assert.equal(downloadBounds.height, 28);
     assert.equal(iconBounds.width, 20);
     assert.equal(iconBounds.height, 20);
     assert.ok(
@@ -589,8 +589,8 @@ const scenario = {
       'download is aligned with the right edge of the image',
     );
     assert.ok(
-      downloadBounds.y >= imageBounds.y + imageBounds.height,
-      'download sits below the image',
+      Math.abs(downloadBounds.y - imageBounds.y - imageBounds.height) < 1,
+      'download sits directly below the image without extra margin',
     );
     const readsBeforeDownload = assetReads;
     const [imageFile] = await Promise.all([page.waitForEvent('download'), imageDownload.click()]);

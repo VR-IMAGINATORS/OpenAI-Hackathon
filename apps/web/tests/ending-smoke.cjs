@@ -136,11 +136,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const downloadBounds = await downloadLink.boundingBox();
     const videoBounds = await video.boundingBox();
     assert(
-      downloadBounds.height === 44 && downloadBounds.width === 44,
-      'icon-only download keeps a compact touch target',
+      downloadBounds.height === 28 && downloadBounds.width === 44,
+      'icon-only download uses compact vertical spacing',
     );
     assert.equal((await downloadLink.innerText()).trim(), '', 'download has no visible text label');
-    assert(downloadBounds.y >= videoBounds.y + videoBounds.height, 'download sits below the video');
+    assert(
+      Math.abs(downloadBounds.y - videoBounds.y - videoBounds.height) < 1,
+      'download sits directly below the video without extra margin',
+    );
     assert(
       Math.abs(downloadBounds.x + downloadBounds.width - videoBounds.x - videoBounds.width) < 1,
       'download aligns with the video right edge',
