@@ -164,118 +164,129 @@ export default function EndingVideo({
         </div>
       )}
       <div className="ending-heading">
-        <h2>
-          {finalOutcome && <EndingOutcomeIcon outcome={finalOutcome} />}
-          {finalOutcome
-            ? {
-                happy: t('ハッピーエンド', 'Happy ending'),
-                normal: t('ノーマルエンド', 'Normal ending'),
-                bad: t('バッドエンド', 'Bad ending'),
-              }[finalOutcome]
-            : t('プレイ終了', 'Game ended')}
-        </h2>
-        {count !== undefined && (
-          <p className="ending-count">{t(`解除：${count}個`, `Cleared: ${count}`)}</p>
-        )}
+        <div className="ending-heading-label">
+          <h2>
+            {finalOutcome && <EndingOutcomeIcon outcome={finalOutcome} />}
+            {finalOutcome
+              ? {
+                  happy: t('ハッピーエンド', 'Happy ending'),
+                  normal: t('ノーマルエンド', 'Normal ending'),
+                  bad: t('バッドエンド', 'Bad ending'),
+                }[finalOutcome]
+              : t('プレイ終了', 'Game ended')}
+          </h2>
+          {count !== undefined && (
+            <p className="ending-count">{t(`解除：${count}個`, `Cleared: ${count}`)}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          className="ending-toggle"
+          aria-label={
+            expanded
+              ? t('リザルトを折りたたむ', 'Collapse result')
+              : t('リザルトを開く', 'Expand result')
+          }
+          aria-expanded={expanded}
+          aria-controls={detailsId}
+          onClick={() => {
+            if (expanded) videoRef.current?.pause();
+            setExpanded(!expanded);
+          }}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d={expanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
+          </svg>
+        </button>
       </div>
-      <div className="ending-result" aria-live="polite" aria-atomic="true">
-        {story ? (
-          <div className="ending-story">
-            {tagLabel && <p className="ending-tag">{tagLabel}</p>}
-            <p>{story.text}</p>
-          </div>
-        ) : !unavailable && storyPending ? (
-          <p className="ending-note">
-            {t('あなたらしい結末を振り返っています…', 'Finding the story of your play…')}
-          </p>
-        ) : !unavailable && view?.storyStatus === 'failed' ? (
-          <p className="ending-note">
-            {t(
-              '結末の文章を生成できませんでした。プレイの結果は確定しています。',
-              'The ending text could not be generated. Your game result is final.',
-            )}
-            {view &&
-              pending.has(view.status) &&
-              t(' 動画の制作は続けています。', ' Video preparation is continuing.')}
-          </p>
-        ) : null}
-        {!story && !storyPending && !unavailable && summary && (
-          <p className="ending-summary">
-            {t('最後の行動：', 'Last action: ')}
-            {summary}
-          </p>
-        )}
-      </div>
-      <p className="ending-status" role="status">
-        {view && pending.has(view.status) && !unavailable && (
-          <span className="ending-spinner" aria-hidden="true" />
-        )}
-        {ready && !expanded ? t('動画が完成しました', 'Your video is ready') : statusText}
-      </p>
-      <button
-        type="button"
-        className="ending-toggle"
-        aria-expanded={expanded}
-        aria-controls={detailsId}
-        onClick={() => {
-          if (expanded) videoRef.current?.pause();
-          setExpanded(!expanded);
-        }}
-      >
-        {expanded
-          ? t('閉じて会話を見返す', 'Collapse to revisit the conversation')
-          : ready
-            ? t('動画を見る', 'Watch video')
-            : t('結果の詳細を開く', 'Show result details')}
-        <span aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
-      </button>
-      <div id={detailsId} className="ending-details" hidden={!expanded}>
-        {view && pending.has(view.status) && !unavailable && (
-          <p className="ending-note">
-            {t(
-              '動画を待つ間も、結果と会話履歴を確認できます。',
-              'You can read your result and conversation while you wait.',
-            )}
-          </p>
-        )}
-        {failureText && !unavailable && <p>{failureText}</p>}
-        {diagnosticCodes.length > 0 && !unavailable && (
-          <details className="ending-note">
-            <summary>{t('不具合報告用の情報', 'Information for reporting this issue')}</summary>
-            {diagnosticCodes.map((code) => (
-              <p key={code}>
-                <code>{code}</code>
-              </p>
-            ))}
-            <p>
-              Play ID: <code>{playId}</code>
+      <div id={detailsId} className="ending-body" hidden={!expanded}>
+        <div className="ending-result" aria-live="polite" aria-atomic="true">
+          {story ? (
+            <div className="ending-story">
+              {tagLabel && <p className="ending-tag">{tagLabel}</p>}
+              <p>{story.text}</p>
+            </div>
+          ) : !unavailable && storyPending ? (
+            <p className="ending-note">
+              {t('あなたらしい結末を振り返っています…', 'Finding the story of your play…')}
             </p>
-            <p>{t(`解除：${count ?? 0}個`, `Cleared: ${count ?? 0}`)}</p>
-          </details>
-        )}
-        {ready && !mediaFailed && (
-          <video
-            ref={videoRef}
-            key={playId}
-            src={endingVideoPath(playId)}
-            controls
-            playsInline
-            preload="metadata"
-            aria-label={t('エンディング動画', 'Ending video')}
-            onError={() => setMediaFailed(true)}
-          />
-        )}
+          ) : !unavailable && view?.storyStatus === 'failed' ? (
+            <p className="ending-note">
+              {t(
+                '結末の文章を生成できませんでした。プレイの結果は確定しています。',
+                'The ending text could not be generated. Your game result is final.',
+              )}
+              {view &&
+                pending.has(view.status) &&
+                t(' 動画の制作は続けています。', ' Video preparation is continuing.')}
+            </p>
+          ) : null}
+          {!story && !storyPending && !unavailable && summary && (
+            <p className="ending-summary">
+              {t('最後の行動：', 'Last action: ')}
+              {summary}
+            </p>
+          )}
+        </div>
+        <p className="ending-status" role="status">
+          {view && pending.has(view.status) && !unavailable && (
+            <span className="ending-spinner" aria-hidden="true" />
+          )}
+          {statusText}
+        </p>
+        <div className="ending-details">
+          {view && pending.has(view.status) && !unavailable && (
+            <p className="ending-note">
+              {t(
+                '動画を待つ間も、結果と会話履歴を確認できます。',
+                'You can read your result and conversation while you wait.',
+              )}
+            </p>
+          )}
+          {failureText && !unavailable && <p>{failureText}</p>}
+          {diagnosticCodes.length > 0 && !unavailable && (
+            <details className="ending-note">
+              <summary>{t('不具合報告用の情報', 'Information for reporting this issue')}</summary>
+              {diagnosticCodes.map((code) => (
+                <p key={code}>
+                  <code>{code}</code>
+                </p>
+              ))}
+              <p>
+                Play ID: <code>{playId}</code>
+              </p>
+              <p>{t(`解除：${count ?? 0}個`, `Cleared: ${count ?? 0}`)}</p>
+            </details>
+          )}
+          {ready && !mediaFailed && (
+            <video
+              ref={videoRef}
+              key={playId}
+              src={endingVideoPath(playId)}
+              controls
+              playsInline
+              preload="metadata"
+              aria-label={t('エンディング動画', 'Ending video')}
+              onError={() => setMediaFailed(true)}
+            />
+          )}
         {ready && mediaFailed && (
-          <p role="status">
-            {t(
-              '動画を再生できません。プレイの結果は上に表示されています。',
-              'The video could not be played. Your game result is shown above.',
-            )}
-          </p>
-        )}
-      </div>
-      <div className="ending-continued">
-        <img src="/images/to-be-continued.png" alt="to be continued" width={1504} height={352} />
+          <div role="status">
+            <p>
+              {t(
+                '動画を再生できません。プレイの結果は上に表示されています。',
+                'The video could not be played. Your game result is shown above.',
+              )}
+            </p>
+            <button type="button" onClick={() => setMediaFailed(false)}>
+              {t('動画を読み直す', 'Reload video')}
+            </button>
+          </div>
+          )}
+        </div>
+        <div className="ending-continued">
+          <img src="/images/to-be-continued.png" alt="to be continued" width={1504} height={352} />
+        </div>
       </div>
     </section>
   );

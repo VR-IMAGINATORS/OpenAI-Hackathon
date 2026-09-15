@@ -122,7 +122,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const ending = document.querySelector('.ending-video');
       const arrow = ending.querySelector('.ending-continued');
       return {
-        last: ending.lastElementChild === arrow,
+        last: ending.querySelector('.ending-body').lastElementChild === arrow,
         top: arrow.getBoundingClientRect().top,
         width: arrow.getBoundingClientRect().width,
         right: arrow.getBoundingClientRect().right,
@@ -136,8 +136,38 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       Math.abs(footer.right - footer.contentRight) < 1,
       'arrow aligns with the result right edge',
     );
-    await page.getByRole('button', { name: /閉じて会話を見返す/ }).click();
-    assert(await arrow.isVisible(), 'collapsing video details keeps the result footer');
+    await video.evaluate((element) => {
+      window.__videoPauses = 0;
+      element.pause = () => window.__videoPauses++;
+    });
+    await page.getByRole('button', { name: 'リザルトを折りたたむ', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.__videoPauses), 1, 'collapse pauses the video');
+    assert(await page.getByRole('heading', { name: 'ノーマルエンド', exact: true }).isVisible());
+    assert(await page.locator('.ending-count').isVisible());
+    for (const selector of [
+      '.ending-body',
+      '.ending-tag',
+      '.ending-story',
+      '.ending-status',
+      'video',
+      '.ending-continued',
+    ]) {
+      assert.equal(await page.locator(selector).isVisible(), false, `${selector} folds away`);
+    }
+    const expand = page.getByRole('button', { name: 'リザルトを開く', exact: true });
+    assert.equal(await expand.getAttribute('aria-expanded'), 'false');
+    await page.screenshot({ path: 'artifacts/ending-collapsed-mobile.png', fullPage: true });
+    await page.setViewportSize({ width: 320, height: 568 });
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      false,
+      'collapsed heading and toggle fit a narrow phone',
+    );
+    await expand.press('Enter');
+    assert(await arrow.isVisible(), 'expanding restores the footer');
+    assert(await video.isVisible(), 'expanding restores the video');
+    assert(await page.locator('.ending-tag').isVisible(), 'expanding restores the tag');
+    await page.setViewportSize({ width: 390, height: 844 });
     status = 'failed';
     errorCode = 'ENDING_START_FRAME_HTTP_401';
     await page.evaluate((id) => window.renderEnding(id, 'en'), second);
@@ -176,7 +206,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('不具合報告用の情報', { exact: true }).click();
     await page.getByText(storyErrorCode, { exact: true }).waitFor();
     await page.getByText(first, { exact: true }).waitFor();
-    await page.getByRole('button', { name: /閉じて会話を見返す/ }).click();
+    await page.getByRole('button', { name: 'リザルトを折りたたむ', exact: true }).click();
     status = 'ready';
     await readyNotice.waitFor();
     assert.equal(
@@ -184,7 +214,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       false,
       'notice preserves collapsed details',
     );
-    await page.getByRole('button', { name: /動画を見る/ }).click();
+    await page.getByRole('button', { name: 'リザルトを開く', exact: true }).click();
     await page.locator('video').waitFor();
     assert(gets > textFailedGets, 'text failure must not stop video polling');
     await page.getByText(storyErrorCode, { exact: true }).waitFor();
