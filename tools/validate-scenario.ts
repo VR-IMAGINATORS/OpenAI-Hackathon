@@ -11,7 +11,12 @@ import {
 const explicit = process.argv[2] ?? process.env.SCENARIO_PATH;
 const paths = explicit
   ? [explicit]
-  : ['scenarios/default.json', 'scenarios/mobile-playtest.json', 'scenarios/story-catalog.json'];
+  : [
+      'scenarios/default.json',
+      'scenarios/mobile-playtest.json',
+      'scenarios/story-catalog.json',
+      'scenarios/playtest/warehouse-expanded-r1.json',
+    ];
 try {
   for (const path of paths) {
     const raw = readConfigJson(resolve(path));

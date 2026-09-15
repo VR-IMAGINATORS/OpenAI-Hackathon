@@ -37,7 +37,12 @@ function fixture(t: TestContext) {
   }
   return { directory, scenarioPath, coreConfigPath, time };
 }
-const environment = { HOSTED_NO_ENV_FILE: '1', APP_PASSPHRASE: 'story-test-only', AI_MODE: 'mock' };
+const environment = {
+  SCENARIO_PATH: 'scenarios/story-catalog.json',
+  HOSTED_NO_ENV_FILE: '1',
+  APP_PASSPHRASE: 'story-test-only',
+  AI_MODE: 'mock',
+};
 
 test('catalog previews do not draw; all 18 new-play snapshots are immutable and locale-bound', (t) => {
   const f = fixture(t);
