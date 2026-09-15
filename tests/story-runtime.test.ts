@@ -200,7 +200,7 @@ test('story clear phases follow committed facts, including the last available ac
   assert.equal(phase(), 'opening');
   assert.equal(game.facts.values['puzzle-0'], 'partial');
   assert.equal(game.inventory[0].id, itemId);
-  assert.equal(game.situation, gimmickGuidance(snap, 0, '変化後の現在状況。')!.text);
+  assert.equal(game.situation, gimmickGuidance(snap, 0, '確定したpartial状態。')!.text);
   await act();
   assert.equal(phase(), 'middle');
   assert.equal(game.situation, gimmickGuidance(snap, 1)!.text);
@@ -608,6 +608,7 @@ test('judgment receives current mechanism and completion but no future facts or 
           narrative: 'partial',
           situation: 'partial',
           shortReason: 'partial',
+          actionExplanation: { mechanism: 'length_reach', reason: 'insufficient_reach' },
           factChanges: [],
           inventoryChanges: [],
         });
@@ -829,6 +830,7 @@ test('runtime advances requested hint levels across partial progress and resets 
           narrative: '確定した変化。',
           situation: '部分変化。',
           shortReason: '通常の物性。',
+          actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
           inventoryChanges: [],
         });
       },

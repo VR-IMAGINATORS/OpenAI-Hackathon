@@ -10,7 +10,7 @@
 - Webとテキスト模擬のゲーム判断は `game-harness.ts / GameHarness` に共通化。調査の開示選択と公開資料の生成は `investigation.ts` が担い、Webへの資料送信と模擬用の公開文章を同じ確定結果から作る。観察・仮説・提案は `companionInitiative` に従う。
 - `core-intent-ai.ts` の `consult.answer` は完成台詞ではなく、関連する公開事実・不確実性・必要な確認の資料。`reason` は内部用でLiveに渡さない。
 - 雑談は `responseKind: social`、`answer: ""`。サーバーの受付・20クレジット精算は維持し、Liveには受付情報だけを返して、自分で返答を考えさせる。秘密開示の選択や台詞生成の追加呼出しは行わない。
-- 行動確定後は `companion-response.ts / companionResultFacts` が公開結果・現況・道具状態を同期的に投影する。以前の `companion_reply` Responses呼出しは本編から除去した。秘密を知る判定AIの文章は既存の公開投影を通す。
+- 行動確定後は `companion-response.ts / companionResultFacts` が公開結果・実行対象と用途・現況・道具状態を同期的に投影する。以前の `companion_reply` Responses呼出しは本編から除去した。判定AIの自由文は捨て、有限の `actionExplanation` から性質・作用・結果を説明する。`game.ts` で検証した結果にだけ説明を結び付け、次の障害の案内とは区別する。
 - `live.ts / speechCommands` は通知ID付きの一つの資料を送る。短い資料はcommentary一つ。長い資料はthinkingに分割し、全資料の後にcommentaryを一つ送る。各appendの480 UTF-8 bytes上限を維持し、未完資料からは発話を始めないよう指示する。
 - 相談直前の同じ現況の追加送信、写真自動行動の受付台詞を除いた。同じ依頼の再送は既存の証拠消費・通知順序で防ぎ、同一通知のevent IDも安定させる。
 - 通常の時間警告は従来どおり発話開始を要求しないthinking。最終警告は通知資料として一度伝える。クレジット案内は画面に残す。

@@ -129,6 +129,7 @@ export function createMockPlayClient(): AIResponsesClient {
             inventoryChanges: [],
             factChanges: [],
             shortReason: 'mock unsuccessful action',
+            actionExplanation: { mechanism: 'shape_contact', reason: 'no_relevant_effect' },
             creativity: {
               kind: 'ordinary',
               approach: 'Use the supplied tool on the current obstacle',

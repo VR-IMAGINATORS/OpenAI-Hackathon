@@ -406,8 +406,22 @@ export class GameHarness {
     // Keep private narration direction out of the speakable payload.
     // Freeze the scene now; a later photo or action must not change this result's picture.
     this.presentScene(result.narrative + '\n' + this.currentSituation(), messageId);
+    const action = this.game.committedActions.find((entry) => entry.actionId === result.actionId);
     this.speak(
-      companionResultFacts(this.companionContext(), result),
+      companionResultFacts(
+        this.companionContext(),
+        result,
+        action
+          ? {
+              actionId: action.actionId,
+              target: this.game.scenario.obstacles.find(
+                (obstacle) => obstacle.id === action.obstacleId,
+              )!.title,
+              usage: action.usage,
+              items: action.items.map((item) => item.name),
+            }
+          : undefined,
+      ),
       delegationId,
       messageId,
       result.narrative + '\n' + this.currentSituation(),

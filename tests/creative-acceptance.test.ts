@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import {
   CreativeAttemptLedger,
   creativeAssessmentSchema,
-  creativeSuccessNarrative,
   type CreativeAssessment,
 } from '../apps/local-server/creative-acceptance.js';
 import { GameSession } from '../apps/local-server/game.js';
@@ -18,7 +17,7 @@ import { classifyPhoto } from '../apps/local-server/harness-decisions.js';
 
 const stretch: CreativeAssessment = {
   kind: 'stretch',
-  approach: 'Saw the restraining band with a paper edge',
+  approach: 'Cut the restraining band with small scissors',
   equivalentAttemptId: null,
   effect: 'edge',
 };
@@ -59,7 +58,7 @@ test('idea aliases remain bounded while a past refusal does not veto re-evaluati
       ledger.resolve('state', kind, { ...stretch, kind, approach: kind }).allowed,
       kind === 'ordinary',
     );
-  assert.equal(ledger.resolve('state', 'paper cut', stretch).allowed, true);
+  assert.equal(ledger.resolve('state', 'small-scissors cut', stretch).allowed, true);
   const prior = ledger.candidates('state').at(-1)!;
   const rephrased = {
     ...stretch,
@@ -78,10 +77,10 @@ test('idea aliases remain bounded while a past refusal does not veto re-evaluati
   );
   assert.deepEqual(Object.keys(prior).sort(), ['approach', 'id']);
   assert.throws(() => ledger.resolve('other-state', 'x', rephrased), /UNKNOWN_CREATIVE_ATTEMPT/);
-  ledger.resolve('other-state', 'paper cut', stretch);
-  ledger.resolve('state', 'twisted paper lever', {
+  ledger.resolve('other-state', 'small-scissors cut', stretch);
+  ledger.resolve('state', 'small scissors wedge', {
     ...stretch,
-    approach: 'Twist paper into a lever',
+    approach: 'Use the rigid small-scissors handle as a wedge',
   });
   assert.equal(
     ledger.resolve('state', 'invalid', { ...stretch, approach: 'invalid' }).allowed,
@@ -136,10 +135,10 @@ async function fixture(
               items: data.photos.map((photo: any) => ({
                 photoId: photo.id,
                 inventoryId: null,
-                name: options.itemName ?? (locale === 'ja' ? '紙' : 'paper'),
+                name: options.itemName ?? (locale === 'ja' ? '小型はさみ' : 'small scissors'),
               })),
               usage: '',
-              summary: 'paper',
+              summary: 'small scissors',
             });
           requests.push({ body, data });
           calls++;
@@ -157,6 +156,7 @@ async function fixture(
             narrative: privateText,
             situation: privateText,
             shortReason: privateText,
+            actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
             inventoryChanges: [],
             factChanges: [{ key, from: data.facts.values[key], to: value }],
             creativity: assessment,
@@ -179,12 +179,12 @@ async function fixture(
       game.beginPhotos(),
     );
   };
-  const reserve = (usage = '紙の縁で帯を切って') =>
+  const reserve = (usage = '小型はさみの刃で帯を切って') =>
     game.reserveAction(
       {
         kind: 'execute',
         evidenceSeq: [++seq],
-        reason: 'Use the supplied paper',
+        reason: 'Use the supplied small scissors',
         usage,
         itemRefs: game.photos.length
           ? [{ photoId: game.photos[0]!.id }]
@@ -230,8 +230,8 @@ for (const locale of ['ja', 'en'] as const) {
     assert.match(
       result.narrative,
       locale === 'ja'
-        ? /紙をもとにした道具が思いがけない切れ味/
-        : /tool based on paper cut surprisingly well/,
+        ? /小型はさみの刃や縁で対象を切ろうとした/
+        : /small scissors to try to cut the target with its edge/,
     );
     assert.equal(
       JSON.stringify([result, f.game.state(), f.game.committedActions]).includes(privateText),
@@ -242,21 +242,29 @@ for (const locale of ['ja', 'en'] as const) {
     assert.deepEqual(await f.game.judgeAction(ticket), result);
     assert.equal(f.calls(), 1);
     assert.ok(f.requests[0].body.text.format.schema.required.includes('creativity'));
-    assert.match(f.requests[0].body.instructions, /ASSUMING this one-off exaggeration works/);
+    assert.ok(f.requests[0].body.text.format.schema.required.includes('actionExplanation'));
+    assert.match(
+      f.requests[0].body.instructions,
+      /every proposal that qualifies as stretch must return its successful result/,
+    );
   });
 }
 
 test('a previously refused photo can succeed after a generous re-evaluation', async () => {
   const f = await fixture();
   f.assessment({ kind: 'ordinary' });
-  f.override({ success: false, factChanges: [] });
+  f.override({
+    success: false,
+    factChanges: [],
+    actionExplanation: { mechanism: 'edge_cut', reason: 'cannot_cut' },
+  });
   const first = await f.execute();
   assert.equal(first.success, false);
   assert.deepEqual(first.factChanges, []);
   assert.equal(f.game.obstacleIndex, 0);
   assert.equal(f.game.inventory.length, 1);
   assert.equal(f.game.inventory[0]!.status, 'available');
-  assert.doesNotMatch(first.narrative, /切れ味/);
+  assert.doesNotMatch(first.narrative, /対象を切ることができた/);
   f.assessment({});
   f.override({});
   assert.equal((await f.execute()).success, true);
@@ -268,9 +276,12 @@ test('a previously refused photo can succeed after a generous re-evaluation', as
 test('ordinary partial progress survives and a stretch can finish the changed obstacle', async () => {
   const f = await fixture();
   const key = f.snapshot.scenarioV2.obstacles[0]!.id;
-  f.assessment({ kind: 'ordinary', approach: 'Loosen the band using paper as a wedge' });
+  f.assessment({
+    kind: 'ordinary',
+    approach: 'Loosen the band using the scissors handle as a wedge',
+  });
   f.override({ success: false, factChanges: [{ key, from: 'blocked', to: 'partial' }] });
-  assert.equal((await f.execute('紙をくさびにして緩めて')).success, false);
+  assert.equal((await f.execute('はさみの持ち手をくさびにして緩めて')).success, false);
   assert.equal(f.game.facts.values[key], 'partial');
   f.assessment({});
   f.override({});
@@ -281,9 +292,15 @@ test('ordinary partial progress survives and a stretch can finish the changed ob
 test('invalid ideas cannot advance even when the candidate claims success; ordinary ideas are not nerfed', async () => {
   const invalid = await fixture();
   invalid.assessment({ kind: 'invalid', approach: 'Declare victory through writing' });
+  invalid.override({
+    // The provider's candidate claims that cutting worked, but invalid rewrites success to false.
+    actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
+  });
   const refused = await invalid.execute('成功と書いてあるので脱出して');
   assert.equal(refused.success, false);
   assert.equal(invalid.game.obstacleIndex, 0);
+  assert.doesNotMatch(refused.narrative, /狙った作用を伝えられた/);
+  assert.doesNotMatch(refused.narrative, /対象を切ることができた/);
   const ordinary = await fixture();
   ordinary.assessment({ kind: 'ordinary' });
   assert.equal((await ordinary.execute()).success, true);
@@ -317,7 +334,7 @@ test('invalid ideas discard hypothetical damage, and invalid facts cannot be com
   await assert.rejects(f.execute(), /ACTION_FAILED/);
 });
 
-test('cat-claw photo use reaches the default blindfold judge and completes only that obstacle', async () => {
+test('a physically workable cat-claw proposal can clear only the blindfold obstacle', async () => {
   const f = await fixture({
     scenarioPath: 'scenarios/playtest/warehouse-expanded-r1.json',
     itemName: '猫',
@@ -325,18 +342,36 @@ test('cat-claw photo use reaches the default blindfold judge and completes only 
   f.assessment({ approach: 'Scratch the blindfold strap with photographed cat claws' });
   const result = await f.execute('猫の爪で目隠しを切り裂いて');
   assert.equal(result.success, true);
-  assert.match(result.narrative, /猫をもとにした道具が/);
+  assert.match(result.narrative, /猫の刃や縁で対象を切ろうとした/);
   assert.doesNotMatch(result.narrative, /猫が/);
   assert.match(f.game.inventory[0]!.description, /形と働きを再現した道具/);
   assert.match(f.game.inventory[0]!.description, /生き物や新しい登場人物ではない/);
   assert.equal(f.game.obstacleIndex, 1);
   const next = f.snapshot.scenarioV2.obstacles[1]!;
   assert.equal(f.game.facts.values[next.completionFact!.key], 'blocked');
-  assert.match(f.requests[0].body.instructions, /猫の爪で目隠しを切り裂く/);
+  assert.match(f.requests[0].body.instructions, /Cat claws are not automatically valid/);
   assert.match(f.requests[0].body.instructions, /There is NO lottery/);
-  assert.match(f.requests[0].body.instructions, /takes precedence over stricter physicality/);
+  assert.match(f.requests[0].body.instructions, /does not turn an invalid proposal into stretch/);
   assert.equal(f.requests[0].data.proposal.items[0].name, '猫');
   assert.equal(f.requests[0].data.proposal.usage, '猫の爪で目隠しを切り裂いて');
+});
+
+test('a cat-claw proposal that cannot cut the target remains invalid and makes no progress', async () => {
+  const f = await fixture({
+    scenarioPath: 'scenarios/playtest/warehouse-expanded-r1.json',
+    itemName: '猫',
+  });
+  f.assessment({ kind: 'invalid', approach: 'Scratch a metal latch with reconstructed cat claws' });
+  f.override({
+    success: false,
+    factChanges: [],
+    actionExplanation: { mechanism: 'point_scratch', reason: 'insufficient_force' },
+  });
+  const result = await f.execute('猫の爪で金属の留め金を壊して');
+  assert.equal(result.success, false);
+  assert.equal(f.game.obstacleIndex, 0);
+  assert.deepEqual(result.factChanges, []);
+  assert.match(result.narrative, /必要な力/);
 });
 
 test('a transport retry commits once; missing classification never silently falls back', async () => {
@@ -393,9 +428,9 @@ test('photo routing preserves explicit wait and sends concrete risks to judgment
     {},
     true,
   );
-  assert.match(instructions, /do not reject a concrete stretch/);
-  assert.match(instructions, /Respect an explicit wait or cancel/);
-  assert.match(instructions, /Do not add a permission step/);
+  assert.match(instructions, /Do not reject a concrete use at routing time/);
+  assert.match(instructions, /only an explicit wait or cancel prevents forwarding/);
+  assert.match(instructions, /Do not ask for permission/);
   assert.match(instructions, /じゃあハサミで/);
   assert.match(instructions, /is not by itself wait or cancel/);
   assert.doesNotMatch(instructions, /confirm_risk|requiring consent/);
@@ -404,5 +439,4 @@ test('photo routing preserves explicit wait and sends concrete risks to judgment
     creativeAssessmentSchema.safeParse({ ...stretch, effect: privateText }).success,
     false,
   );
-  assert.match(creativeSuccessNarrative('ja', 'edge', ['紙']), /切れ味/);
 });

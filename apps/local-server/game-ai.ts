@@ -12,6 +12,12 @@ import { factChangeSchema, type GameFacts } from '../../packages/shared/conversa
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import type { GamePhoto } from './photo.js';
 import {
+  actionExplanationSchema,
+  actionExplanationInstructions,
+  supportedActionExplanation,
+  describeActionExplanation,
+} from './action-explanation.js';
+import {
   creativeAssessmentSchema,
   creativeJudgmentInstructions,
   type CreativeAssessment,
@@ -32,6 +38,8 @@ export interface AIContext {
 export const coreJudgmentSchema = judgmentSchema.extend({
   factChanges: z.array(factChangeSchema).max(30),
   shortReason: z.string().min(1).max(1000),
+  // Older in-process adapters may omit this; provider requests require it below.
+  actionExplanation: actionExplanationSchema.optional(),
 });
 export const creativeJudgmentSchema = coreJudgmentSchema.extend({
   creativity: creativeAssessmentSchema,
@@ -99,6 +107,7 @@ export function judgmentResponseSchema(snapshot: ScenarioSnapshot, context: AICo
     description: z.string().max(80),
   });
   const schema = coreJudgmentSchema.extend({
+    actionExplanation: actionExplanationSchema,
     // This prose is discarded by public projection. Leave output space for the decision.
     narrative: z.string().max(120),
     situation: z.string().max(120),
@@ -106,13 +115,25 @@ export function judgmentResponseSchema(snapshot: ScenarioSnapshot, context: AICo
     factChanges: z.array(changes).max(transitions.length),
     inventoryChanges: z.array(inventoryChange).max(ids.length),
   });
-  return context.creativity ? schema.extend({ creativity: creativeAssessmentSchema }) : schema;
+  const result = context.creativity
+    ? schema.extend({ creativity: creativeAssessmentSchema })
+    : schema;
+  return result.refine(
+    (value) =>
+      !!supportedActionExplanation(
+        value.actionExplanation,
+        value.success,
+        value.factChanges.length > 0,
+      ),
+    { message: 'Explanation must agree with the action result', path: ['actionExplanation'] },
+  );
 }
-/** Discard prose produced with private mechanics; only authored visible facts may surface. */
+/** Discard private prose; publish bounded physical observations and authored visible facts. */
 export function projectPublicJudgment(
   snapshot: ScenarioSnapshot,
   context: AIContext,
   value: CoreJudgment,
+  proposal?: RecognizedProposal,
 ): CoreJudgment {
   const locale = snapshot.locale;
   const obstacle = snapshot.scenarioV2.obstacles[context.obstacleIndex]!;
@@ -128,6 +149,11 @@ export function projectPublicJudgment(
     )
     .map((entry) => entry.localizedText[locale]);
   const progressed = value.factChanges.length > 0;
+  const actionExplanation = supportedActionExplanation(
+    value.actionExplanation,
+    value.success,
+    progressed,
+  );
   const outcome =
     locale === 'ja'
       ? value.success
@@ -142,7 +168,22 @@ export function projectPublicJudgment(
           : 'I tried, but it is not solved yet.';
   return {
     ...value,
-    narrative: [outcome, ...visible].join(' ').slice(0, 2000),
+    actionExplanation,
+    narrative: [
+      ...(proposal
+        ? [
+            describeActionExplanation(
+              locale,
+              actionExplanation,
+              proposal.items.map((item) => item.name),
+            ),
+          ]
+        : []),
+      outcome,
+      ...visible,
+    ]
+      .join(' ')
+      .slice(0, 2000),
     situation: (visible.join(' ') || (value.success ? outcome : context.situation)).slice(0, 2000),
     shortReason: outcome,
     inventoryChanges: value.inventoryChanges.map((change) => ({
@@ -245,6 +286,7 @@ export function createGameAI(
               snapshot.coreConfig.acceptancePolicy[snapshot.locale]
             : '') +
           (proposal && context.creativity ? '\n' + creativeJudgmentInstructions : '') +
+          (proposal && snapshot ? '\n' + actionExplanationInstructions : '') +
           (!proposal && snapshot?.coreConfig.creativity?.enabled
             ? "\nRecognize the photographed subject even if it is not a conventional tool. Preserve a requested visible part/function, such as using a photographed cat's claws to cut a blindfold. When the intended part is supplied, use a concrete tool name such as 猫の爪を再現した道具 or reconstructed cat-claw tool. Do not omit the cat as unusable, demand a separate claw photo, or replace the user's method. Recognition alone does not create a living actor or decide success."
             : '') +

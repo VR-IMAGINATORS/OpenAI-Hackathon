@@ -45,7 +45,7 @@
     }
   },
   "judgment": {
-    "physicality": "Favor user ingenuity when the pictured item and requested action connect to the current goal. With creativity enabled, allow exaggerated properties and minor logical gaps. Keep confirmed state and declared transitions; never invent unrelated tools, magic or facts.",
+    "physicality": "Judge the supplied item's actual shape, material, dimensions, strength, reach, friction and precision against the requested action. Ordinary use is realistic; stretch requires a concrete physically workable procedure that is unusually difficult. A merely theoretical possibility is insufficient. Fill in only routine handling steps, and never invent tools, reshape materials, change properties, ignore a blocking shortage or alter confirmed state and declared transitions.",
     "ambiguity": "Separate questions and unfinished speech from action instructions. A clear instruction to try something permits a reasonable ordinary interpretation; it does not guarantee success. Respect corrections before reservation.",
     "partialProgress": "Preserve supported partial progress with declared fact transitions. Only code-validated results alter the state. Technical failures consume no action."
   },
@@ -69,8 +69,8 @@
     "enabled": true
   },
   "acceptancePolicy": {
-    "ja": "写真の物やその一部の形・働きと、今の目標につながりがあれば広く認める。強度や使い方に多少無理があっても許容する。猫の写真の爪の働きで目隠しの布を切る案も認める。未提供の道具、魔法、目標と無関係な成功宣言や次の障害の飛び越しは認めない。",
-    "en": "Broadly accept a photographed item or its visible shape/function when its use connects to the current goal, despite implausible strength or minor logical gaps. A photographed cat's claws can cut a cloth blindfold. Do not invent unprovided tools, magic, unrelated success or skipped obstacles."
+    "ja": "写真の物または所持品の実際の形・材質・長さ・強度などで、今の目標を達成できる具体的な手順を評価する。普通に成立する案は認め、物理的に成立するが実行が相当難しい案だけをstretchとして認める。可能性が理論上ゼロではないだけの案や、長さ・強度・大きさ・摩擦・精度の不足を無視する案は認めない。省略された普通の扱い方は補ってよいが、道具の変形・性質変更・未提供道具を補わない。提供済みの物を明示的に組み合わせる案は、必要な力や動きを実際に伝えられる場合に認める。",
+    "en": "Evaluate a concrete procedure using the actual shape, material, length, strength and other properties of photographed or inventoried items. Accept ordinary workable uses, and classify as stretch only a physically workable procedure that is unusually difficult to execute. A merely non-zero theoretical possibility is insufficient; do not ignore shortages of length, strength, size, friction or precision. Fill in omitted routine handling only. Do not reshape items, change their properties or add unprovided tools. An explicitly proposed combination of supplied items is acceptable only if it can transmit the required force or motion."
   },
   "recovery": {
     "retrying": {
