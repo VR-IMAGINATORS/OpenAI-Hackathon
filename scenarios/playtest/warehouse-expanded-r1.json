@@ -243,8 +243,8 @@
     {
       "id": "gimmick-pressure-latch-blocked",
       "localizedText": {
-        "ja": "目隠しは上下へずらせず、耳の下の結びも指ではほどけません。ほかに身体の拘束はありません。帯と結びは肩のカメラで確認できます。",
-        "en": "The blindfold cannot slide up or down, and fingers cannot untie the knot below the ear. There are no other bodily restraints. The shoulder camera can examine the straps and knot."
+        "ja": "布の目かくしは、上にも下にもずらせません。耳の下の結び目も、指ではほどけません。体のほかの場所はしばられていません。肩のカメラで、顔や髪から少し離れた帯を見つけられます。",
+        "en": "The cloth blindfold will not slide up or down, and the knot below the ear cannot be untied by hand. No other part of the body is tied. The shoulder camera can find a part of the strap away from the face and hair."
       },
       "kind": "observable",
       "prerequisites": [
@@ -303,8 +303,8 @@
     {
       "id": "gimmick-pressure-latch-hint-1",
       "localizedText": {
-        "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
-        "en": "The head strap and under-chin strap meet at a hardened knot."
+        "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものを探してみよう。",
+        "en": "Look for something that can cut the strap away from the face and hair, or break apart the hard knot."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -323,8 +323,8 @@
     {
       "id": "gimmick-pressure-latch-hint-1-partial",
       "localizedText": {
-        "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
-        "en": "The head strap and under-chin strap meet at a hardened knot."
+        "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものを探してみよう。",
+        "en": "Look for something that can cut the strap away from the face and hair, or break apart the hard knot."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -495,8 +495,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-1",
       "localizedText": {
-        "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
-        "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+        "ja": "窓のすき間から奥の輪まで届くものを探してみよう。輪を手前に引くと、扉を閉じている棒も動きます。",
+        "en": "Look for something that can reach the ring through a gap in the window. Pulling the ring toward you also moves the bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -519,8 +519,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-1-partial",
       "localizedText": {
-        "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
-        "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+        "ja": "窓のすき間から奥の輪まで届くものを探してみよう。輪を手前に引くと、扉を閉じている棒も動きます。",
+        "en": "Look for something that can reach the ring through a gap in the window. Pulling the ring toward you also moves the bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -723,8 +723,8 @@
     {
       "id": "gimmick-thermal-leak-hint-1",
       "localizedText": {
-        "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
-        "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+        "ja": "ネジの直線的な溝に合う、先が平たいものを探してみよう。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
+        "en": "Look for something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside should let us slide the horizontal bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -751,8 +751,8 @@
     {
       "id": "gimmick-thermal-leak-hint-1-partial",
       "localizedText": {
-        "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
-        "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+        "ja": "ネジの直線的な溝に合う、先が平たいものを探してみよう。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
+        "en": "Look for something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside should let us slide the horizontal bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -1146,8 +1146,8 @@
       },
       "situation": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。",
       "situationDisplay": {
-        "ja": "目隠しは上下へずらせず、耳の下の結びも指ではほどけません。ほかに身体の拘束はありません。帯と結びは肩のカメラで確認できます。",
-        "en": "The blindfold cannot slide up or down, and fingers cannot untie the knot below the ear. There are no other bodily restraints. The shoulder camera can examine the straps and knot."
+        "ja": "目をおおう布が、頭とあごの下の帯でしっかり止まっています。耳の下の結び目はかたく、指ではほどけません。顔の横にある帯は、肩のカメラで見えます。体のほかの場所はしばられていません。",
+        "en": "Straps around the head and under the chin hold a cloth over your eyes. The hard knot below the ear cannot be untied with fingers. The shoulder camera can see the strap beside the face. The rest of your body is not tied."
       },
       "goal": "写真1枚で具現化したはさみを使い、AIが顔や髪から浮いた耳の下側の帯本体を切る意図なら1行動で解除する。\n同じ切断作用を持つ道具で帯本体を断つか、工具で樹脂に固められた共通の結びを崩して全体を緩める意図が明確なら1行動で評価する。\n共通の結びを支える張力が失われ、顎下のずれ止めごと目隠し全体が外れて視界が戻る。",
       "constraints": [
@@ -1180,12 +1180,12 @@
       },
       "hints": [
         {
-          "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
-          "en": "The head strap and under-chin strap meet at a hardened knot."
+          "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものを探してみよう。",
+          "en": "Look for something that can cut the strap away from the face and hair, or break apart the hard knot."
         },
         {
-          "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
-          "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+          "ja": "顔や髪から離れた帯の本体を切ると、目かくし全体がゆるみます。短く余った先だけを切っても外れません。",
+          "en": "Cut the main strap where it is away from the face and hair to loosen the whole blindfold. Cutting only the short loose end will not remove it."
         },
         {
           "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
@@ -1205,8 +1205,8 @@
       },
       "situation": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。",
       "situationDisplay": {
-        "ja": "閉じた内扉の脇に、小さな格子付き操作窓があります。奥には引き輪と連結金具が見えます。格子が覆うのは操作窓だけです。",
-        "en": "A small barred control window sits beside the closed inner door. A ring and linkage are visible behind it. The bars cover only the control window."
+        "ja": "閉じた内扉の横に、細いすき間がある小さな窓があります。窓の奥には輪と、輪につながる金具が見えます。輪は、扉を閉じている横向きの棒につながっています。",
+        "en": "Beside the closed inner door is a small window with narrow gaps. A ring and connected metal parts are visible behind it. The ring connects to the horizontal bar that keeps the door closed."
       },
       "goal": "写真1枚で具現化したマジックハンドを格子の手前から隙間へ通し、AIが引き輪をつかんで手前へ引く意図なら1行動で解除する。\n格子の隙間から輪へ届き、手前へ引く力を伝えられる別の道具と使い方が明確なら1行動で評価する。\n連結金具が閂を引き込み、内扉が手前へ開いて出口までの経路が通る。",
       "constraints": [
@@ -1239,11 +1239,11 @@
       },
       "hints": [
         {
-          "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
-          "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+          "ja": "窓のすき間から奥の輪まで届くものを探してみよう。輪を手前に引くと、扉を閉じている棒も動きます。",
+          "en": "Look for something that can reach the ring through a gap in the window. Pulling the ring toward you also moves the bar that keeps the door closed."
         },
         {
-          "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
+          "ja": "細いすき間に長い道具を通し、奥の輪をつかんで手前へ引けば、扉を開けられます。",
           "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
         },
         {
@@ -1264,8 +1264,8 @@
       },
       "situation": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。",
       "situationDisplay": {
-        "ja": "最後の出口は、ネジ一本で留まった金具が横向きの閂を塞いでいます。固定部品と、そのそばの方向表示を確認できます。",
-        "en": "At the final exit, a bracket held by one screw blocks a horizontal bolt. The fastenings and nearby directional markings are available to examine."
+        "ja": "最後の出口では、ネジ一本で止めた金具が、扉を閉じている横向きの棒を動かせないようにしています。ネジの溝と、そのそばの矢印を確認できます。",
+        "en": "At the final exit, a metal piece held by one screw stops the horizontal bar that keeps the door closed from moving. You can see the slot in the screw and an arrow beside it."
       },
       "goal": "写真1枚で具現化したマイナスドライバーを使い、AIがネジを反時計回りに外し、同じ道具で閂を横へ動かす意図なら1行動で解除する。\n観察できるネジ溝に合う硬い先端を持ち、ネジを回してから閂を動かせる別の道具なら評価する。硬貨も溝に合い同じ作用を生じる使い方なら1行動で解除する。\n閂が受けから抜け、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
       "constraints": [
@@ -1298,12 +1298,12 @@
       },
       "hints": [
         {
-          "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
-          "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+          "ja": "ネジの直線的な溝に合う、先が平たいものを探してみよう。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
+          "en": "Look for something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside should let us slide the horizontal bar that keeps the door closed."
         },
         {
-          "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
-          "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+          "ja": "ネジを外して金具をよけ、同じ道具で扉を閉じている横向きの棒を動かせば、出口が開きます。",
+          "en": "Remove the screw and move the metal piece aside. Then use the same tool to slide the horizontal bar and open the exit."
         },
         {
           "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",

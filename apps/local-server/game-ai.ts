@@ -245,6 +245,9 @@ export function createGameAI(
               snapshot.coreConfig.acceptancePolicy[snapshot.locale]
             : '') +
           (proposal && context.creativity ? '\n' + creativeJudgmentInstructions : '') +
+          (!proposal && snapshot?.coreConfig.creativity?.enabled
+            ? "\nRecognize the photographed subject even if it is not a conventional tool. Preserve a requested visible part/function, such as using a photographed cat's claws to cut a blindfold. When the intended part is supplied, use a concrete tool name such as 猫の爪を再現した道具 or reconstructed cat-claw tool. Do not omit the cat as unusable, demand a separate claw photo, or replace the user's method. Recognition alone does not create a living actor or decide success."
+            : '') +
           (proposal && context.judgmentRepair
             ? '\nThe prior judgment was not committed. Re-evaluate this same fixed request. Repair the reported validation failure using only the supplied current state, permitted transitions and inventory IDs. Match success to completionFact. Keep text brief so the complete JSON fits. Do not invent a different usage or treat a technical failure as a failed physical attempt.'
             : ''),

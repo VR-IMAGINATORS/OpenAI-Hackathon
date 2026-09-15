@@ -27,6 +27,7 @@ import {
   openingHandoff,
   storyHint,
 } from '../apps/local-server/story.js';
+import { gimmickGuidance } from '../apps/local-server/gimmick-guidance.js';
 import {
   scenePrompt,
   sceneRules,
@@ -193,18 +194,21 @@ test('story clear phases follow committed facts, including the last available ac
   ]);
   const phase = () => storyContext(snap, storyClearCount(snap, game.facts))?.phase;
   assert.equal(phase(), 'opening');
+  assert.equal(game.situation, gimmickGuidance(snap, 0)!.text);
   const itemId = game.inventory[0].id;
   await act();
   assert.equal(phase(), 'opening');
   assert.equal(game.facts.values['puzzle-0'], 'partial');
   assert.equal(game.inventory[0].id, itemId);
+  assert.equal(game.situation, gimmickGuidance(snap, 0, '変化後の現在状況。')!.text);
   await act();
   assert.equal(phase(), 'middle');
-  assert.equal(game.situation, snap.scenarioV2.obstacles[1].situationDisplay.ja);
+  assert.equal(game.situation, gimmickGuidance(snap, 1)!.text);
   await act();
   assert.equal(phase(), 'final');
   await act();
   assert.equal(game.status, 'won');
+  assert.doesNotMatch(game.situation, /HINT_/);
   assert.equal(game.actionsUsed, 4);
   assert.equal(storyClearCount(snap, game.facts), 3);
 });
@@ -353,15 +357,20 @@ test('all 18 localized openings fit the Live contract and keep current clues in 
       const snap = snapshot(locale, scenario);
       const game = fixture(snap, []).game;
       for (const status of ['briefing', 'playing'] as const) {
-        liveRequest.parse({
-          session: {
-            model: 'gpt-live-1',
-            delegation: { type: 'client' },
-            store: false,
-            instructions: liveInstructions({ ...game.state(), status }, snap),
-          },
-          transport: { type: 'webrtc', sdp: 'offer' },
-        });
+        const instructions = liveInstructions({ ...game.state(), status }, snap);
+        assert.doesNotThrow(
+          () =>
+            liveRequest.parse({
+              session: {
+                model: 'gpt-live-1',
+                delegation: { type: 'client' },
+                store: false,
+                instructions,
+              },
+              transport: { type: 'webrtc', sdp: 'offer' },
+            }),
+          `${index}/${locale}/${status}: ${instructions.length}`,
+        );
       }
       const speech = storyOpening(snap);
       const briefing = storyOpeningBriefing(snap);
@@ -438,10 +447,12 @@ for (const locale of ['ja', 'en'] as const)
         runtime.game.state(),
       );
       assert.equal(liveContext.openingMessage, expected);
-      assert.equal(liveContext.situation, publicContext.situation);
+      assert.deepEqual(liveContext.currentObstacleGuide, publicContext.currentObstacleGuide);
+      assert.equal(liveContext.situation, undefined);
       assert.ok(!expected.includes('PRIVATE_MYSTERY_DIRECTION'));
       assert.ok(!expected.includes('PRIVATE_MECHANISM'));
-      assert.ok(!livePrompt.includes('HINT_'));
+      assert.ok(livePrompt.includes('HINT_0_1'));
+      assert.ok(!livePrompt.includes('HINT_1_'));
       assert.ok(
         factCommands(expected).every((command) => Buffer.byteLength(command.content) <= 480),
       );
@@ -478,7 +489,8 @@ for (const locale of ['ja', 'en'] as const)
       assert.deepEqual(notices, [briefing]);
       assert.ok(briefing.includes(snap.scenarioV2.story!.openingClue[locale]));
       assert.ok(briefing.includes(snap.scenarioV2.obstacles[0].situationDisplay[locale]));
-      assert.ok(!/PRIVATE_|HINT_|VISIBLE_PUZZLE/.test(briefing));
+      assert.ok(!/PRIVATE_|HINT_[1-9]_|VISIBLE_PUZZLE/.test(briefing));
+      assert.ok(briefing.includes('HINT_0_1'));
       assert.equal(scenes.length, 1, 'the silent briefing must not generate a second scene image');
       assert.equal(runtime.pollCommands(live.generation, 0).commands.length, 0);
       runtime.heartbeat('connected');
@@ -546,6 +558,36 @@ test('lore and ordinary consultation receive only public story; hints are opt-in
   assert.equal(storyHint(snap, 1, asking)?.hint, 'HINT_1_1');
   assert.equal(storyHint(snap, 0, context('Please give me a hint'))?.level, 1);
   assert.equal(storyHint(snap, 0, context('No hints please')), undefined);
+
+  let calls = 0;
+  const game = fixture(snap, []).game;
+  const decision = await classifyCoreIntent({
+    snapshot: snap,
+    knowledge: new KnowledgeStore(snap),
+    gameState: game.state(),
+    model: 'fake',
+    conversation: asking,
+    photos: [],
+    obstacleIndex: 0,
+    game: { status: 'playing' },
+    respond: async () => {
+      calls++;
+      return calls === 1
+        ? response({
+            decision: {
+              kind: 'consult',
+              evidenceSeq: [1],
+              reason: 'hint request',
+              answer: '現在の仕掛けを説明する。',
+            },
+          })
+        : response({ answer: '説明だけの応答。', inferences: [] });
+    },
+  });
+  assert.equal(calls, 2, 'the guarantee adds no third AI call');
+  assert.equal(decision.kind, 'consult');
+  if (decision.kind === 'consult')
+    assert.match(decision.answer ?? '', /説明だけの応答。\n\nヒント: HINT_0_1/);
 });
 
 test('judgment receives current mechanism and completion but no future facts or mystery instructions', async () => {
@@ -589,8 +631,10 @@ test('judgment receives current mechanism and completion but no future facts or 
   );
 });
 
-test('scene generation and inspection exclude future obstacle facts and keep selected location', async () => {
+test('scene generation and inspection expose only the current public obstacle state', async () => {
   const snap = snapshot();
+  snap.scenarioV2.setting.location = 'PRIVATE_LOCATION';
+  snap.scenarioV2.story!.openingClue = localized('PRIVATE_OPENING_CLUE');
   const input: SceneInput = {
     playId: 'play',
     messageId: 'scene',
@@ -599,16 +643,21 @@ test('scene generation and inspection exclude future obstacle facts and keep sel
     situation: 'current observed situation',
   };
   const prompt = scenePrompt(input, '');
-  assert.ok(prompt.includes(snap.scenarioV2.setting.location));
-  assert.ok(prompt.includes(snap.scenarioV2.story!.openingClue.ja));
-  assert.ok(prompt.includes('VISIBLE_PUZZLE_0'));
+  const generated = JSON.parse(prompt.slice(prompt.indexOf('{')));
+  assert.equal(generated.character, snap.scenarioV2.core.characterAppearance);
+  assert.equal(generated.style, snap.scenarioV2.core.visualStyle);
+  assert.equal(generated.scene.currentObstacle.id, snap.scenarioV2.obstacles[0].id);
+  assert.ok(prompt.includes(snap.scenarioV2.obstacles[0].situationDisplay.ja));
+  assert.ok(!prompt.includes('VISIBLE_PUZZLE_0'));
   assert.ok(!prompt.includes('VISIBLE_PUZZLE_1'));
   assert.ok(!prompt.includes('puzzle-1'));
+  assert.ok(!prompt.includes(snap.scenarioV2.setting.location));
+  assert.ok(!prompt.includes(snap.scenarioV2.story!.openingClue.ja));
   assert.ok(!prompt.includes('PRIVATE_MECHANISM'));
   assert.ok(!prompt.includes('PRIVATE_MYSTERY_DIRECTION'));
   const rules = sceneRules(input);
-  assert.ok(rules.some((rule) => rule.ruleId === 'fact:puzzle-0'));
-  assert.ok(!rules.some((rule) => rule.ruleId === 'fact:puzzle-1'));
+  assert.ok(rules.some((rule) => rule.ruleId === 'current-obstacle'));
+  assert.ok(rules.some((rule) => rule.ruleId.startsWith('current:forbidden:')));
   const fakeAi = {
     config: { inspectionModel: 'fake' },
     mediaCall: async (_job: string, _epoch: number, _kind: string, body: any) => {
@@ -620,7 +669,7 @@ test('scene generation and inspection exclude future obstacle facts and keep sel
   input.facts.values['puzzle-0'] = 'cleared';
   input.facts.obstacleId = snap.scenarioV2.obstacles[1].id;
   const next = scenePrompt(input, '');
-  assert.ok(next.includes('puzzle-0'));
+  assert.ok(!next.includes('puzzle-0'));
   assert.ok(next.includes('puzzle-1'));
   assert.ok(!next.includes('puzzle-2'));
 });
@@ -634,18 +683,19 @@ test('legacy V2 preserves its opening and Live instructions without story metada
   );
 });
 
-test('scene generation and inspection retain the committed tool, method and result across obstacle advancement', async () => {
+test('scene generation and inspection focus current state without in-progress action history', async () => {
   for (const locale of ['ja', 'en'] as const) {
     const snap = snapshot(locale);
     const { game, act } = fixture(snap, [
       { success: false, factChanges: [{ key: 'puzzle-0', from: 'blocked', to: 'partial' }] },
       { success: true, factChanges: [{ key: 'puzzle-0', from: 'partial', to: 'cleared' }] },
     ]);
-    game.inventory[0].name = 'scissors';
+    game.inventory[0].name = 'PAST_ACTION_TOOL';
     for (const success of [false, true]) {
       await act();
       const action = structuredClone(game.committedActions.at(-1)!);
-      action.usage = 'Cut the binding with the scissors';
+      action.usage = 'PAST_ACTION_METHOD';
+      action.narrative = 'PAST_ACTION_NARRATIVE';
       action.items[0].afterStatus = success ? 'consumed' : 'damaged';
       const input: SceneInput = {
         playId: 'test',
@@ -656,36 +706,20 @@ test('scene generation and inspection retain the committed tool, method and resu
         action,
       };
       const prompt = scenePrompt(input, '');
-      const generated = JSON.parse(prompt.split('\n')[1]);
-      assert.equal(generated.committedAction.obstacleId, snap.scenarioV2.obstacles[0].id);
-      assert.equal(generated.committedAction.usage, action.usage);
-      assert.deepEqual(generated.committedAction.tools, [
-        {
-          name: 'scissors',
-          afterStatus: success ? 'consumed' : 'damaged',
-        },
-      ]);
-      assert.equal(generated.committedAction.success, success);
-      assert.deepEqual(generated.committedAction.afterValues, {
-        'puzzle-0': success ? 'cleared' : 'partial',
-      });
-      assert.equal(generated.committedAction.beforeValues, undefined);
+      const generated = JSON.parse(prompt.slice(prompt.indexOf('{')));
+      assert.equal(generated.committedAction, null);
       assert.deepEqual(action.beforeFacts.values['puzzle-0'], success ? 'partial' : 'blocked');
       assert.equal(
         action.items[0].beforeStatus,
         'available',
         'full history stays available to video direction',
       );
+      assert.equal(generated.scene.currentObstacle.id, input.facts.obstacleId);
+      assert.equal(generated.scene.currentObstacle.state, success ? 'blocked' : 'partial');
+      assert.doesNotMatch(prompt, /PAST_ACTION_TOOL|PAST_ACTION_METHOD|PAST_ACTION_NARRATIVE/);
       assert.match(prompt, /One full-frame camera view of one place at one instant/);
       assert.ok(generated.rules.some((rule: any) => rule.ruleId === 'composition:single_moment'));
-      if (success) {
-        assert.equal(generated.facts.obstacleId, snap.scenarioV2.obstacles[1].id);
-        assert.ok(
-          generated.rules.some(
-            (rule: any) => rule.ruleId === 'action:required:0' && rule.value === 'cleared',
-          ),
-        );
-      }
+      assert.ok(generated.rules.some((rule: any) => rule.ruleId === 'current-obstacle'));
       assert.doesNotMatch(prompt, /PRIVATE_|puzzle-2|VISIBLE_PUZZLE_2/);
       const fakeAi = {
         config: { inspectionModel: 'fake' },
@@ -693,9 +727,18 @@ test('scene generation and inspection retain the committed tool, method and resu
           const inspected = JSON.parse(body.input[0].content[0].text);
           assert.deepEqual(inspected.committedAction, generated.committedAction);
           assert.deepEqual(inspected.rules, generated.rules);
+          const currentFactKeys = snap.scenarioV2.obstacles.find(
+            (obstacle) => obstacle.id === input.facts.obstacleId,
+          )!.factKeys;
+          assert.deepEqual(Object.keys(inspected.facts.values), currentFactKeys);
           assert.match(
-            body.instructions,
-            /do not reject merely because a tool or past action is off-screen/,
+            inspected.rules.find((rule: any) => rule.ruleId === 'current-obstacle').description,
+            /remains unresolved/,
+          );
+          assert.match(body.instructions, /current obstacle is the primary subject/i);
+          assert.doesNotMatch(
+            body.input[0].content[0].text,
+            /PAST_ACTION_TOOL|PAST_ACTION_METHOD|PAST_ACTION_NARRATIVE/,
           );
           return response({ verdict: 'pass', contradictions: [] });
         },
@@ -705,9 +748,17 @@ test('scene generation and inspection retain the committed tool, method and resu
         'pass',
       );
       input.action = { ...action, items: [] };
-      assert.deepEqual(JSON.parse(scenePrompt(input, '').split('\n')[1]).committedAction.tools, []);
+      assert.equal(
+        JSON.parse(scenePrompt(input, '').slice(scenePrompt(input, '').indexOf('{')))
+          .committedAction,
+        null,
+      );
       input.action = null;
-      assert.equal(JSON.parse(scenePrompt(input, '').split('\n')[1]).committedAction, null);
+      assert.equal(
+        JSON.parse(scenePrompt(input, '').slice(scenePrompt(input, '').indexOf('{')))
+          .committedAction,
+        null,
+      );
       assert.ok(!sceneRules(input).some((rule) => rule.ruleId.startsWith('action:')));
     }
   }
@@ -867,8 +918,10 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.equal(hints[3].obstacleId, snap.scenarioV2.obstacles[1].id);
   assert.equal(runtime.game.actionsUsed, 2);
   assert.ok(scenes[2].text.includes(snap.scenarioV2.obstacles[1].situationDisplay.ja));
+  assert.ok(scenes[2].text.includes('HINT_1_1'));
   assert.equal(scenes[0].action, null);
   assert.equal(scenes[1].action?.success, false);
+  assert.ok(scenes[1].text.includes('確定したpartial状態。\n\nヒント: HINT_0_1'));
   assert.equal(scenes[1].action?.afterFacts.values['puzzle-0'], 'partial');
   assert.equal(scenes[2].action?.success, true);
   assert.equal(scenes[2].action?.obstacleId, snap.scenarioV2.obstacles[0].id);

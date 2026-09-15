@@ -17,6 +17,7 @@ export function companionResultFacts(
     situation: publicContext.situation || resultPublic.situation,
     inventory: publicContext.inventory.map(({ name, status }) => ({ name, status })),
     initiative: publicContext.initiative,
+    currentObstacleGuide: publicContext.currentObstacleGuide,
     ambience: publicContext.ambience?.map(({ targetId, attribute, value }) => ({
       targetId,
       attribute,

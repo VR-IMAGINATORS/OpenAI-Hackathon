@@ -35,8 +35,9 @@ PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobil
 
 - apps/local-server/story.ts: story付きシナリオの短い導入音声と表示専用の補足文。舞台と初期の公開情報はシナリオから差し込む。追加の文章生成AIは使わない。
 - config/game-core.json: conversation.ja/en.openingMessageでstoryなしの旧V2シナリオの導入説明、liveInstructionsで役割・共通会話指示、分類例、物理判定・画像検査方針、表示グループ間隔。
-- scenarios/story-catalog.json: Web既定の6舞台・10障害・18構成。`gimmicks[].objective.ja/en` が「現在の目標」の表示文、`name` は障害名。詳しくは [シナリオの編集](planner-guide.md)。
-- scenarios/mobile-playtest.json: 明示指定する旧V2シナリオ。日英の目標は `obstacles[].title`、factsと許可遷移、人物/画風、必須/禁止の画像条件。
+- scenarios/playtest/warehouse-expanded-r1.json: 現在のWeb既定の固定V2シナリオ。`obstacles[].title` は現在の目標、`goal` と `constraints` は判定の材料、`mechanism` と `hints` は内部の仕組みと段階ヒント、人物/画風と必須/禁止の画像条件もここで編集する。
+- scenarios/story-catalog.json: `SCENARIO_PATH=scenarios/story-catalog.json` を明示したときに使うV3カタログ。`gimmicks[].objective.ja/en` が現在の目標、`name` は障害名。詳しくは [シナリオの編集](planner-guide.md)。
+- scenarios/mobile-playtest.json: 明示指定する旧V2シナリオ。
 - apps/local-server/hosted-runtime.ts: 音声受付→分類→一度だけ行動→表示への接続。
 - apps/server/result-store.ts: 履歴・サムネイル・検査済み画像・結果保持。
 - apps/server/scene-jobs.ts / packages/server/image-service.ts: 画像生成待機、生成、重大矛盾検査、再試行。
@@ -68,15 +69,15 @@ ENABLE_GAME_TRACE=1はローカル開発専用。自分のプレイのGET /api/p
 
 残り時間・写真送信回数は上部の情報欄、状況詳細と持ち物は同じ欄を開いて確認する。終了後の再プレイもアプリ内に表示する。AWSへの配置対応は保留中。
 
-## 無茶な工夫の許容（2026-09-15）
+## 目的につながる工夫の許容（2026-09-16）
 
-`config/game-core.json` の `creativity.enabled` で切り替え、`creativity.successProbability`（0〜1、初期1/3）で無茶枠の成功確率を設定する。新規プレイから反映し、既存プレイは開始時の設定を維持する。設定省略・無効時は従来の通常物性判定。
+`config/game-core.json` の `creativity.enabled` で切り替える。抽選は使わない。道具・使い方・現在の目標につながる工夫は、通常の物性を少し越える場合も原則として成立させる。猫の写真から再構成した爪の形と働きで、目隠しの帯を切る案も、この条件を満たせば許容する。設定の変更は新規プレイから反映し、進行中のプレイとその画像ジョブは開始時snapshotを維持する。
 
-普通に成立する工夫は抽選せず評価する。道具・使い方と目標が結び付く無茶だけ、通常の材質・強度等をその行動に限り誇張して成立候補を作り、サーバーが一度抽選する。対象外の成功命令や魔法、保留・中止、未承認の重大リスクはこの機能で許可しない。
+写真の文字だけで成功を宣言すること、魔法や恒久的な特殊能力、提供されていない道具、壁・扉・格子の向こうへの直接具現化、現在以外の障害の解除、確定していない進展の宣言は許可しない。相談や写真送信だけでは行動を確定しない。停止するのは明示した「待って」「やめて」のみで、道具の損耗や意外な使い方だけを理由に確認待ちにはしない。
 
-同じ障害の実状態と道具・使い方では、言い直し・写真再送・在庫再利用でも前の結果を使う。文字列正規化とAIによる既存案との意味照合を併用するため、言い換えの認識品質は実AIの試遊でも確認する。異なる方法や物性、実際の障害状態の変化は新しい案として評価できる。台帳は最大100案/別表現、終了時に破棄し、上限で過去の失敗を追い出さない。
+小学校高学年にも分かる説明で現在の目標と状況を伝え、その直後に初級ヒントを一つ必ず添える。追加の段階ヒントは要求時に出す。進行中の画像は現在の未解除対象を主役にし、前の障害の解除描写・使用道具・結果を混ぜない。最終クリア後は確定した出口の開放を描く。
 
-当たりは現在障害の達成まで進め、外れは成立候補の状態変更・破損を適用しない。通常判定の部分進展は維持する。結果には道具名と限定した作用から短い日英の説明を加える。秘密を知る判定AIの自由文は公開しない。仕様と手動確認は[creative-acceptance](../specs/creative-acceptance/spec.md)を参照。
+AIによる物体・行為の関連性の判断、実際の声の自然さ、画像の意味的な正確さ、スマホとAWSでの体験は別途実機で確認する。現行仕様・実装計画は [gimmick-playability](../specs/gimmick-playability/spec.md) を参照する。2026-09-15の抽選方式は [creative-acceptance](../specs/creative-acceptance/spec.md) に履歴として残す。
 
 ## 行動しない場合の診断
 

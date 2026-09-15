@@ -212,7 +212,8 @@ for (const locale of ['ja', 'en'] as const)
         delivered.upserts.slice(0, 3).every((m: { imageSlot: unknown }) => m.imageSlot === null),
       );
       assert.match(briefing.text, locale === 'ja' ? /特殊な通信/ : /special connection/);
-      assert.match(briefing.text, locale === 'ja' ? /調べるよう頼んで/ : /Ask me to examine/);
+      assert.match(briefing.text, locale === 'ja' ? /ヒント: / : /Hint: /);
+      assert.match(briefing.text, locale === 'ja' ? /探してみよう/ : /Look for something/);
       assert.match(
         briefing.text,
         locale === 'ja' ? /写真を送って使い方/ : /send me its photo and tell me how to use it/,

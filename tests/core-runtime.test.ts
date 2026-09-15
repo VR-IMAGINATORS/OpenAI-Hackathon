@@ -12,6 +12,7 @@ import { ResultStore } from '../apps/server/result-store.js';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
+import { parseCoreConfig } from '../packages/shared/core-config.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -142,7 +143,10 @@ async function setup(
   const queue = new PhotoQueue();
   snapshot.scenarioV2.rules.initialCredits = initialCredits;
   if (creativeProbability !== undefined)
-    snapshot.coreConfig.creativity = { enabled: true, successProbability: creativeProbability };
+    snapshot.coreConfig.creativity = parseCoreConfig({
+      ...snapshot.coreConfig,
+      creativity: { enabled: true, successProbability: creativeProbability },
+    }).creativity;
   const notices: string[] = [];
   const scenes: any[] = [];
   const results = new ResultStore();
@@ -988,10 +992,12 @@ test('consult speaks answer rather than classification reason and action speaks 
   await h.say('切って');
   await h.delegate();
   await until(() => h.calls.judge === 1 && h.runtime.state().actionsUsed === 1);
-  assert.ok(
-    liveBriefings(h.runtime.pollCommands(h.generation, 0).commands).some((c) =>
-      c.facts.includes(h.runtime.game.situation),
-    ),
+  const actionFacts = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands)
+    .map((briefing) => JSON.parse(briefing.facts))
+    .find((facts) => facts.type === 'action_result');
+  assert.equal(
+    actionFacts.situation,
+    `${actionFacts.currentObstacleGuide.explanation}\n\nヒント: ${actionFacts.currentObstacleGuide.hint}`,
   );
   assert.equal(h.scenes.length, 2);
   assert.equal(h.scenes[1].situation, h.runtime.game.situation);
@@ -1373,7 +1379,7 @@ test('a correction during judgment does not abort or replace the reserved action
 
 for (const origin of ['photo', 'voice'] as const) {
   for (const probability of [0, 1]) {
-    test(`creative ${origin} action at probability ${probability} reaches committed state, speech and image once`, async (t) => {
+    test(`creative ${origin} action ignores retired probability ${probability} and succeeds once`, async (t) => {
       const h = await setup(
         t,
         execute,
@@ -1409,25 +1415,25 @@ for (const origin of ['photo', 'voice'] as const) {
       await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
       await tick();
       assert.equal(h.calls.judge, 1);
-      assert.equal(h.runtime.game.obstacleIndex, probability);
-      assert.equal(h.runtime.game.facts.values.wrists, probability ? 'free' : 'bound');
-      assert.equal(h.runtime.game.lastResult!.success, probability === 1);
+      assert.equal(h.runtime.game.obstacleIndex, 1);
+      assert.equal(h.runtime.game.facts.values.wrists, 'free');
+      assert.equal(h.runtime.game.lastResult!.success, true);
       assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 900 : 880);
       const scene = h.scenes[1]!;
-      const commands = h.runtime
+      const sceneCommands = h.runtime
         .pollCommands(h.generation, 0)
-        .commands.filter(
-          (command) =>
-            command.messageId === scene.messageId && command.type === 'session.commentary.append',
-        );
+        .commands.filter((command) => command.messageId === scene.messageId);
+      const commands = sceneCommands.filter(
+        (command) => command.type === 'session.commentary.append',
+      );
       assert.equal(commands.length, 1);
       const published = JSON.stringify([scene, commands, h.runtime.game.state()]);
       assert.equal(published.includes('PRIVATE_CREATIVE_CANDIDATE'), false);
       assert.equal(published.includes('equivalentAttemptId'), false);
-      if (probability === 1) {
-        assert.match(scene.text, /思いがけない切れ味/);
-        assert.match(commands[0]!.content, /思いがけない切れ味/);
-      } else assert.doesNotMatch(published, /思いがけない切れ味/);
+      assert.match(scene.text, /思いがけない切れ味/);
+      const spoken = liveBriefings(sceneCommands);
+      assert.equal(spoken.length, 1);
+      assert.match(spoken[0]!.facts, /思いがけない切れ味/);
       await h.runtime.photos(photoRequest, [h.photo]);
       assert.equal(h.calls.judge, 1);
       assert.equal(h.runtime.game.actionsUsed, 1);

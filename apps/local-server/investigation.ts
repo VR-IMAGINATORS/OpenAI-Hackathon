@@ -158,11 +158,19 @@ export async function resolveConsultation(
     replyWireSchema,
   );
   options.validate?.();
+  const answer = stagedHint
+    ? appendHint(value.answer, stagedHint.hint, options.snapshot.locale)
+    : value.answer;
   return {
-    answer: value.answer,
+    answer,
     inferences:
       initiative !== 'observations' || explicitlyRequestsHypothesis(options.context)
         ? value.inferences
         : [],
   };
+}
+
+function appendHint(answer: string, hint: string, locale: 'ja' | 'en') {
+  if (answer.includes(hint)) return answer;
+  return `${answer}\n\n${locale === 'ja' ? 'ヒント' : 'Hint'}: ${hint}`;
 }

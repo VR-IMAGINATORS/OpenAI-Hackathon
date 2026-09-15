@@ -2,6 +2,7 @@ import { loadInvestigationPrompts, type InvestigationPrompts } from './investiga
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import type { GameFacts } from '../../packages/shared/conversation.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
+import { gimmickGuidance } from './gimmick-guidance.js';
 import {
   inferenceSchema,
   type AmbienceValue,
@@ -229,6 +230,20 @@ export function buildCompanionContext(
   const locale = snapshot.locale;
   const story = snapshot.scenarioV2.story;
   const knownFacts = store.knownFacts();
+  const currentObstacleId = snapshot.scenarioV2.obstacles[state.obstacle.index]?.id;
+  const currentExplanation = knownFacts
+    .filter((entry) => {
+      if (!entry.currentlyApplicable) return false;
+      const source = snapshot.scenarioV2.knowledge.find((candidate) => candidate.id === entry.id);
+      if (!source) return false;
+      const metadata = store.metadata(source);
+      return metadata.targetId === currentObstacleId && metadata.layer !== 'hint';
+    })
+    .map((entry) => entry.text)
+    .join('\n');
+  const guidance = ['won', 'lost', 'expired'].includes(state.status)
+    ? undefined
+    : gimmickGuidance(snapshot, state.obstacle.index, currentExplanation);
   return {
     ...(story ? { aiName: story.aiName[locale], world: story.world[locale] } : {}),
     scene: snapshot.scenarioV2.title[locale],
@@ -248,7 +263,16 @@ export function buildCompanionContext(
     })),
     inferences: store.snapshot().inferences,
     currentGoal: state.obstacle.title,
+    ...(guidance
+      ? {
+          currentObstacleGuide: {
+            explanation: guidance.explanation,
+            hint: guidance.hint,
+          },
+        }
+      : {}),
     situation:
+      guidance?.text ||
       knownFacts
         .filter((entry) => entry.currentlyApplicable)
         .map((entry) => entry.text)

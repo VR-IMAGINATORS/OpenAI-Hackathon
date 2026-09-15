@@ -11,6 +11,7 @@ import {
 } from '../packages/shared/harness.js';
 import { KnowledgeStore, buildCompanionContext } from '../apps/local-server/companion-knowledge.js';
 import { storyNarration } from '../apps/local-server/story.js';
+import { gimmickGuidance } from '../apps/local-server/gimmick-guidance.js';
 import type { ScenarioSnapshot } from '../apps/server/scenario-catalog.js';
 import type { PublicGameState } from '../packages/shared/game.js';
 const raw = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
@@ -345,7 +346,7 @@ test('legacy empty knowledge uses only public scenario observation, never raw ju
     inventory: [],
   } as unknown as PublicGameState;
   const context = buildCompanionContext(source, new KnowledgeStore(source), state);
-  assert.equal(context.situation, source.scenarioV2.obstacles[0]!.situationDisplay.ja);
+  assert.equal(context.situation, gimmickGuidance(source, 0)!.text);
   assert(!JSON.stringify(context).includes('JUDGE_SECRET_CANARY'));
 });
 
@@ -410,7 +411,10 @@ test('initial and reconnect Live payloads exclude hidden scenario and raw judgme
   source.scenarioV2.story!.mystery = { ja: secret, en: secret };
   source.scenarioV2.story!.phases.opening = { ja: secret, en: secret };
   source.scenarioV2.obstacles[0]!.mechanism = { ja: secret, en: secret };
-  source.scenarioV2.obstacles[0]!.hints = [{ ja: secret, en: secret }];
+  source.scenarioV2.obstacles[0]!.hints = [
+    { ja: '公開された最初のヒント', en: 'Public beginner hint' },
+  ];
+  source.scenarioV2.obstacles[1]!.hints = [{ ja: secret, en: secret }];
   source.scenarioV2.knowledge.push({
     id: 'never-revealed',
     kind: 'hidden',
@@ -435,6 +439,7 @@ test('initial and reconnect Live payloads exclude hidden scenario and raw judgme
     for (const context of [undefined, buildCompanionContext(source, store, state)]) {
       const payload = liveInstructions(state, source, undefined, context);
       assert(!payload.includes(secret), `${status}: secret leaked into instructions`);
+      assert(payload.includes('公開された最初のヒント'));
       assert(payload.includes(source.scenarioV2.obstacles[0]!.situationDisplay.ja));
       assert(payload.includes('明示的な「待って」「やめて」「中止」だけ'));
       assert(payload.includes('確定した中止通知が届くまで'));
