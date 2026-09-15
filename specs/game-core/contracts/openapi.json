@@ -1729,6 +1729,16 @@
                 "type": "null"
               }
             ]
+          },
+          "validUntil": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Warning expiry in server epoch milliseconds. Strip this metadata before sending the command to Live."
+          },
+          "noticeKind": {
+            "type": "string",
+            "enum": ["time-warning"]
           }
         },
         "required": ["seq", "event_id", "type", "delegation_id", "content", "messageId"]
@@ -1755,9 +1765,15 @@
               "$ref": "#/components/schemas/Command"
             },
             "maxItems": 128
+          },
+          "serverNow": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Server epoch milliseconds at poll response construction. Add local elapsed time since receipt to check warning expiry."
           }
         },
-        "required": ["generation", "controlEpoch", "acknowledgedThrough", "commands"]
+        "required": ["generation", "controlEpoch", "acknowledgedThrough", "commands", "serverNow"]
       },
       "Trace": {
         "type": "object",
