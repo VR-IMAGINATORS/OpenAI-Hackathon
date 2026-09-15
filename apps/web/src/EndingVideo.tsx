@@ -156,7 +156,11 @@ export default function EndingVideo({
     }[view.status];
   }
   return (
-    <section className="ending-video" aria-label={t('このプレイの結末', 'Your ending')}>
+    <section
+      className="ending-video"
+      data-outcome={finalOutcome ?? undefined}
+      aria-label={t('このプレイの結末', 'Your ending')}
+    >
       {showReadyNotice && (
         <div className="ending-ready-notice" role="status" aria-atomic="true">
           <span aria-hidden="true">✓</span>
@@ -203,8 +207,23 @@ export default function EndingVideo({
         <div className="ending-result" aria-live="polite" aria-atomic="true">
           {story ? (
             <div className="ending-story">
-              {tagLabel && <p className="ending-tag">{tagLabel}</p>}
-              <p>{story.text}</p>
+              {tagLabel && (
+                <div className="ending-title-band">
+                  <svg className="ending-title-mark" viewBox="0 0 32 32" aria-hidden="true">
+                    <path d="m16 5 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z" />
+                  </svg>
+                  <div>
+                    <p className="ending-card-label">{t('今回のあなた', 'Your play style')}</p>
+                    <h3 className="ending-tag">{tagLabel}</h3>
+                  </div>
+                </div>
+              )}
+              <div className="ending-story-content">
+                <p className="ending-card-label">
+                  {t('あなたが変えた未来', 'The future you changed')}
+                </p>
+                <p className="ending-story-text">{story.text}</p>
+              </div>
             </div>
           ) : !unavailable && storyPending ? (
             <p className="ending-note">

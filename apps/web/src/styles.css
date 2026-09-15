@@ -2032,6 +2032,9 @@ h1 span {
   font-size: 16px;
 }
 .ending-video {
+  --ending-accent: #9eead6;
+  --ending-band: #25443f;
+  --ending-border: #52796f;
   flex-shrink: 0;
   padding: 14px 20px;
   margin-block: 16px;
@@ -2041,6 +2044,16 @@ h1 span {
   border-radius: 16px;
   line-height: 1.7;
   overflow-wrap: anywhere;
+}
+.ending-video[data-outcome='normal'] {
+  --ending-accent: #ffd294;
+  --ending-band: #443b2d;
+  --ending-border: #806b4d;
+}
+.ending-video[data-outcome='bad'] {
+  --ending-accent: #ff9a9f;
+  --ending-band: #452f38;
+  --ending-border: #80565f;
 }
 .messenger-complete .ending-video {
   margin: 0;
@@ -2076,13 +2089,7 @@ h1 span {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-  color: #9eead6;
-}
-.ending-outcome-icon[data-outcome='normal'] {
-  color: #ffd294;
-}
-.ending-outcome-icon[data-outcome='bad'] {
-  color: #ff9a9f;
+  color: var(--ending-accent);
 }
 .ending-door-panel {
   fill: currentColor;
@@ -2207,20 +2214,60 @@ h1 span {
   cursor: pointer;
 }
 .ending-story {
-  margin-top: 12px;
-  padding-top: 8px;
-  border-top: 1px solid #344b54;
+  margin-block: 16px;
+  border: 1px solid var(--ending-border);
+  border-radius: 14px;
+  background: #1b2c38;
+  box-shadow: 0 6px 18px #0002;
+  overflow: hidden;
+}
+.ending-title-band {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--ending-border);
+  background: linear-gradient(115deg, var(--ending-band), #1b2c38);
+}
+.ending-video .ending-title-mark {
+  width: 36px;
+  height: 36px;
+  padding: 4px;
+  border: 1px solid var(--ending-border);
+  border-radius: 10px;
+  color: var(--ending-accent);
+  fill: currentColor;
+  fill-opacity: 0.16;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.ending-story .ending-card-label {
+  margin: 0;
+  color: #b7c8d0;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+}
+.ending-title-band .ending-card-label {
+  color: var(--ending-accent);
 }
 .ending-story .ending-tag {
-  display: inline-block;
-  margin: 8px 0 0;
-  padding: 4px 12px;
-  border: 1px solid #81b6a5;
-  border-radius: 999px;
-  color: #c7f4e5;
-  background: #203d38;
-  font-size: 15px;
+  margin: 4px 0 0;
+  color: var(--ending-accent);
+  font-size: 20px;
   font-weight: 700;
+  line-height: 1.5;
+}
+.ending-story-content {
+  padding: 18px;
+  text-align: left;
+}
+.ending-story .ending-story-text {
+  margin: 10px 0 0;
+  font-size: 15px;
+  line-height: 1.9;
 }
 @media (min-width: 800px) {
   .messenger-app {
