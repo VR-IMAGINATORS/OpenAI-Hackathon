@@ -586,8 +586,7 @@ test('lore and ordinary consultation receive only public story; hints are opt-in
   });
   assert.equal(calls, 2, 'the guarantee adds no third AI call');
   assert.equal(decision.kind, 'consult');
-  if (decision.kind === 'consult')
-    assert.match(decision.answer ?? '', /説明だけの応答。\n\nヒント: HINT_0_1/);
+  if (decision.kind === 'consult') assert.equal(decision.answer, '説明だけの応答。\n\nHINT_0_1');
 });
 
 test('judgment receives current mechanism and completion but no future facts or mystery instructions', async () => {
@@ -921,7 +920,7 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.ok(scenes[2].text.includes('HINT_1_1'));
   assert.equal(scenes[0].action, null);
   assert.equal(scenes[1].action?.success, false);
-  assert.ok(scenes[1].text.includes('確定したpartial状態。\n\nヒント: HINT_0_1'));
+  assert.ok(scenes[1].text.includes('確定したpartial状態。\n\nHINT_0_1'));
   assert.equal(scenes[1].action?.afterFacts.values['puzzle-0'], 'partial');
   assert.equal(scenes[2].action?.success, true);
   assert.equal(scenes[2].action?.obstacleId, snap.scenarioV2.obstacles[0].id);

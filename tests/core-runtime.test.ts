@@ -997,7 +997,7 @@ test('consult speaks answer rather than classification reason and action speaks 
     .find((facts) => facts.type === 'action_result');
   assert.equal(
     actionFacts.situation,
-    `${actionFacts.currentObstacleGuide.explanation}\n\nヒント: ${actionFacts.currentObstacleGuide.hint}`,
+    `${actionFacts.currentObstacleGuide.explanation}\n\n${actionFacts.currentObstacleGuide.hint}`,
   );
   assert.equal(h.scenes.length, 2);
   assert.equal(h.scenes[1].situation, h.runtime.game.situation);

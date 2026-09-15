@@ -384,7 +384,8 @@ test('initial briefing uses the approved overview and first hint without hidden 
   const text = storyOpeningBriefing(f.snapshot);
   assert.match(text, /INITIAL_OVERVIEW_CANARY/);
   assert.match(text, /写真を送って使い方/);
-  assert.match(text, /ヒント: STAGED_HINT_CANARY/);
+  assert.match(text, /\n\nSTAGED_HINT_CANARY/);
+  assert.doesNotMatch(text, /ヒント[:：]|Hint:/i);
   assert.doesNotMatch(text, /OLD_DETAIL_CANARY|DETAIL_CANARY|PRIVATE/);
   const raw = { ...f.snapshot.coreConfig } as any;
   delete raw.companionInitiative;

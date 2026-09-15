@@ -1,8 +1,8 @@
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 
 const fallbackHint = {
-  ja: 'まず、動かせそうな場所と、動きをじゃましている物を一つずつ確かめよう。',
-  en: 'First, check what can move and what is blocking it, one part at a time.',
+  ja: '動きをじゃましている物をどかせるものがあればなぁ…。動かせそうな部分を自由にできるかもしれないね。',
+  en: 'If only we had something to move whatever is blocking it… That might let the stuck part move freely.',
 };
 
 export interface GimmickGuidance {
@@ -13,9 +13,12 @@ export interface GimmickGuidance {
 }
 
 function stripHintSuffix(text: string, label: string, hint: string): string {
-  const suffix = `\n\n${label}${hint}`;
+  // Accept the old labelled form too when refreshing an existing presentation.
+  const suffixes = [`\n\n${hint}`, `\n\n${label}${hint}`];
   let explanation = text.trim();
-  while (explanation.endsWith(suffix)) explanation = explanation.slice(0, -suffix.length).trim();
+  let suffix: string | undefined;
+  while ((suffix = suffixes.find((value) => explanation.endsWith(value))))
+    explanation = explanation.slice(0, -suffix.length).trim();
   return explanation;
 }
 
@@ -37,7 +40,7 @@ export function gimmickGuidance(
     obstacleId: obstacle.id,
     explanation,
     hint,
-    text: `${explanation}\n\n${label}${hint}`,
+    text: `${explanation}\n\n${hint}`,
   };
 }
 

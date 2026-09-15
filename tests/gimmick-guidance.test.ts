@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { parseScenarioV2 } from '../packages/shared/scenario.js';
 import { parseCoreConfig } from '../packages/shared/core-config.js';
 import type { ScenarioSnapshot } from '../apps/server/scenario-catalog.js';
-import { gimmickGuidance } from '../apps/local-server/gimmick-guidance.js';
+import { gimmickGuidance, withoutGimmickHint } from '../apps/local-server/gimmick-guidance.js';
 import { storyOpeningBriefing } from '../apps/local-server/story.js';
 
 function snapshot(locale: 'ja' | 'en' = 'ja'): ScenarioSnapshot {
@@ -28,7 +28,8 @@ test('every authored obstacle presentation places one useful hint after its expl
       assert.equal(guide.explanation, obstacle.situationDisplay[locale]);
       assert.equal(guide.hint, obstacle.hints![0]![locale]);
       assert.ok(guide.text.indexOf(guide.explanation) < guide.text.indexOf(guide.hint));
-      assert.match(guide.text, locale === 'ja' ? /\n\nヒント: / : /\n\nHint: /);
+      assert.ok(guide.text.endsWith(`\n\n${guide.hint}`));
+      assert.doesNotMatch(guide.text, /ヒント[:：]|Hint:/i);
     });
   }
 });
@@ -37,20 +38,21 @@ test('missing authored hint uses a current-obstacle fallback without another mod
   const snap = snapshot();
   delete snap.scenarioV2.obstacles[0]!.hints;
   const guide = gimmickGuidance(snap, 0)!;
-  assert.match(guide.hint, /動かせそうな場所/);
+  assert.match(guide.hint, /があれば/);
   assert.doesNotMatch(guide.text, /マジックハンド|ドライバー/);
 });
 
-test('reapplying guidance replaces prior copies of the same current hint', () => {
-  const snap = snapshot();
-  const initial = gimmickGuidance(snap, 0, '現在の公開状態。')!;
-  const repeated = gimmickGuidance(
-    snap,
-    0,
-    `${initial.text}\n\n${initial.text.slice(initial.explanation.length + 2)}`,
-  )!;
-  assert.equal(repeated.explanation, '現在の公開状態。');
-  assert.equal(repeated.text.split(initial.hint).length - 1, 1);
+test('refreshing and ending guidance remove repeated hints with or without the legacy label', () => {
+  for (const locale of ['ja', 'en'] as const) {
+    const snap = snapshot(locale);
+    const initial = gimmickGuidance(snap, 0, '現在の公開状態。')!;
+    const legacyLabel = locale === 'ja' ? 'ヒント: ' : 'Hint: ';
+    const repeatedText = `${initial.text}\n\n${legacyLabel}${initial.hint}\n\n${initial.hint}`;
+    const repeated = gimmickGuidance(snap, 0, repeatedText)!;
+    assert.equal(repeated.explanation, '現在の公開状態。');
+    assert.equal(repeated.text, initial.text);
+    assert.equal(withoutGimmickHint(snap, 0, repeatedText), initial.explanation);
+  }
 });
 
 test('opening screen briefing includes the first explanation followed by its hint only', () => {

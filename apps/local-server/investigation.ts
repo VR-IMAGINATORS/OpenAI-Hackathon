@@ -158,9 +158,7 @@ export async function resolveConsultation(
     replyWireSchema,
   );
   options.validate?.();
-  const answer = stagedHint
-    ? appendHint(value.answer, stagedHint.hint, options.snapshot.locale)
-    : value.answer;
+  const answer = stagedHint ? appendHint(value.answer, stagedHint.hint) : value.answer;
   return {
     answer,
     inferences:
@@ -170,7 +168,7 @@ export async function resolveConsultation(
   };
 }
 
-function appendHint(answer: string, hint: string, locale: 'ja' | 'en') {
+function appendHint(answer: string, hint: string) {
   if (answer.includes(hint)) return answer;
-  return `${answer}\n\n${locale === 'ja' ? 'ヒント' : 'Hint'}: ${hint}`;
+  return `${answer}\n\n${hint}`;
 }
