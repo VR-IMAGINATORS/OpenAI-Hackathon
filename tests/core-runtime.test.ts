@@ -493,7 +493,7 @@ test('time warning waits for quiet, sends silent context once and survives recon
   assert.equal(h.notices.length, 0);
   h.quiet();
   h.runtime.tick();
-  assert.equal(h.notices.length, 1);
+  assert.equal(h.notices.length, 0);
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
   assert.ok(commands.length > 0);
   assert.ok(commands.every((c) => c.type === 'session.thinking.append' && c.delegation_id === null));
@@ -505,11 +505,11 @@ test('time warning waits for quiet, sends silent context once and survives recon
     message: 'おっと、残り時間が少なくなってきた。',
   });
   h.runtime.tick();
-  assert.equal(h.notices.length, 1);
+  assert.equal(h.notices.length, 0);
   await h.runtime.live(randomUUID(), 'new offer');
   h.runtime.heartbeat('connected');
   h.runtime.tick();
-  assert.equal(h.notices.length, 1);
+  assert.equal(h.notices.length, 0);
   assert.equal(h.runtime.pollCommands(h.runtime.game.generation, 0).commands.length, 0);
 });
 
@@ -573,7 +573,7 @@ test('time warning respects pause, disabled setting, configured message and term
   assert.equal(h.notices.length, 0);
   warning.enabled = true;
   h.runtime.tick();
-  assert.deepEqual(h.notices, ['あと30秒未満です']);
+  assert.deepEqual(h.notices, []);
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
   assert.ok(commands.every((c) => c.type === 'session.thinking.append'));
   assert.equal(JSON.parse(commands.map((c) => c.content).join('')).message, 'あと30秒未満です');

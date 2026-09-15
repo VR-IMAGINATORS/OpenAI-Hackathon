@@ -769,7 +769,8 @@ export class GameRuntime {
         first ??= queued;
       }
       if (warning || notice.includesTimeWarning) {
-        this.presentNotice(notice.payload.text);
+        // Live may paraphrase this text. Its transcript is the single chat
+        // source; a fixed notice here would duplicate the same warning.
         this.recordDiagnostic('time_warning');
       }
     }
