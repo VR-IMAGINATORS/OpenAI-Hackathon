@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatMessage } from '../../../packages/shared/conversation.js';
 import { playRequest, PlayApiError, controlHeaders } from './play-api.js';
+import { readImageAsset } from './media-read.js';
 export type Locale = 'ja' | 'en';
 export type Feed = {
   playId: string;
@@ -43,21 +44,12 @@ function PrivateImage({
     let objectUrl = '';
     setUrl('');
     setFailed(false);
-    void fetch('/api/play/assets/' + encodeURIComponent(assetId), {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      headers: controlHeaders({ playId }),
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (
-          !response.ok ||
-          response.headers.get('content-type')?.split(';')[0] !== 'image/jpeg' ||
-          Number(response.headers.get('content-length') ?? 0) > 256 * 1024
-        )
-          throw new Error('Asset unavailable');
-        const blob = await response.blob();
-        if (blob.size > 256 * 1024) throw new Error('Asset too large');
+    void readImageAsset(
+      '/api/play/assets/' + encodeURIComponent(assetId),
+      controlHeaders({ playId }),
+      controller.signal,
+    )
+      .then((blob) => {
         if (controller.signal.aborted) return;
         objectUrl = URL.createObjectURL(blob);
         setUrl(objectUrl);

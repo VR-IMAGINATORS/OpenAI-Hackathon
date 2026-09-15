@@ -27,6 +27,8 @@ export interface EndingFailureContext {
   clearedCount: number;
   actionCount: number;
   failedActionCount: number;
+  durationMs?: number;
+  remainingMs?: number;
   evidenceRecordCount?: number;
   evidenceBytes?: number;
   validationFields?: string;
@@ -81,7 +83,8 @@ export function endingFailureCode(error: unknown, stage: EndingStage): string {
   if (error instanceof AiServiceError) {
     if (error.code === 'INVALID_REQUEST') return prefix + 'INVALID_REQUEST';
     if (error.code === 'REQUEST_LIMIT') return 'ENDING_AI_BUDGET_EXHAUSTED';
-    if (error.code === 'ENDING_EXPIRED' || error.code === 'ENDING_CALL_TIMEOUT') return prefix + 'TIMEOUT';
+    if (error.code === 'ENDING_EXPIRED' || error.code === 'ENDING_CALL_TIMEOUT')
+      return prefix + 'TIMEOUT';
   }
   const httpStatus = (value: unknown): value is number =>
     typeof value === 'number' && Number.isInteger(value) && value >= 400 && value <= 599;

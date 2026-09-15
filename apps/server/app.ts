@@ -97,7 +97,11 @@ export function createHostedApp(
   const clockOrigin = now(),
     wallOrigin = wallNow();
   const resultNow = () => wallOrigin + now() - clockOrigin;
-  const sceneJobs = new SceneJobs(ai, { now });
+  const sceneJobs = new SceneJobs(ai, {
+    now,
+    onFailure: (playId, stage, errorCode) =>
+      log({ event: 'scene_failed', correlationId: playId, stage, errorCode }),
+  });
   let endingJobs: EndingJobs;
   const results = new ResultStore({
     now: resultNow,
@@ -229,10 +233,13 @@ export function createHostedApp(
                   { deferDisplay },
                 );
                 results.bindScene(id, input.messageId, input.gameVersion);
-                const fail = () =>
+                const fail = (
+                  _errorCode = 'SCENE_RECEIVE_FAILED',
+                  status: 'failed' | 'cancelled' = 'failed',
+                ) =>
                   safeDisplay(() =>
                     results.updateMessage(id, input.messageId, {
-                      imageSlot: { ...slot, status: 'failed', errorCode: 'SCENE_RECEIVE_FAILED' },
+                      imageSlot: { ...slot, status, errorCode: 'SCENE_RECEIVE_FAILED' },
                     }),
                   );
                 try {
@@ -256,6 +263,12 @@ export function createHostedApp(
                             imageSlot: { ...slot, status: 'ready', assetId },
                           });
                         } catch {
+                          log({
+                            event: 'scene_failed',
+                            correlationId: id,
+                            stage: 'storage',
+                            errorCode: 'SCENE_STORAGE_FAILED',
+                          });
                           fail();
                         }
                       },
@@ -835,10 +848,13 @@ export function createHostedApp(
     }
     if (code === 'PLAY_CAPACITY') res.setHeader('Retry-After', '5');
     log({
-      event: 'request_failed', errorCode: code,
+      event: 'request_failed',
+      errorCode: code,
       correlationId: requestPlays.get(req),
       route: typeof req.route?.path === 'string' ? req.route.path : undefined,
-      method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'].includes(req.method) ? req.method : undefined,
+      method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'].includes(req.method)
+        ? req.method
+        : undefined,
     });
     const message =
       code === 'PLAY_CAPACITY'

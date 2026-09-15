@@ -8,7 +8,10 @@ import {
   type FalRequestHandle,
   type FalTransport,
 } from '../../packages/server/fal.js';
-import { EndingVideoMediaError, validateEndingMp4 } from '../../packages/server/ending-video-media.js';
+import {
+  EndingVideoMediaError,
+  validateEndingMp4,
+} from '../../packages/server/ending-video-media.js';
 import { createEndingFrames } from '../../packages/server/ending-image-service.js';
 import {
   abortableDelay,
@@ -33,6 +36,19 @@ export interface PreparedEnding {
   start: Buffer;
   end: Buffer;
   prompt: string;
+}
+function retryableVideoRead(error: unknown): boolean {
+  return (
+    error instanceof EndingVideoMediaError ||
+    (error instanceof FalTransportError &&
+      !error.terminal &&
+      ![
+        'FAL_INVALID_URL',
+        'FAL_REDIRECT_REJECTED',
+        'FAL_RESPONSE_TOO_LARGE',
+        'FAL_CONFIG_INVALID',
+      ].includes(error.code))
+  );
 }
 interface Job {
   id: string;
@@ -131,6 +147,8 @@ export class EndingJobs {
               clearedCount: packet.clearedIds.length,
               actionCount: packet.actions.length,
               failedActionCount: packet.actions.filter((action) => !action.success).length,
+              durationMs: Math.max(0, this.now() - packet.endedAt),
+              remainingMs: Math.max(0, job!.deadline - this.now()),
               evidenceRecordCount: packet.evidence.records.length,
               evidenceBytes: Buffer.byteLength(JSON.stringify(packet.evidence.records)),
               validationFields: endingValidationFields(error),
@@ -156,14 +174,12 @@ export class EndingJobs {
         return await read();
       } catch (error) {
         this.assertCurrent(job);
-        const retryable =
-          error instanceof EndingVideoMediaError ||
-          (error instanceof FalTransportError &&
-            !error.terminal &&
-            !['FAL_INVALID_URL', 'FAL_REDIRECT_REJECTED', 'FAL_RESPONSE_TOO_LARGE', 'FAL_CONFIG_INVALID'].includes(error.code));
-        if (!retryable || attempt >= 2) throw error;
+        if (!retryableVideoRead(error) || attempt >= 2) throw error;
         this.reportRecovery(job, error);
-        await abortableDelay((this.options.retryDelayMs ?? 1000) * 2 ** attempt, job.controller.signal);
+        await abortableDelay(
+          (this.options.retryDelayMs ?? 1000) * 2 ** attempt,
+          job.controller.signal,
+        );
       }
     }
   }
@@ -442,6 +458,7 @@ export class EndingJobs {
             job.upstreamPending = false;
             throw error;
           }
+          if (!retryableVideoRead(error)) throw error;
           // Status GET may be retried; the paid submission is never retried.
           signal.throwIfAborted();
           pollDelay = Math.min(8000, pollDelay * 2);

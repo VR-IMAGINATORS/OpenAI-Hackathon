@@ -441,3 +441,28 @@ test('media configuration rejects unsupported models, too-short deadlines and mi
     /AI_GLOBAL_IMAGE_ATTEMPTS required/,
   );
 });
+
+test('scene failures retain a safe cause and cancellation remains distinct from failure', async () => {
+  const reports: { playId: string; stage: string; code: string }[] = [];
+  const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), fake({
+    createImage: async () => { throw new Error('PRIVATE_PROMPT_AND_PHOTO'); },
+  }));
+  ai.register('one', performance.now() + 100000);
+  const jobs = new SceneJobs(ai, {
+    onFailure: (playId, stage, code) => reports.push({ playId, stage, code }),
+  });
+  let failure: string | undefined;
+  jobs.enqueue(input(), { ready: () => assert.fail('unverified image'), failed: (code) => { failure = code; } });
+  await until(() => !!failure);
+  assert.equal(failure, 'SCENE_RECEIVE_FAILED');
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].playId, 'one');
+  assert.doesNotMatch(JSON.stringify(reports), /PRIVATE/);
+  let cancelled: string | undefined;
+  jobs.enqueue(input('one', 'cancelled-scene'), {
+    ready: () => assert.fail('cancelled image'),
+    failed: (_code, status) => { cancelled = status; },
+  });
+  jobs.cancelAll();
+  assert.equal(cancelled, 'cancelled');
+});

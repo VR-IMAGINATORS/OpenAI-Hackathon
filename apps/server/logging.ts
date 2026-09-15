@@ -3,6 +3,7 @@ export interface OperationalEvent {
   correlationId?: string;
   version?: string;
   durationMs?: number;
+  remainingMs?: number;
   errorCode?: string;
   count?: number;
   clearedCount?: number;
@@ -23,11 +24,14 @@ export interface OperationalEvent {
 /** Only explicitly selected operational fields may reach stdout. */
 export function operationalLog(event: OperationalEvent, write = console.log): void {
   const safe: Record<string, string | number> = { event: event.event };
-  for (const key of ['correlationId', 'version', 'errorCode', 'validationFields', 'route', 'method', 'stage'] as const) {
+  for (const key of [
+    'correlationId', 'version', 'errorCode', 'validationFields', 'route', 'method', 'stage',
+  ] as const) {
     if (event[key] !== undefined) safe[key] = event[key]!;
   }
   for (const key of [
     'durationMs',
+    'remainingMs',
     'count',
     'clearedCount',
     'actionCount',
