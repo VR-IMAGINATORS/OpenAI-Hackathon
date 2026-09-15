@@ -194,7 +194,7 @@ export default function PlayScreen({
           );
           if (!discard && !connection.send([{ type, event_id, delegation_id, content }])) break;
           commandAck.current.seq = command.seq;
-          if (!discard && command.messageId)
+          if (!discard && command.messageId && command.type === 'session.commentary.append')
             setSentMessageIds((ids) => new Set([...ids, command.messageId!]));
           try {
             sessionStorage.setItem(key, String(command.seq));

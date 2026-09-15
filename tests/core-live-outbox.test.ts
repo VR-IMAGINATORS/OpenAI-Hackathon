@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { LiveOutbox, LiveOutboxError } from '../apps/local-server/live-outbox.js';
-import { factCommand } from '../apps/local-server/live.js';
+import { factCommand, speechCommands } from '../apps/local-server/live.js';
 
 const error = (code: string) => (value: unknown) =>
   value instanceof LiveOutboxError && value.code === code;
@@ -41,6 +41,18 @@ test('duplicate notifications retain their sequence and reject altered content',
   first.content = 'outside mutation';
   box.poll(1, 0, 0).commands[0].content = 'outside poll mutation';
   assert.equal(box.poll(1, 0, 0).commands[0].content, command.content);
+});
+
+test('a complete multipart notification retains its event IDs and one trigger across enqueue retries', () => {
+  const box = new LiveOutbox(1, 0, () => 0);
+  const facts = '確定した公開結果。'.repeat(70);
+  const commands = speechCommands(facts, 'delegation', 'result-id');
+  commands.forEach((c) => box.append(c));
+  const before = box.poll(1, 0, 0);
+  speechCommands(facts, 'delegation', 'result-id').forEach((c) => box.append(c));
+  assert.deepEqual(box.poll(1, 0, 0), before);
+  assert.equal(before.commands.filter((c) => c.type === 'session.commentary.append').length, 1);
+  assert.equal(box.poll(1, 0, box.latestSeq).commands.length, 0);
 });
 
 test('connection reset discards old delivery and keeps the same connection idempotent', () => {

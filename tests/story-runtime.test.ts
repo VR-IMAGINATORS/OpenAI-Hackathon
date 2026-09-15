@@ -1,3 +1,4 @@
+import { liveBriefings } from './fixtures/live-briefings.js';
 import test from 'node:test';
 import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import assert from 'node:assert/strict';
@@ -841,9 +842,8 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.equal(scenes[2].action?.usage, '道具を使って', 'scene owns a frozen copy of the method');
   const commands = runtime.pollCommands(live.generation, 0).commands;
   assert.ok(commands.every((queued) => Buffer.byteLength(queued.content) <= 480));
-  const spoken = commands
-    .filter((queued) => queued.type === 'session.commentary.append')
-    .map((queued) => queued.content)
+  const spoken = liveBriefings(commands)
+    .map((queued) => queued.facts)
     .join('');
   assert.ok(spoken.includes('HINT_0_1'));
   assert.ok(spoken.includes('HINT_0_2'));

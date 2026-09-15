@@ -152,10 +152,11 @@ export const intentDecisionSchema = z.discriminatedUnion('kind', [
       kind: z.literal('consult'),
       evidenceSeq,
       reason,
-      answer: z.string().min(1).max(2000).optional(),
+      // Public briefing for Live, not a spoken script. Empty only for social conversation.
+      answer: z.string().max(2000).optional(),
       riskProposal: riskProposalSchema.nullable().optional(),
       recognitionCorrection: recognitionCorrectionSchema.nullable().optional(),
-      responseKind: z.enum(['answer', 'correction']).optional(),
+      responseKind: z.enum(['answer', 'correction', 'social']).optional(),
     })
     .strict(),
   executeIntentSchema,

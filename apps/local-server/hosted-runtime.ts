@@ -1,5 +1,5 @@
 import { KnowledgeStore, buildCompanionContext } from './companion-knowledge.js';
-import { composeCompanionReply } from './companion-response.js';
+import { companionResultFacts } from './companion-response.js';
 import { VoiceNotificationScheduler } from './voice-notifications.js';
 import { OpeningBriefingDelivery } from './opening-briefing.js';
 import { FinalVoicePlayback } from './final-voice-playback.js';
@@ -325,8 +325,8 @@ export class GameRuntime {
         onMissingDelegation: (decision) => {
           this.recordDiagnostic('delegation_missing', decision.kind);
           if (!this.valid() || this.game.status !== 'playing') return;
-          this.sendFacts(this.currentSituation());
           if (decision.kind === 'execute') {
+            this.sendFacts(this.currentSituation());
             this.enqueue({
               ...factCommand(
                 this.words(
@@ -435,7 +435,14 @@ export class GameRuntime {
             message: decision.message,
             gameVersion: this.game.gameVersion,
           };
-        this.speak(decision.message, delegationId);
+        this.speak(
+          JSON.stringify({
+            type: 'photo_result',
+            facts: decision.message,
+            requiresConfirmation: decision.decision === 'confirm_risk',
+          }),
+          delegationId,
+        );
         return;
       }
     }
@@ -463,8 +470,7 @@ export class GameRuntime {
     this.ledger!.updateState({ judging: true });
     this.activeUsage = intent.usage;
     this.runtimeActionId = ticket.id;
-    if (intent.origin?.kind === 'photo')
-      this.speak(this.words('これなら使えそう。やってみる。', 'I can use this. Let me try.'));
+    // Photo admission is quiet; the result supplies the single spoken reaction.
     this.pendingRisk = undefined;
     this.recordDiagnostic('judgment_started');
     const judgmentStarted = this.now();
@@ -500,21 +506,9 @@ export class GameRuntime {
         this.traceEntries.shift();
     }
     // Keep private narration direction out of the speakable payload.
-    const committedVersion = this.game.gameVersion;
     // Freeze the scene now; a later photo or action must not change this result's picture.
     this.presentScene(result.narrative + '\n' + this.currentSituation(), messageId);
-    const spokenResult = this.game.terminal
-      ? result.narrative
-      : await composeCompanionReply(this.modelClient(), this.companionContext(), result).catch(
-          () => result.narrative,
-        );
-    if (
-      this.disposed ||
-      context.controllerEpoch !== this.epoch ||
-      this.game.gameVersion !== committedVersion
-    )
-      return;
-    this.speak(spokenResult, delegationId, messageId);
+    this.speak(companionResultFacts(this.companionContext(), result), delegationId, messageId);
   }
   private modelClient() {
     return {
@@ -579,11 +573,22 @@ export class GameRuntime {
             message: decision.message,
             gameVersion: version,
           };
-        this.speak(decision.message);
+        this.speak(
+          JSON.stringify({
+            type: 'photo_result',
+            facts: decision.message,
+            requiresConfirmation: decision.decision === 'confirm_risk',
+          }),
+        );
       }
       return;
     }
-    this.speak(this.words('届いたよ。どう使おうか？', 'I got it. How should I use it?'));
+    this.speak(
+      this.words(
+        '写真受信済み。用途が未確定。使い方の確認が必要。',
+        'Photo received. Intended use is unclear; ask how to use it.',
+      ),
+    );
   }
 
   private receiveControl(fragment: TranscriptFragment): void {
@@ -752,8 +757,19 @@ export class GameRuntime {
     );
     try {
       this.recordHintDecision(decision);
-      this.sendFacts(this.currentSituation(), delegationId);
-      this.speak(decision.answer ?? this.currentSituation(), delegationId);
+      this.speak(
+        JSON.stringify(
+          decision.responseKind === 'social'
+            ? { type: 'social' }
+            : {
+                type: 'consultation',
+                facts: decision.answer || this.game.situation,
+                requiresConfirmation: !!decision.riskProposal,
+                ...(decision.riskProposal ? { risk: decision.riskProposal.message } : {}),
+              },
+        ),
+        delegationId,
+      );
       if (this.notificationFailed) {
         if (id) this.game.credits.cancel(id);
         return;
@@ -816,6 +832,7 @@ export class GameRuntime {
     let first: ReturnType<GameRuntime['enqueue']>;
     for (const command of speechCommands(text, delegationId)) {
       const queued = this.enqueue(command, messageId);
+      if (!queued) break;
       first ??= queued;
     }
     return first;
@@ -891,9 +908,11 @@ export class GameRuntime {
       const commands =
         notice.kind === 'normal-warning'
           ? factCommands(JSON.stringify({ type: 'time_warning', message: notice.payload.text }))
-          : speechCommands(notice.payload.text, notice.payload.delegationId);
+          : speechCommands(notice.payload.text, notice.payload.delegationId, notice.id);
       for (const command of commands) {
         const queued = this.enqueue(command, notice.payload.messageId, warning);
+        // Incomplete facts must never be followed by their speech trigger.
+        if (!queued) break;
         first ??= queued;
       }
       if (warning || notice.includesTimeWarning) {
