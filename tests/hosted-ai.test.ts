@@ -357,6 +357,31 @@ test('hosted close calls share three attempts and keep unconfirmed slots', async
   assert.equal(ai.resume(), false);
 });
 
+test('hosted late confirmed hangup releases its Live reservation exactly once', async () => {
+  const closes = [deferred<void>(), deferred<void>(), deferred<void>()];
+  let next = 0;
+  const ai = new AiService(
+    { ...config(), timeoutMs: 10 },
+    fake({ hangup: () => closes[next++]!.promise }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  await ai.createLive('one', liveBody);
+  assert.equal(await ai.retire('one'), false);
+  assert.equal(next, 3);
+  assert.equal(ai.snapshot().liveBusy, 1);
+  assert.equal(ai.isLiveCloseConfirmed('one'), false);
+  closes[0].resolve();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(ai.snapshot().liveBusy, 0);
+  assert.equal(ai.isLiveCloseConfirmed('one'), true);
+  closes[1].resolve();
+  closes[2].resolve();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(ai.snapshot().liveBusy, 0);
+  assert.equal(ai.forget('one'), true);
+});
+
 test('hosted deadlines are immutable and late Responses cannot reach an expired game', async () => {
   let now = 0;
   const pending = deferred<unknown>();

@@ -44,6 +44,7 @@ export interface MediaPermit {
   };
 }
 interface LiveReservation {
+  playId: string;
   providerId?: string;
   pending?: Promise<unknown>;
   closing?: Promise<boolean>;
@@ -477,6 +478,8 @@ export class AiService {
     const parsed = liveRequest.safeParse(body);
     if (!parsed.success || !this.config.liveModels.includes(parsed.data.session.model))
       throw new AiServiceError(400, 'INVALID_REQUEST', '音声接続の設定を確認してください。');
+    for (const budget of this.plays.values())
+      if (budget.live) this.reconcileLiveClosure(budget.live);
     if (
       (play.live && !play.live.closed) ||
       play.liveAttempts >= this.config.liveAttemptsPerPlay ||
@@ -485,6 +488,7 @@ export class AiService {
     )
       this.limit();
     const live: LiveReservation = {
+      playId,
       closeRequested: false,
       attempts: 0,
       closed: false,
@@ -649,24 +653,46 @@ export class AiService {
   }
   private closeReservation(live: LiveReservation): Promise<boolean> {
     live.closeRequested = true;
+    this.reconcileLiveClosure(live);
     if (live.closed) return Promise.resolve(true);
     if (!live.providerId) return Promise.resolve(false);
     if (live.closing) return live.closing;
     live.closing = (async () => {
-      while (live.attempts < 3) {
+      while (!live.closed && live.attempts < 3) {
         live.attempts++;
+        const raw = Promise.resolve().then(() => this.transport.hangup(live.providerId!));
+        void raw.then(
+          () => this.confirmLiveClosed(live),
+          () => {},
+        );
         try {
-          await this.bounded(Promise.resolve().then(() => this.transport.hangup(live.providerId!)));
-          live.closed = true;
-          this.liveBusy--;
+          await this.bounded(raw);
+          this.confirmLiveClosed(live);
           return true;
         } catch {
           /* An abort or timeout is not a confirmed hangup. */
         }
       }
-      return false;
+      return live.closed;
     })();
     return live.closing;
+  }
+  private confirmLiveClosed(live: LiveReservation): void {
+    if (live.closed) return;
+    live.closed = true;
+    this.liveBusy--;
+    if (live.providerId) this.transport.releaseClosedLiveSession?.(live.providerId);
+    if (this.plays.get(live.playId)?.retired) this.forget(live.playId);
+  }
+  private reconcileLiveClosure(live: LiveReservation): void {
+    if (!live.closed && live.providerId && this.transport.isLiveSessionClosed?.(live.providerId))
+      this.confirmLiveClosed(live);
+  }
+  /** True only when this play has no Live reservation or its provider close was confirmed. */
+  isLiveCloseConfirmed(playId: string): boolean {
+    const live = this.plays.get(playId)?.live;
+    if (live) this.reconcileLiveClosure(live);
+    return !live || live.closed;
   }
   async closeLive(playId: string): Promise<boolean> {
     const live = this.plays.get(playId)?.live;
@@ -734,6 +760,7 @@ export class AiService {
   }
   snapshot() {
     const live = [...this.plays.values()].flatMap((p) => (p.live ? [p.live] : []));
+    for (const reservation of live) this.reconcileLiveClosure(reservation);
     return {
       mediaBusy: this.imageBusy + this.inspectionBusy,
       imageBusy: this.imageBusy,
