@@ -323,6 +323,8 @@ export class GameHarness {
       obstacleIndex: this.game.obstacleIndex,
       hintsAlreadyGiven: this.hintsAlreadyGiven(context),
       knowledge: this.knowledge,
+      retainedRequest: this.game.retainedRequest,
+      onDiscardRetainedRequest: () => this.game.discardRetainedRequest(),
       gameState: this.game.state(),
       onRiskProposal: (proposal) => {
         if (this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion)
@@ -356,10 +358,17 @@ export class GameHarness {
     context: IntentContext,
     delegationId: string | null,
   ): Promise<void> {
+    const retained = this.game.retainedRequest;
+    const photoCreditAmount =
+      intent.retryOf && retained?.actionId === intent.retryOf ? retained.photoCreditAmount : 0;
+    // A failed automatic photo action refunded its send. Resume that same charge,
+    // without adding a conversation charge for asking to recover the request.
+    const photoCreditId = photoCreditAmount ? `photo-recovery:${randomUUID()}` : null;
+    if (photoCreditId) this.game.reserveCredits(photoCreditId, 'photo', photoCreditAmount);
     const creditId =
       intent.origin?.kind === 'photo'
         ? null
-        : this.reserveConversation(context.generation, intent.evidenceSeq);
+        : (photoCreditId ?? this.reserveConversation(context.generation, intent.evidenceSeq));
     const before = this.game.gameVersion;
     let completed = false;
     try {

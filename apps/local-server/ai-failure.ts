@@ -31,3 +31,17 @@ export function aiFailureCode(error: unknown): string {
     if (typeof candidate === 'string' && codes.has(candidate)) return candidate;
   return 'PROCESSING_ERROR';
 }
+
+export function canRetryJudgment(error: unknown): boolean {
+  const code = aiFailureCode(error);
+  if (code === 'UPSTREAM_FAILED') return (error as { status?: number }).status! >= 500;
+  return [
+    'AI_OUTPUT_INVALID',
+    'AI_OUTPUT_INCOMPLETE',
+    'INVALID_FACT_CHANGE',
+    'INVALID_COMPLETION_FACT',
+    'INVALID_INVENTORY_CHANGE',
+    'INVALID_STRETCH_CANDIDATE',
+    'UNKNOWN_CREATIVE_ATTEMPT',
+  ].includes(code);
+}

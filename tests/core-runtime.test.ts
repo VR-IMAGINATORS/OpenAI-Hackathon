@@ -1031,6 +1031,140 @@ const obviousPhoto = (input: any) => ({
   reason: '切る道具を求めているため',
 });
 
+const recoveredJudgment = {
+  success: false,
+  narrative: 'ロープが少し緩んだ。',
+  situation: '結び目が緩んでいる。',
+  shortReason: '結び目を動かした',
+  inventoryChanges: [],
+  factChanges: [{ key: 'wrists', from: 'bound', to: 'loosened' }],
+};
+
+test('runtime repairs malformed judgment silently, then publishes and charges once', async (t) => {
+  const judgments: any[] = [];
+  const h = await setup(t, execute, undefined, false, undefined, undefined, (context) => {
+    judgments.push(context);
+    return judgments.length === 1 ? { success: 'invalid' } : recoveredJudgment;
+  });
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
+  const lastSeq = h.runtime.pollCommands(h.generation, 0).commands.at(-1)?.seq ?? 0;
+  await h.say('これでロープを切って');
+  const delegation = randomUUID();
+  await h.delegate(delegation);
+  await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+  await h.delegate(delegation);
+  await tick();
+  assert.equal(h.calls.judge, 2);
+  assert.equal(h.runtime.game.credits.remaining, 880);
+  assert.equal(h.runtime.game.retainedRequest, null);
+  assert.equal(h.runtime.game.error, null);
+  assert.deepEqual(judgments[0].proposal, judgments[1].proposal);
+  assert.equal(judgments[1].judgmentRepair, 'AI_OUTPUT_INVALID');
+  const briefings = liveBriefings(
+    h.runtime.pollCommands(h.generation, 0).commands.filter((c) => c.seq > lastSeq),
+  );
+  assert.equal(briefings.length, 1);
+  assert.equal(JSON.parse(briefings[0]!.facts).type, 'action_result');
+});
+
+for (const origin of ['photo', 'voice'] as const) {
+  test(`failed ${origin} request resumes from new evidence without another explanation or duplicate charge`, async (t) => {
+    let attempt = 0;
+    const contexts: any[] = [];
+    const judgments: any[] = [];
+    const h = await setup(
+      t,
+      (context) => {
+        contexts.push(context);
+        return context.game.retainedRequest
+          ? {
+              kind: 'retry_request',
+              evidenceSeq: context.conversation.eligibleEvidenceSeq,
+              reason: 'Explicit request to resume',
+            }
+          : execute(context);
+      },
+      undefined,
+      false,
+      undefined,
+      origin === 'photo' ? obviousPhoto : undefined,
+      (context) => {
+        judgments.push(context);
+        return ++attempt <= 2 ? { success: 'invalid' } : recoveredJudgment;
+      },
+    );
+    await h.runtime.photos(randomUUID(), [h.photo]);
+    if (origin === 'voice') {
+      await until(() => h.calls.photo === 1);
+      await tick();
+      await h.say('これでロープを切って');
+      await h.delegate();
+    }
+    await until(() => !!h.runtime.game.retainedRequest && !h.runtime.game.credits.pending);
+    await tick();
+    const retained = h.runtime.game.retainedRequest!;
+    assert.equal(h.calls.judge, 2);
+    assert.equal(h.runtime.game.actionsUsed, 0);
+    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 1000 : 900);
+    assert.equal(h.runtime.game.inventory.length, 0);
+    assert.equal(h.runtime.game.photos.length, 1);
+    const notices = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands)
+      .map((c) => JSON.parse(c.facts))
+      .filter((c) => c.type === 'request_unavailable');
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0].requestRetained, true);
+    assert.equal(notices[0].requiresRestatement, false);
+    assert.doesNotMatch(notices[0].facts, /もう一度|教えて|確認でき/);
+    await h.say('もう一度やって');
+    const delegation = randomUUID();
+    await h.delegate(delegation);
+    await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+    await h.delegate(delegation);
+    await tick();
+    assert.equal(h.calls.judge, 3);
+    assert.equal(h.calls.recognize, 1);
+    assert.equal(h.calls.photo, 1);
+    assert.equal(h.runtime.game.inventory.length, 1);
+    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 900 : 880);
+    assert.equal(h.runtime.game.retainedRequest, null);
+    assert.equal(h.runtime.game.error, null);
+    assert.equal(judgments[2].proposal.usage, judgments[0].proposal.usage);
+    const supplied = contexts.at(-1).game.retainedRequest;
+    assert.deepEqual(supplied.itemRefs, retained.intent.itemRefs);
+    assert.equal(supplied.usage, retained.intent.usage);
+    assert.equal(supplied.actionId, undefined);
+    assert.equal(supplied.origin, undefined);
+    assert.equal(supplied.reason, undefined);
+  });
+}
+
+test('explicit cancellation clears the failed request without an action or charge', async (t) => {
+  const h = await setup(
+    t,
+    (context) => ({
+      kind: 'cancel_request',
+      evidenceSeq: context.conversation.eligibleEvidenceSeq,
+      reason: 'User abandoned the request',
+    }),
+    undefined,
+    false,
+    undefined,
+    obviousPhoto,
+    () => ({ success: 'invalid' }),
+  );
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => !!h.runtime.game.retainedRequest && !h.runtime.game.credits.pending);
+  await h.say('やっぱりその道具は使わないで');
+  await h.delegate();
+  await until(() => h.runtime.game.retainedRequest === null);
+  await tick();
+  assert.equal(h.calls.judge, 2);
+  assert.equal(h.runtime.game.actionsUsed, 0);
+  assert.equal(h.runtime.game.credits.remaining, 1000);
+});
+
 test('obvious photo starts one action without a usage question or fabricated delegation', async (t) => {
   const h = await setup(t, execute, undefined, false, undefined, obviousPhoto);
   const requestId = randomUUID();

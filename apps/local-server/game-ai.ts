@@ -25,6 +25,8 @@ export interface AIContext {
   transcript: string;
   facts?: GameFacts;
   creativity?: { previousAttempts: PreviousCreativeAttempt[] };
+  /** Fixed internal validation code only; no prior model prose. */
+  judgmentRepair?: string;
 }
 export const coreJudgmentSchema = judgmentSchema.extend({
   factChanges: z.array(factChangeSchema).max(30),
@@ -204,6 +206,7 @@ export function createGameAI(
           inventory,
           transcript,
           proposal,
+          ...(proposal && context.judgmentRepair ? { judgmentRepair: context.judgmentRepair } : {}),
           ...(proposal && context.creativity ? { creativity: context.creativity } : {}),
           photos: photos.map((p) => ({ id: p.id })),
         }),
@@ -238,7 +241,10 @@ export function createGameAI(
               '\n' +
               snapshot.coreConfig.acceptancePolicy[snapshot.locale]
             : '') +
-          (proposal && context.creativity ? '\n' + creativeJudgmentInstructions : ''),
+          (proposal && context.creativity ? '\n' + creativeJudgmentInstructions : '') +
+          (proposal && context.judgmentRepair
+            ? '\nThe prior judgment was not committed. Re-evaluate this same fixed request. Repair the reported validation failure using only the supplied current state, permitted transitions and inventory IDs. Match success to completionFact. Keep text brief so the complete JSON fits. Do not invent a different usage or treat a technical failure as a failed physical attempt.'
+            : ''),
         input: [{ role: 'user', content: input }],
         text: {
           format: {

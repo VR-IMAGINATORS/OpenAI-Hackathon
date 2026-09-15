@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { aiFailureCode } from './ai-failure.js';
+import { aiFailureCode, canRetryJudgment } from './ai-failure.js';
 import {
   executeIntentSchema,
   actionResultSchema,
@@ -50,6 +50,7 @@ export class GameSession {
   currentContextVersion = 0;
   facts: GameFacts;
   private reservedEvidence = new Set<number>();
+  private retainedActionId: string | null = null;
   private readonly creativeAttempts?: CreativeAttemptLedger;
   private coreActions = new Map<
     string,
@@ -59,6 +60,7 @@ export class GameSession {
       proposal: Proposal;
       running: boolean;
       attempts: number;
+      photoCreditAmount: number;
       controller: AbortController;
       controls: Map<string, ReturnType<typeof setTimeout>>;
       controlWaiters: Set<() => void>;
@@ -236,9 +238,33 @@ export class GameSession {
       this.end('lost', 'credits_exhausted');
   }
   invalidate() {
+    this.discardRetainedRequest();
     this.inputRevision++;
     this.proposal = null;
     this.error = null;
+  }
+  /** The original input remains available after technical failure, without another upload. */
+  get retainedRequest() {
+    const record = this.retainedActionId ? this.coreActions.get(this.retainedActionId) : undefined;
+    if (
+      !record ||
+      record.ticket.status !== 'failed' ||
+      this.terminal ||
+      record.ticket.generation !== this.generation ||
+      record.ticket.gameVersion !== this.gameVersion ||
+      record.ticket.actionEpoch !== this.actionEpoch ||
+      record.ticket.controllerEpoch !== this.controllerEpoch ||
+      record.proposal.inputRevision !== this.inputRevision
+    )
+      return null;
+    return {
+      actionId: record.ticket.id,
+      intent: structuredClone(record.ticket.intent),
+      photoCreditAmount: record.photoCreditAmount,
+    };
+  }
+  discardRetainedRequest() {
+    this.retainedActionId = null;
   }
   /** Invalidate work from the previous tab without restarting the game. */
   changeController() {
@@ -490,6 +516,18 @@ export class GameSession {
     this.editable();
     if (!this.coreSnapshot) throw new GameError(409, 'CORE_REQUIRED');
     const intent = executeIntentSchema.parse(value);
+    const retained = this.retainedRequest;
+    if (
+      intent.retryOf &&
+      (retained?.actionId !== intent.retryOf ||
+        intent.origin ||
+        intent.usage !== retained.intent.usage ||
+        JSON.stringify(intent.itemRefs) !== JSON.stringify(retained.intent.itemRefs) ||
+        (intent.mode ?? 'tool') !== (retained.intent.mode ?? 'tool') ||
+        JSON.stringify(intent.environmentTargetIds ?? []) !==
+          JSON.stringify(retained.intent.environmentTargetIds ?? []))
+    )
+      throw new GameError(409, 'ACTION_INVALID');
     if (
       this.status !== 'playing' ||
       this.voiceState !== 'connected' ||
@@ -591,11 +629,19 @@ export class GameSession {
       proposal,
       running: false,
       attempts: 0,
+      photoCreditAmount:
+        intent.origin?.kind === 'photo'
+          ? context.photos.length * creditCosts.photo
+          : intent.retryOf
+            ? retained!.photoCreditAmount
+            : 0,
       controller: new AbortController(),
       controls: new Map(),
       controlWaiters: new Set(),
     });
     intent.evidenceSeq.forEach((seq) => this.reservedEvidence.add(seq));
+    this.discardRetainedRequest();
+    this.error = null;
     this.pending = ticket.id;
     this.status = 'judging';
     this.clock.pause('judgment');
@@ -629,7 +675,10 @@ export class GameSession {
     record.running = true;
     try {
       let judgment: CoreJudgment;
+      let repairCode: string | undefined;
       for (;;) {
+        while (record.controls.size && ticket.status === 'pending')
+          await new Promise<void>((resolve) => record.controlWaiters.add(resolve));
         this.assertPendingAction(ticket);
         record.attempts++;
         try {
@@ -637,6 +686,7 @@ export class GameSession {
             await this.ai.judge(
               {
                 ...structuredClone(context),
+                ...(repairCode ? { judgmentRepair: repairCode } : {}),
                 photos: context.photos.map((photo) => ({
                   id: photo.id,
                   jpeg: Buffer.from(photo.jpeg),
@@ -646,18 +696,23 @@ export class GameSession {
               record.controller.signal,
             ),
           );
+          this.assertPendingAction(ticket);
+          // All repairable checks run before random draws or any mutation.
+          this.validateCoreJudgment(context, judgment);
+          if (judgment.creativity?.kind === 'stretch' && !judgment.success)
+            throw new Error('INVALID_STRETCH_CANDIDATE');
+          if (
+            judgment.creativity?.equivalentAttemptId &&
+            !context.creativity?.previousAttempts.some(
+              (attempt) => attempt.id === judgment.creativity!.equivalentAttemptId,
+            )
+          )
+            throw new Error('UNKNOWN_CREATIVE_ATTEMPT');
           break;
         } catch (error) {
-          // Retry only a known upstream transport failure. Model/schema errors,
-          // admission limits and game failures are not transient transport failures.
-          const upstream = error as { code?: string; status?: number } | null;
-          if (
-            record.attempts >= 2 ||
-            upstream?.code !== 'UPSTREAM_FAILED' ||
-            !(upstream.status! >= 500)
-          )
-            throw error;
+          if (record.attempts >= 2 || !canRetryJudgment(error)) throw error;
           this.assertPendingAction(ticket);
+          repairCode = aiFailureCode(error);
         }
       }
       while (record.controls.size && ticket.status === 'pending') {
@@ -668,10 +723,11 @@ export class GameSession {
       if (record.ticket.status === 'invalid') throw new GameError(410, 'ACTION_INVALID');
       if (ticket.status === 'pending') {
         ticket.status = 'failed';
+        this.retainedActionId = ticket.id;
         this.error =
           this.coreSnapshot?.locale === 'en'
-            ? 'I could not confirm that. Please try asking again.'
-            : 'うまく確認できなかった。もう一度お願いできる？';
+            ? 'I have your tool and instructions. I cannot complete the attempt right now.'
+            : '道具と使い方は受け取っているよ。今は先に進められなくなっている。';
       }
       if (error instanceof GameError) throw error;
       throw new GameError(502, 'ACTION_FAILED', aiFailureCode(error));

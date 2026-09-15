@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import {
   classifyCoreIntent,
   coreIntentResponseSchema,
@@ -7,7 +8,7 @@ import {
 import { factCommands, speechCommands, liveInstructions } from '../apps/local-server/live.js';
 import { ConversationLedger } from '../apps/local-server/conversation.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
-import { intentDecisionSchema } from '../packages/shared/conversation.js';
+import { intentDecisionSchema, type ExecuteIntent } from '../packages/shared/conversation.js';
 import type { PublicGameState } from '../packages/shared/game.js';
 
 const snapshot = new ScenarioCatalog({
@@ -53,6 +54,76 @@ const classify = (respond: (body: any) => Promise<unknown>) =>
       inventory: [],
     },
   });
+
+for (const outcome of [
+  'retry',
+  'cancel',
+  'missing',
+  'stale',
+  'extra_usage',
+  'provider_retry_id',
+  'wait',
+  'new_request',
+] as const) {
+  test(`retained request classification: ${outcome}`, async () => {
+    const original: ExecuteIntent = {
+      kind: 'execute',
+      evidenceSeq: [50],
+      usage: 'Use scissors on the rope',
+      itemRefs: [{ photoId: randomUUID() }],
+      reason: 'Original request',
+    };
+    const actionId = randomUUID();
+    let discarded = 0;
+    const promise = classifyCoreIntent({
+      model: 'fake',
+      snapshot,
+      conversation: ledger.captureUnconsumedContext(),
+      photos: [],
+      game: {},
+      retainedRequest: outcome === 'missing' ? null : { actionId, intent: original },
+      onDiscardRetainedRequest: () => {
+        discarded++;
+      },
+      respond: async () =>
+        response(
+          outcome === 'wait'
+            ? { kind: 'wait', reason: 'Acknowledgment only' }
+            : outcome === 'new_request'
+              ? { ...original, evidenceSeq: [1], usage: 'Different use' }
+              : {
+                  kind: outcome === 'cancel' ? 'cancel_request' : 'retry_request',
+                  evidenceSeq: [outcome === 'stale' ? 99 : 1],
+                  reason: 'Current user request',
+                  ...(outcome === 'extra_usage' ? { usage: 'Injected change' } : {}),
+                  ...(outcome === 'provider_retry_id' ? { retryOf: randomUUID() } : {}),
+                },
+        ),
+    });
+    if (['missing', 'stale', 'extra_usage', 'provider_retry_id'].includes(outcome)) {
+      await assert.rejects(promise);
+      assert.equal(discarded, 0);
+    } else {
+      const actual = await promise;
+      if (outcome === 'retry') {
+        assert.deepEqual(actual, {
+          ...original,
+          origin: undefined,
+          evidenceSeq: [1],
+          retryOf: actionId,
+          reason: 'Current user request',
+        });
+        assert.equal(discarded, 0);
+      } else if (outcome === 'wait') {
+        assert.equal(actual.kind, 'wait');
+        assert.equal(discarded, 0);
+      } else {
+        assert.equal(discarded, 1);
+        assert.equal(actual.kind, outcome === 'cancel' ? 'consult' : 'execute');
+      }
+    }
+  });
+}
 
 test('consult requests a real answer and excludes private puzzle data from intent input', async () => {
   const actual = await classify(async (body) => {

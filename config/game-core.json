@@ -79,8 +79,8 @@
       "en": "Sorry, let me check once more."
     },
     "failed": {
-      "ja": "ごめん、今は確かめられなかった。もう一度どうしたいか教えて。",
-      "en": "Sorry, I could not check that just now. Tell me what you want to try again."
+      "ja": "今は先に進められなくなっている。",
+      "en": "I cannot move forward right now."
     },
     "cancelled": {
       "ja": "わかった、いったん止めるね。",

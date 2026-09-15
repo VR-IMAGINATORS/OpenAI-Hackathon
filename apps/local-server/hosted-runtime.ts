@@ -314,11 +314,21 @@ export class GameRuntime {
           if (this.valid() && code !== 'ACTION_INVALID') {
             // Safe operational evidence, including production where detailed game trace is disabled.
             console.warn('game_processing_failed', { code });
-            this.game.error = this.words(
-              'ごめん、うまく確認できなかった。もう一度教えて。',
-              'Sorry, I could not confirm that. Please tell me again.',
+            this.game.error =
+              error instanceof GameError && error.message === 'ACTION_FAILED'
+                ? this.game.error
+                : this.words(
+                    '今は返事を返せなくなっている。言ってくれた内容はこちらに残っているよ。',
+                    'I cannot respond right now. I still have what you told me.',
+                  );
+            this.speak(
+              JSON.stringify({
+                type: 'request_unavailable',
+                facts: this.game.error,
+                requestRetained: !!this.game.retainedRequest,
+                requiresRestatement: false,
+              }),
             );
-            this.speak(this.game.error);
           }
           this.syncCore();
         },
@@ -488,10 +498,19 @@ export class GameRuntime {
     if (!this.valid() || this.game.status !== 'playing' || this.game.state().busy) return;
     this.recordDiagnostic(stage);
     const text =
-      this.coreSnapshot?.coreConfig.recovery.failed[this.coreSnapshot.locale] ??
-      'ごめん、もう一度教えて。';
+      this.game.retainedRequest && this.game.error
+        ? this.game.error
+        : (this.coreSnapshot?.coreConfig.recovery.failed[this.coreSnapshot.locale] ??
+          '今は先に進められなくなっている。');
     this.game.error = text;
-    this.speak(text);
+    this.speak(
+      JSON.stringify({
+        type: 'request_unavailable',
+        facts: text,
+        requestRetained: !!this.game.retainedRequest,
+        requiresRestatement: false,
+      }),
+    );
     this.presentNotice(text);
   }
   /** Server-owned maintenance; also callable with the injected clock in tests. */

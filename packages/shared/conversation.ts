@@ -69,6 +69,8 @@ export const executeIntentSchema = z
     kind: z.literal('execute'),
     evidenceSeq: z.array(sequence).max(10000),
     origin: actionOriginSchema.optional(),
+    /** Server-owned link to an uncommitted failed request; never supplied by the model. */
+    retryOf: uuid.optional(),
     mode: z.enum(['tool', 'environment']).optional(),
     environmentTargetIds: z
       .array(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/))
