@@ -1,4 +1,5 @@
 import { KnowledgeStore } from './companion-knowledge.js';
+import { buildPublicScene } from './public-scene.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import type { GameFacts } from '../../packages/shared/conversation.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
@@ -52,16 +53,11 @@ export function storyOpening(snapshot: ScenarioSnapshot) {
 /** Display-only briefing, composed from public initial knowledge without another AI call. */
 export function storyOpeningBriefing(snapshot: ScenarioSnapshot) {
   const locale = snapshot.locale;
-  const situation = new KnowledgeStore(snapshot)
-    .knownFacts()
-    .filter((entry) => entry.currentlyApplicable)
-    .map((entry) => entry.text);
-  const details =
-    [...new Set(situation)].join('\n') ||
-    snapshot.scenarioV2.obstacles[0]!.situationDisplay[locale];
+  const publicScene = buildPublicScene(snapshot);
+  const details = publicScene.overview;
   return locale === 'ja'
-    ? `一週間後のあなたが、${snapshot.scenarioV2.title.ja}に閉じ込められた。特殊な通信で、過去のあなたに連絡しています。\n\n${details}\n\n身近なものの写真を撮って、私に送ってください。そして、それをどう使うか教えて。`
-    : `Your future self is trapped in ${snapshot.scenarioV2.title.en}, one week from now. I’m contacting you in the past through a special connection.\n\n${details}\n\nTake a photo of something nearby and send it to me. Then tell me how to use it.`;
+    ? `一週間後のあなたが、${snapshot.scenarioV2.title.ja}に閉じ込められた。特殊な通信で、過去のあなたに連絡しています。\n\n${details}\n\n気になる場所やものを、私に調べるよう頼んでください。分かったことから突破口を一緒に考えましょう。使えそうな身近なものがあれば、写真を送って使い方を教えてください。`
+    : `Your future self is trapped in ${snapshot.scenarioV2.title.en}, one week from now. I’m contacting you in the past through a special connection.\n\n${details}\n\nAsk me to examine a place or object that catches your attention. We can reason from what we discover. If you have a useful everyday object, send me its photo and tell me how to use it.`;
 }
 
 export function storyFromState(
@@ -86,7 +82,7 @@ export function requestsStoryHint(context: IntentContext): boolean {
     .map((fragment) => fragment.delta)
     .join('');
   if (
-    /ヒント(?:は|を)?(?:今は|まだ)?(?:いらない|要らない|不要)|\b(?:no|without)\s+(?:any\s+)?hints?\b|don['’]?t\s+(?:give|want)(?:\s+me)?(?:\s+(?:a|any))?\s+hints?/i.test(
+    /ヒント(?:は|を)?(?:今は|まだ)?(?:いらない|要らない|不要|なし|抜き)|ヒント(?:じゃ|では)なく|\b(?:no|without)\s+(?:any\s+)?hints?\b|(?:do\s+not|don['’]?t)\s+(?:give|want)(?:\s+me)?(?:\s+(?:a|any))?\s+hints?/i.test(
       request,
     )
   )
@@ -105,8 +101,7 @@ export function storyHint(
 ) {
   if (!snapshot.scenarioV2.story || !requestsStoryHint(context)) return undefined;
   const obstacle = snapshot.scenarioV2.obstacles[obstacleIndex];
-  if (!obstacle?.hints?.length) return undefined;
-  const index = Math.min(Math.max(0, hintsAlreadyGiven), obstacle.hints.length - 1);
+  if (!obstacle) return undefined;
   const store = knowledge ?? new KnowledgeStore(snapshot);
   if (!knowledge) {
     // Legacy callers provide a committed obstacle index, not a model-selected one.
@@ -119,14 +114,13 @@ export function storyHint(
     }
     store.advance({ obstacleId: obstacle.id, values });
   }
-  const baseId = `${obstacle.id}-hint-${index + 1}`;
+  const selected = store.selectHint(obstacle.id, hintsAlreadyGiven);
+  if (!selected) return undefined;
+  const { id, level } = selected;
   const batch = store.eligibleRevealCandidates();
-  const id = batch.candidates.some((entry) => entry.id === `${baseId}-partial`)
-    ? `${baseId}-partial`
-    : baseId;
   if (!store.snapshot().revealedIds.includes(id) && !store.applyReveals([id], batch.version))
     return undefined;
   const known = store.knownFacts().find((entry) => entry.id === id);
   if (!known) return undefined;
-  return { obstacleId: obstacle.id, level: index + 1, hint: known.text };
+  return { obstacleId: obstacle.id, level, hint: known.text };
 }

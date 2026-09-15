@@ -7,6 +7,7 @@
 ## 現在の発話経路
 
 - 声と最終的な言葉選びはGPT-Live。裏側はゲームの判定・公開情報の選択を担当する。
+- Webとテキスト模擬のゲーム判断は `game-harness.ts / GameHarness` に共通化。調査の開示選択と公開資料の生成は `investigation.ts` が担い、Webへの資料送信と模擬用の公開文章を同じ確定結果から作る。観察・仮説・提案は `companionInitiative` に従う。
 - `core-intent-ai.ts` の `consult.answer` は完成台詞ではなく、関連する公開事実・不確実性・必要な確認の資料。`reason` は内部用でLiveに渡さない。
 - 雑談は `responseKind: social`、`answer: ""`。サーバーの受付・20クレジット精算は維持し、Liveには受付情報だけを返して、自分で返答を考えさせる。秘密開示の選択や台詞生成の追加呼出しは行わない。
 - 行動確定後は `companion-response.ts / companionResultFacts` が公開結果・現況・道具状態を同期的に投影する。以前の `companion_reply` Responses呼出しは本編から除去した。秘密を知る判定AIの文章は既存の公開投影を通す。

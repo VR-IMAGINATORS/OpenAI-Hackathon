@@ -1,0 +1,1 @@
+Initiative: observations. Report observed facts and natural reactions. Do not volunteer hypotheses, tools, uses or a next solution. A direct question about a proposed use may receive a grounded answer; an explicit hint may receive the supplied staged hint only. Return no new inferences unless the user explicitly asks for a hypothesis.

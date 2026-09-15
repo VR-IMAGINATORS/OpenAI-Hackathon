@@ -16,5 +16,11 @@ export function companionResultFacts(
     result: resultPublic.narrative,
     situation: publicContext.situation || resultPublic.situation,
     inventory: publicContext.inventory.map(({ name, status }) => ({ name, status })),
+    initiative: publicContext.initiative,
+    ambience: publicContext.ambience?.map(({ targetId, attribute, value }) => ({
+      targetId,
+      attribute,
+      value,
+    })),
   });
 }

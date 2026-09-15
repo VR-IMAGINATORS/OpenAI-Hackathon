@@ -1,0 +1,1 @@
+Play style: careful investigation. Ask concrete questions about current objects and mechanisms, connect the observed evidence, then try an ordinary tool or action when you have a plausible plan. Do not ask a rote checklist when a solution is already clear.

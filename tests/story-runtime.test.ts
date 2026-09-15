@@ -314,6 +314,35 @@ test('all ten imported gimmicks accept a retained partial state followed by a co
   assert.equal(seen.size, 10);
 });
 
+test('expanded playtest fits the Live contract with every locale and initiative', () => {
+  const scenario = parseScenarioV2(
+    JSON.parse(readFileSync('scenarios/playtest/warehouse-expanded-r1.json', 'utf8')),
+  );
+  for (const locale of ['ja', 'en'] as const)
+    for (const initiative of ['observations', 'hypotheses', 'suggestions'] as const) {
+      const base = snapshot(locale, scenario);
+      const snap = { ...base, coreConfig: { ...base.coreConfig, companionInitiative: initiative } };
+      const game = fixture(snap, []).game;
+      for (const status of ['briefing', 'playing'] as const) {
+        const instructions = liveInstructions({ ...game.state(), status }, snap);
+        assert.ok(
+          instructions.length <= 8000,
+          `${locale}/${initiative}/${status}: ${instructions.length}`,
+        );
+        assert.match(instructions, new RegExp('Initiative: ' + initiative));
+        liveRequest.parse({
+          session: {
+            model: 'gpt-live-1',
+            delegation: { type: 'client' },
+            store: false,
+            instructions,
+          },
+          transport: { type: 'webrtc', sdp: 'offer' },
+        });
+      }
+    }
+});
+
 test('all 18 localized openings fit the Live contract and keep current clues in the silent briefing', () => {
   const catalog = parseStoryCatalog(
     JSON.parse(readFileSync('scenarios/story-catalog.json', 'utf8')),
@@ -714,15 +743,18 @@ test('runtime advances requested hint levels across partial progress and resets 
         if (body.text.format.name === 'companion_reply')
           return response({ reply: data.result.narrative + '\n' + data.context.situation });
         if (body.text.format.name === 'knowledge_selection') return response({ ids: [] });
+        if (body.text.format.name === 'investigation_reply') {
+          hints.push(data.stagedHint);
+          return response({ answer: data.stagedHint.hint, inferences: [] });
+        }
         if (body.text.format.name === 'core_intent') {
           if (data.game.requestedHint) {
-            hints.push(data.game.requestedHint);
             return response({
               decision: {
                 kind: 'consult',
                 evidenceSeq: data.conversation.eligibleEvidenceSeq,
                 reason: 'requested hint',
-                answer: data.game.requestedHint.hint,
+                answer: 'ヒントを確かめるね。',
               },
             });
           }

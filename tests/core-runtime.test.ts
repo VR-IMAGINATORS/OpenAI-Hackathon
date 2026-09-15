@@ -487,6 +487,7 @@ test('long consultation produces one complete briefing and one speech trigger wi
     type: 'consultation',
     facts,
     requiresConfirmation: false,
+    ambience: [],
   });
   assert.ok(
     commands.every((c) => JSON.parse(c.content).notificationId === briefings[0]!.notificationId),

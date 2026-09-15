@@ -1,3 +1,4 @@
+import type { InvestigationPrompts } from './investigation-prompts.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
@@ -44,6 +45,7 @@ export function liveInstructions(
   snapshot?: ScenarioSnapshot,
   facts?: GameFacts,
   companionContext?: CompanionContext,
+  prompts?: InvestigationPrompts,
 ) {
   if (snapshot) {
     // Reconnection must not reintroduce prose from a secret-aware judge through
@@ -87,6 +89,12 @@ export function liveInstructions(
       ...(snapshot.scenarioV2.story
         ? [
             `導入の返事後に話すのはopeningMessageだけ。自己紹介・舞台・脱出の必要性・写真から道具を作って扱えることを短く伝える。状況・拘束・手がかり・詳しい通信の仕組みは補足メッセージとしてアプリが表示するので、導入の音声に追加しない。最後は必ず「${openingHandoff[snapshot.locale]}」と話して止まり、続けて質問や説明を加えない。補足メッセージを自分から読み上げたり復唱したりしない。内容を尋ねられた場合は通常どおりclientへ委譲する。途中で「待って」「聞こえない」と言われたら止め、再開を求められたら未説明の要点だけを続けて最後の案内を伝える。`,
+          ]
+        : []),
+      (prompts ?? knowledge.prompts)[companion.initiative ?? 'observations'],
+      ...(snapshot.scenarioV2.investigation
+        ? [
+            'Only state fixed ambience values for allowed cosmetic attributes. Delegate new details; never invent objects, materials, paths, abilities or risks. Cosmetic values are not clues.',
           ]
         : []),
       JSON.stringify({
