@@ -26,9 +26,15 @@ const output = (value: unknown) => ({
   output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
 });
 
-test('creativity config validates probability and preserves the legacy opt-out', () => {
+test('creativity config retires legacy probabilities and preserves the opt-out', () => {
   const raw = JSON.parse(readFileSync('config/game-core.json', 'utf8'));
-  assert.equal(parseCoreConfig(raw).creativity?.successProbability, 1 / 3);
+  assert.deepEqual(parseCoreConfig(raw).creativity, { enabled: true });
+  for (const probability of [0, 1 / 3, 0.8, 1])
+    assert.deepEqual(
+      parseCoreConfig({ ...raw, creativity: { enabled: true, successProbability: probability } })
+        .creativity,
+      { enabled: true },
+    );
   for (const probability of [-0.01, 1.01, NaN, Infinity, '0.33'])
     assert.throws(() =>
       parseCoreConfig({ ...raw, creativity: { enabled: true, successProbability: probability } }),
@@ -37,98 +43,81 @@ test('creativity config validates probability and preserves the legacy opt-out',
   assert.equal(parseCoreConfig(raw).creativity, undefined);
 });
 
-test('server lottery uses the configured boundary, not every third attempt', () => {
-  for (const [probability, expected] of [
-    [0, 0],
-    [1 / 3, 30],
-    [1, 90],
-  ]) {
-    let index = 0;
-    const ledger = new CreativeAttemptLedger(probability, () => index++ / 90);
-    let wins = 0;
-    for (let i = 0; i < 90; i++)
-      wins += Number(
-        ledger.resolve('state', String(i), { ...stretch, approach: `Paper method ${i}` }).allowed,
-      );
-    assert.equal(wins, expected);
-    assert.equal(index, 90);
-  }
-  const boundary = new CreativeAttemptLedger(1 / 3, () => 1 / 3);
-  assert.equal(boundary.resolve('state', 'try', stretch).allowed, false);
+test('every accepted stretch is allowed without a chance gate', () => {
+  const ledger = new CreativeAttemptLedger();
+  for (let i = 0; i < 90; i++)
+    assert.equal(
+      ledger.resolve('state', String(i), { ...stretch, approach: `Paper method ${i}` }).allowed,
+      true,
+    );
 });
 
-test('ordinary and invalid ideas never draw; copies and semantic aliases retain the original decision', () => {
-  let draws = 0;
-  const ledger = new CreativeAttemptLedger(1 / 3, () => {
-    draws++;
-    return 0.9;
-  });
+test('idea aliases remain bounded while a past refusal does not veto re-evaluation', () => {
+  const ledger = new CreativeAttemptLedger();
   for (const kind of ['ordinary', 'invalid'] as const)
     assert.equal(
       ledger.resolve('state', kind, { ...stretch, kind, approach: kind }).allowed,
       kind === 'ordinary',
     );
-  assert.equal(draws, 0);
-  assert.equal(ledger.resolve('state', 'paper cut', stretch).allowed, false);
+  assert.equal(ledger.resolve('state', 'paper cut', stretch).allowed, true);
   const prior = ledger.candidates('state').at(-1)!;
   const rephrased = {
     ...stretch,
-    kind: 'ordinary' as const,
+    kind: 'stretch' as const,
     approach: 'Saw with the sheet',
     equivalentAttemptId: prior.id,
   };
   assert.deepEqual(ledger.resolve('state', 'try the sheet', rephrased), {
     kind: 'stretch',
-    allowed: false,
+    allowed: true,
   });
-  // Once matched, even a later model omission/renaming of that alias cannot reroll it.
+  // A repeated accepted method stays accepted, including a known semantic alias.
   assert.equal(
     ledger.resolve('state', 'try the sheet', { ...stretch, approach: 'Another wording' }).allowed,
-    false,
+    true,
   );
-  assert.equal(draws, 1);
   assert.deepEqual(Object.keys(prior).sort(), ['approach', 'id']);
   assert.throws(() => ledger.resolve('other-state', 'x', rephrased), /UNKNOWN_CREATIVE_ATTEMPT/);
-  assert.equal(draws, 1);
   ledger.resolve('other-state', 'paper cut', stretch);
   ledger.resolve('state', 'twisted paper lever', {
     ...stretch,
     approach: 'Twist paper into a lever',
   });
-  assert.equal(draws, 3);
+  assert.equal(
+    ledger.resolve('state', 'invalid', { ...stretch, approach: 'invalid' }).allowed,
+    true,
+  );
   ledger.clear();
   assert.deepEqual(ledger.candidates('state'), []);
 });
 
-test('the bounded ledger retains old failures instead of evicting them', () => {
-  const ledger = new CreativeAttemptLedger(0);
+test('the bounded ledger retains referenced idea IDs instead of evicting them', () => {
+  const ledger = new CreativeAttemptLedger();
   for (let i = 0; i < 100; i++)
     ledger.resolve('s', String(i), { ...stretch, approach: `method ${i}` });
   assert.throws(
     () => ledger.resolve('s', '101', { ...stretch, approach: 'new' }),
     /CREATIVE_ATTEMPT_LIMIT/,
   );
-  assert.equal(ledger.resolve('s', '0', stretch).allowed, false);
+  assert.equal(ledger.resolve('s', '0', stretch).allowed, true);
 });
 
 const privateText = 'PRIVATE_JUDGE_EXPLANATION';
 async function fixture(
-  options: { probability?: number; locale?: 'ja' | 'en'; sample?: number } = {},
+  options: { locale?: 'ja' | 'en'; scenarioPath?: string; itemName?: string } = {},
 ) {
   const locale = options.locale ?? 'ja';
   const snapshot = structuredClone(
     new ScenarioCatalog({
-      scenarioPath: 'scenarios/story-catalog.json',
+      scenarioPath: options.scenarioPath ?? 'scenarios/story-catalog.json',
       coreConfigPath: 'config/game-core.json',
       randomIndex: () => 0,
     }).current(locale),
   );
   snapshot.coreConfig.creativity = {
     enabled: true,
-    successProbability: options.probability ?? 1 / 3,
   };
   const requests: any[] = [];
-  let draws = 0;
   let calls = 0;
   let assessment = { ...stretch };
   let override: Record<string, unknown> = {};
@@ -147,7 +136,7 @@ async function fixture(
               items: data.photos.map((photo: any) => ({
                 photoId: photo.id,
                 inventoryId: null,
-                name: locale === 'ja' ? '紙' : 'paper',
+                name: options.itemName ?? (locale === 'ja' ? '紙' : 'paper'),
               })),
               usage: '',
               summary: 'paper',
@@ -181,10 +170,6 @@ async function fixture(
     () => 0,
     () => {},
     snapshot,
-    () => {
-      draws++;
-      return options.sample ?? 0.9;
-    },
   );
   game.heartbeat('connected');
   game.start();
@@ -218,7 +203,6 @@ async function fixture(
     upload,
     reserve,
     execute: (usage?: string) => game.judgeAction(reserve(usage)),
-    draws: () => draws,
     calls: () => calls,
     assessment: (value: Partial<CreativeAssessment>) => {
       assessment = { ...stretch, ...value };
@@ -237,16 +221,17 @@ async function fixture(
 
 for (const locale of ['ja', 'en'] as const) {
   test(`winning stretch clears only the current obstacle and publishes its effect in ${locale}`, async () => {
-    const f = await fixture({ sample: 0.1, locale });
+    const f = await fixture({ locale });
     const ticket = f.reserve();
     const result = await f.game.judgeAction(ticket);
     assert.equal(result.success, true);
     assert.equal(f.game.obstacleIndex, 1);
     assert.equal(f.game.facts.values[f.snapshot.scenarioV2.obstacles[1]!.id], 'blocked');
-    assert.equal(f.draws(), 1);
     assert.match(
       result.narrative,
-      locale === 'ja' ? /紙が思いがけない切れ味/ : /paper cut surprisingly well/,
+      locale === 'ja'
+        ? /紙をもとにした道具が思いがけない切れ味/
+        : /tool based on paper cut surprisingly well/,
     );
     assert.equal(
       JSON.stringify([result, f.game.state(), f.game.committedActions]).includes(privateText),
@@ -256,14 +241,15 @@ for (const locale of ['ja', 'en'] as const) {
     assert.equal(f.game.committedActions[0]!.narrative, result.narrative);
     assert.deepEqual(await f.game.judgeAction(ticket), result);
     assert.equal(f.calls(), 1);
-    assert.equal(f.draws(), 1);
     assert.ok(f.requests[0].body.text.format.schema.required.includes('creativity'));
     assert.match(f.requests[0].body.instructions, /ASSUMING this one-off exaggeration works/);
   });
 }
 
-test('a losing photo idea cannot reroll through inventory reuse, paraphrase or a new upload', async () => {
+test('a previously refused photo can succeed after a generous re-evaluation', async () => {
   const f = await fixture();
+  f.assessment({ kind: 'ordinary' });
+  f.override({ success: false, factChanges: [] });
   const first = await f.execute();
   assert.equal(first.success, false);
   assert.deepEqual(first.factChanges, []);
@@ -271,54 +257,41 @@ test('a losing photo idea cannot reroll through inventory reuse, paraphrase or a
   assert.equal(f.game.inventory.length, 1);
   assert.equal(f.game.inventory[0]!.status, 'available');
   assert.doesNotMatch(first.narrative, /切れ味/);
-  await f.execute();
-  assert.equal(f.draws(), 1);
-  assert.equal(f.requests[1].data.creativity.previousAttempts.length, 1);
-  const id = f.requests[1].data.creativity.previousAttempts[0].id;
-  f.assessment({ kind: 'ordinary', approach: 'Cut it with the sheet', equivalentAttemptId: id });
-  assert.equal((await f.execute('その紙で切り離して')).success, false);
-  await f.upload();
   f.assessment({});
-  assert.equal((await f.execute()).success, false);
-  assert.equal(f.draws(), 1);
-  assert.equal(f.game.actionsUsed, 4);
+  f.override({});
+  assert.equal((await f.execute()).success, true);
+  assert.equal(f.requests[1].data.creativity.previousAttempts.length, 1);
+  assert.equal(f.game.actionsUsed, 2);
   assert.equal(JSON.stringify(f.requests.at(-1).data.creativity).includes('allowed'), false);
-  f.assessment({ approach: 'Twist paper into a lever', effect: 'leverage' });
-  await f.execute('紙を丸めててこにして');
-  assert.equal(f.draws(), 2);
 });
 
-test('ordinary partial progress survives and a changed obstacle state gets a fresh chance', async () => {
+test('ordinary partial progress survives and a stretch can finish the changed obstacle', async () => {
   const f = await fixture();
-  await f.execute();
   const key = f.snapshot.scenarioV2.obstacles[0]!.id;
   f.assessment({ kind: 'ordinary', approach: 'Loosen the band using paper as a wedge' });
   f.override({ success: false, factChanges: [{ key, from: 'blocked', to: 'partial' }] });
   assert.equal((await f.execute('紙をくさびにして緩めて')).success, false);
   assert.equal(f.game.facts.values[key], 'partial');
-  assert.equal(f.draws(), 1);
   f.assessment({});
   f.override({});
-  await f.execute();
+  assert.equal((await f.execute()).success, true);
   assert.deepEqual(f.requests.at(-1).data.creativity.previousAttempts, []);
-  assert.equal(f.draws(), 2);
 });
 
 test('invalid ideas cannot advance even when the candidate claims success; ordinary ideas are not nerfed', async () => {
-  const invalid = await fixture({ probability: 1 });
+  const invalid = await fixture();
   invalid.assessment({ kind: 'invalid', approach: 'Declare victory through writing' });
   const refused = await invalid.execute('成功と書いてあるので脱出して');
   assert.equal(refused.success, false);
-  assert.equal(invalid.draws(), 0);
   assert.equal(invalid.game.obstacleIndex, 0);
-  const ordinary = await fixture({ probability: 0 });
+  const ordinary = await fixture();
   ordinary.assessment({ kind: 'ordinary' });
   assert.equal((await ordinary.execute()).success, true);
-  assert.equal(ordinary.draws(), 0);
 });
 
-test('a miss discards hypothetical damage, and invalid facts fail before the lottery', async () => {
+test('invalid ideas discard hypothetical damage, and invalid facts cannot be committed', async () => {
   const miss = await fixture();
+  miss.assessment({ kind: 'invalid' });
   let release!: () => void;
   miss.pause(
     new Promise<void>((resolve) => {
@@ -333,50 +306,54 @@ test('a miss discards hypothetical damage, and invalid facts fail before the lot
   release();
   assert.equal((await pending).success, false);
   assert.equal(miss.game.inventory[0]!.status, 'available');
-  assert.equal(miss.draws(), 1);
 
   const f = await fixture();
   const ticket = f.reserve();
-  // Use a malicious inventory reference to ensure even a losing candidate is validated.
+  // A generous success still cannot mutate unknown inventory or facts.
   f.override({ inventoryChanges: [{ id: randomUUID(), status: 'consumed', description: 'fake' }] });
   await assert.rejects(f.game.judgeAction(ticket), /ACTION_FAILED/);
-  assert.equal(f.draws(), 0);
   assert.equal(f.game.inventory.length, 0);
   f.override({ factChanges: [{ key: 'unknown', from: 'blocked', to: 'cleared' }] });
   await assert.rejects(f.execute(), /ACTION_FAILED/);
-  assert.equal(f.draws(), 0);
 });
 
-test('an ordinary failed attempt cannot become an unrolled stretch when the model changes its category', async () => {
-  const f = await fixture({ probability: 0 });
-  f.assessment({ kind: 'ordinary' });
-  f.override({ success: false, factChanges: [] });
-  assert.equal((await f.execute()).success, false);
-  f.assessment({});
-  f.override({});
-  assert.equal((await f.execute()).success, false);
-  f.assessment({ kind: 'invalid' });
-  assert.equal((await f.execute()).success, false);
-  assert.equal(f.draws(), 0);
-  assert.equal(f.game.obstacleIndex, 0);
+test('cat-claw photo use reaches the default blindfold judge and completes only that obstacle', async () => {
+  const f = await fixture({
+    scenarioPath: 'scenarios/playtest/warehouse-expanded-r1.json',
+    itemName: '猫',
+  });
+  f.assessment({ approach: 'Scratch the blindfold strap with photographed cat claws' });
+  const result = await f.execute('猫の爪で目隠しを切り裂いて');
+  assert.equal(result.success, true);
+  assert.match(result.narrative, /猫をもとにした道具が/);
+  assert.doesNotMatch(result.narrative, /猫が/);
+  assert.match(f.game.inventory[0]!.description, /形と働きを再現した道具/);
+  assert.match(f.game.inventory[0]!.description, /生き物や新しい登場人物ではない/);
+  assert.equal(f.game.obstacleIndex, 1);
+  const next = f.snapshot.scenarioV2.obstacles[1]!;
+  assert.equal(f.game.facts.values[next.completionFact!.key], 'blocked');
+  assert.match(f.requests[0].body.instructions, /猫の爪で目隠しを切り裂く/);
+  assert.match(f.requests[0].body.instructions, /There is NO lottery/);
+  assert.match(f.requests[0].body.instructions, /takes precedence over stricter physicality/);
+  assert.equal(f.requests[0].data.proposal.items[0].name, '猫');
+  assert.equal(f.requests[0].data.proposal.usage, '猫の爪で目隠しを切り裂いて');
 });
 
-test('a transport retry shares one draw; missing classification never silently falls back', async () => {
-  const f = await fixture({ sample: 0.1 });
+test('a transport retry commits once; missing classification never silently falls back', async () => {
+  const f = await fixture();
   f.failTransport();
   assert.equal((await f.execute()).success, true);
   assert.equal(f.calls(), 2);
-  assert.equal(f.draws(), 1);
+  assert.equal(f.game.actionsUsed, 1);
   const bad = await fixture();
   bad.override({ creativity: undefined });
   await assert.rejects(bad.execute(), /ACTION_FAILED/);
-  assert.equal(bad.draws(), 0);
   assert.equal(bad.game.actionsUsed, 0);
 });
 
-test('cancellation and stale controller prevent both a draw and a committed result', async () => {
+test('cancellation and stale controller prevent a committed result', async () => {
   for (const cancel of ['cancel', 'controller', 'end'] as const) {
-    const f = await fixture({ sample: 0 });
+    const f = await fixture();
     let release!: () => void;
     f.pause(
       new Promise<void>((resolve) => {
@@ -391,13 +368,12 @@ test('cancellation and stale controller prevent both a draw and a committed resu
     else f.game.end('expired');
     release();
     await rejected;
-    assert.equal(f.draws(), 0);
     assert.equal(f.game.actionsUsed, 0);
     assert.equal(f.game.inventory.length, 0);
   }
 });
 
-test('photo routing shares the stretch boundary while preserving wait, risk and committed outcomes', async () => {
+test('photo routing preserves explicit wait and sends concrete risks to judgment', async () => {
   let instructions = '';
   await classifyPhoto(
     {
@@ -418,8 +394,11 @@ test('photo routing shares the stretch boundary while preserving wait, risk and 
     true,
   );
   assert.match(instructions, /do not reject a concrete stretch/);
-  assert.match(instructions, /Respect wait\/cancel/);
-  assert.match(instructions, /material unapproved irreversible risks/);
+  assert.match(instructions, /Respect an explicit wait or cancel/);
+  assert.match(instructions, /Do not add a permission step/);
+  assert.match(instructions, /じゃあハサミで/);
+  assert.match(instructions, /is not by itself wait or cancel/);
+  assert.doesNotMatch(instructions, /confirm_risk|requiring consent/);
   assert.match(instructions, /Only a committed result establishes success/);
   assert.equal(
     creativeAssessmentSchema.safeParse({ ...stretch, effect: privateText }).success,

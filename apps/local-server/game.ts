@@ -32,6 +32,7 @@ import type { GameEndReason } from '../../packages/shared/ending.js';
 import { endingOutcome, type CommittedEndingAction } from './ending.js';
 import { GameCredits } from './credits.js';
 import { creditCosts, type CreditKind } from '../../packages/shared/credits.js';
+import { gimmickGuidance, withoutGimmickHint } from './gimmick-guidance.js';
 export class GameError extends Error {
   constructor(
     public status: number,
@@ -62,8 +63,6 @@ export class GameSession {
       attempts: number;
       photoCreditAmount: number;
       controller: AbortController;
-      controls: Map<string, ReturnType<typeof setTimeout>>;
-      controlWaiters: Set<() => void>;
       result?: ActionResult;
     }
   >();
@@ -99,15 +98,13 @@ export class GameSession {
     now?: () => number,
     private onEnd: () => void = () => {},
     readonly coreSnapshot?: ScenarioSnapshot,
-    creativeRandom?: () => number,
   ) {
     if (coreSnapshot?.coreConfig.creativity?.enabled)
-      this.creativeAttempts = new CreativeAttemptLedger(
-        coreSnapshot.coreConfig.creativity.successProbability,
-        creativeRandom,
-      );
+      this.creativeAttempts = new CreativeAttemptLedger();
     this.credits = new GameCredits(scenario.rules.initialCredits);
-    this.situation = scenario.obstacles[0].situation;
+    this.situation = coreSnapshot
+      ? (gimmickGuidance(coreSnapshot, 0)?.text ?? scenario.obstacles[0].situation)
+      : scenario.obstacles[0].situation;
     if (coreSnapshot) this.generation = 1;
     this.facts = {
       obstacleId: scenario.obstacles[0].id,
@@ -187,6 +184,8 @@ export class GameSession {
   }
   end(status: 'won' | 'lost' | 'expired' = 'expired', reason?: GameEndReason) {
     if (this.terminal) return;
+    if (this.coreSnapshot)
+      this.situation = withoutGimmickHint(this.coreSnapshot, this.obstacleIndex, this.situation);
     this.status = status;
     this.endReason =
       status === 'expired'
@@ -408,41 +407,10 @@ export class GameSession {
       context.photos = [];
       context.creativity = undefined;
     }
-    for (const record of this.coreActions.values()) this.releaseActionControls(record);
   }
 
   get pendingActionId(): string | null {
     return this.pending;
-  }
-
-  /** Register received speech before asynchronous classification can race the commit. */
-  holdPendingAction(actionId: string, controlId: string): boolean {
-    const record = this.coreActions.get(actionId);
-    if (!record || record.ticket.status !== 'pending' || this.pending !== actionId) return false;
-    if (record.controls.has(controlId)) return true;
-    if (!controlId || controlId.length > 200 || record.controls.size >= 100) {
-      this.cancelPendingAction(actionId);
-      return false;
-    }
-    const timeout = setTimeout(() => this.cancelPendingAction(actionId), 5_000);
-    timeout.unref();
-    record.controls.set(controlId, timeout);
-    return true;
-  }
-
-  resolvePendingActionControl(
-    actionId: string,
-    controlId: string,
-    decision: 'keep' | 'cancel',
-  ): boolean {
-    const record = this.coreActions.get(actionId);
-    if (!record || record.ticket.status !== 'pending' || !record.controls.has(controlId))
-      return false;
-    if (decision === 'cancel') return this.cancelPendingAction(actionId);
-    clearTimeout(record.controls.get(controlId)!);
-    record.controls.delete(controlId);
-    if (!record.controls.size) this.releaseActionControls(record);
-    return true;
   }
 
   /** Cancellation is final for this ticket; a replacement must reserve a new one. */
@@ -453,21 +421,10 @@ export class GameSession {
     record.controller.abort();
     this.actionEpoch++;
     record.context.photos = [];
-    this.releaseActionControls(record);
     this.pending = null;
     if (!this.terminal) this.status = 'playing';
     this.clock.resume('judgment');
     return true;
-  }
-
-  private releaseActionControls(record: {
-    controls: Map<string, ReturnType<typeof setTimeout>>;
-    controlWaiters: Set<() => void>;
-  }) {
-    for (const timer of record.controls.values()) clearTimeout(timer);
-    record.controls.clear();
-    for (const resolve of record.controlWaiters) resolve();
-    record.controlWaiters.clear();
   }
 
   private recordCommittedAction(
@@ -597,7 +554,10 @@ export class GameSession {
         context.inventory.push({
           id,
           name: item.name,
-          description: item.name,
+          description:
+            this.coreSnapshot?.locale === 'en'
+              ? `A tool reconstructed from the shape and function of ${item.name}; not a living actor.`
+              : `${item.name}の形と働きを再現した道具。生き物や新しい登場人物ではない。`,
           status: 'available',
         });
         item.photoId = null;
@@ -636,8 +596,6 @@ export class GameSession {
             ? retained!.photoCreditAmount
             : 0,
       controller: new AbortController(),
-      controls: new Map(),
-      controlWaiters: new Set(),
     });
     intent.evidenceSeq.forEach((seq) => this.reservedEvidence.add(seq));
     this.discardRetainedRequest();
@@ -677,8 +635,6 @@ export class GameSession {
       let judgment: CoreJudgment;
       let repairCode: string | undefined;
       for (;;) {
-        while (record.controls.size && ticket.status === 'pending')
-          await new Promise<void>((resolve) => record.controlWaiters.add(resolve));
         this.assertPendingAction(ticket);
         record.attempts++;
         try {
@@ -697,7 +653,7 @@ export class GameSession {
             ),
           );
           this.assertPendingAction(ticket);
-          // All repairable checks run before random draws or any mutation.
+          // All repairable checks run before any mutation.
           this.validateCoreJudgment(context, judgment);
           if (judgment.creativity?.kind === 'stretch' && !judgment.success)
             throw new Error('INVALID_STRETCH_CANDIDATE');
@@ -715,9 +671,6 @@ export class GameSession {
           repairCode = aiFailureCode(error);
         }
       }
-      while (record.controls.size && ticket.status === 'pending') {
-        await new Promise<void>((resolve) => record.controlWaiters.add(resolve));
-      }
       return this.commitActionResult(ticket, judgment);
     } catch (error) {
       if (record.ticket.status === 'invalid') throw new GameError(410, 'ACTION_INVALID');
@@ -733,7 +686,6 @@ export class GameSession {
       throw new GameError(502, 'ACTION_FAILED', aiFailureCode(error));
     } finally {
       context.photos = [];
-      this.releaseActionControls(record);
       if (this.pending === ticket.id) {
         this.pending = null;
         if (!this.terminal) this.status = 'playing';
@@ -759,10 +711,8 @@ export class GameSession {
   private commitActionResult(ticket: ActionTicket, judgment: CoreJudgment): ActionResult {
     this.assertPendingAction(ticket);
     const record = this.coreActions.get(ticket.id)!;
-    if (record.controls.size) throw new GameError(409, 'ACTION_CONTROL_PENDING');
     const { context, proposal } = record;
-    // Validate the hypothetical candidate before drawing or changing any state.
-    // Failed/stale/cancelled requests never consume a draw.
+    // Validate the candidate before changing any state.
     let { facts, inventory } = this.validateCoreJudgment(context, judgment);
     if (this.creativeAttempts && judgment.creativity) {
       if (judgment.creativity.kind === 'stretch' && !judgment.success)
@@ -773,12 +723,7 @@ export class GameSession {
         identity.fingerprint,
         judgment.creativity,
       );
-      if (
-        !decision.allowed ||
-        judgment.creativity.kind === 'invalid' ||
-        // An earlier ordinary attempt grants no license for a later hypothetical stretch.
-        (decision.kind === 'ordinary' && judgment.creativity.kind === 'stretch')
-      ) {
+      if (!decision.allowed || judgment.creativity.kind === 'invalid') {
         judgment = projectPublicJudgment(this.coreSnapshot!, context, {
           ...judgment,
           success: false,
@@ -829,8 +774,14 @@ export class GameSession {
     else if (judgment.success) {
       this.obstacleIndex++;
       this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
-      this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
-    }
+      this.situation = this.coreSnapshot
+        ? (gimmickGuidance(this.coreSnapshot, this.obstacleIndex)?.text ??
+          this.scenario.obstacles[this.obstacleIndex].situation)
+        : this.scenario.obstacles[this.obstacleIndex].situation;
+    } else if (this.coreSnapshot)
+      this.situation =
+        gimmickGuidance(this.coreSnapshot, this.obstacleIndex, this.situation)?.text ??
+        this.situation;
     return structuredClone(result);
   }
 
@@ -994,8 +945,14 @@ export class GameSession {
       else if (result.success) {
         this.obstacleIndex++;
         this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
-        this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
-      }
+        this.situation = this.coreSnapshot
+          ? (gimmickGuidance(this.coreSnapshot, this.obstacleIndex)?.text ??
+            this.scenario.obstacles[this.obstacleIndex].situation)
+          : this.scenario.obstacles[this.obstacleIndex].situation;
+      } else if (this.coreSnapshot)
+        this.situation =
+          gimmickGuidance(this.coreSnapshot, this.obstacleIndex, this.situation)?.text ??
+          this.situation;
       return result;
     } catch (error) {
       if (record.status !== 'invalid') {

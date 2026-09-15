@@ -15,6 +15,7 @@ function setup(
     c: ReturnType<ConversationLedger['captureUnconsumedContext']>,
   ) => Promise<IntentDecision>,
   execute?: () => Promise<void>,
+  canClassify?: () => boolean,
 ) {
   let time = 1000,
     calls = 0;
@@ -22,6 +23,7 @@ function setup(
   const coordinator = new IntentCoordinator({
     ledger,
     now: () => time,
+    canClassify,
     classify:
       classify ??
       (async (c) => ({
@@ -247,6 +249,72 @@ test('one worker and at most three classifications per delegation', async () => 
   }
   assert.equal(classified, 3);
   assert.equal(s.calls(), 0);
+});
+
+test('photo processing preserves fragmented instructions without spending classification attempts or the deadline', async () => {
+  let ready = false;
+  let classified = 0;
+  const s = setup(
+    async (context) => {
+      classified++;
+      assert.equal(context.fragments.map((f) => f.delta).join(''), 'ハサミで切って');
+      return {
+        kind: 'execute',
+        evidenceSeq: context.eligibleEvidenceSeq,
+        itemRefs: [{ photoId }],
+        usage: 'cut',
+        reason: 'complete direction after the photo',
+      };
+    },
+    undefined,
+    () => ready,
+  );
+  s.input('ハサミ');
+  s.delegate();
+  await s.coordinator.settled();
+  for (const [index, fragment] of ['で', '切', 'って'].entries()) {
+    s.setTime(2_000 + index * 10_000);
+    s.input(fragment, 300 + index, 301 + index);
+    s.coordinator.tick();
+    await s.coordinator.settled();
+  }
+  s.setTime(35_000);
+  s.coordinator.tick();
+  await s.coordinator.settled();
+  assert.equal(classified, 0);
+  assert.equal(s.coordinator.snapshot()[0]?.attempts, 0);
+  assert.equal(s.coordinator.snapshot()[0]?.status, 'pending');
+  assert.equal(s.ledger.captureUnconsumedContext().eligibleEvidenceSeq.length, 4);
+  ready = true;
+  s.coordinator.onContextChanged();
+  await s.coordinator.settled();
+  assert.equal(classified, 1);
+  assert.equal(s.calls(), 1);
+  assert.equal(s.coordinator.snapshot()[0]?.deadline, 55_000);
+  s.delegate('duplicate-direction');
+  await s.coordinator.settled();
+  assert.equal(s.calls(), 1);
+});
+
+test('a deferred delegation still expires after its available processing time', async () => {
+  let ready = false;
+  const s = setup(
+    async () => ({ kind: 'wait', reason: 'unfinished' }),
+    undefined,
+    () => ready,
+  );
+  s.input('ハサミで');
+  s.delegate();
+  await s.coordinator.settled();
+  s.setTime(31_000);
+  ready = true;
+  s.coordinator.tick();
+  await s.coordinator.settled();
+  assert.equal(s.coordinator.snapshot()[0]?.status, 'pending');
+  s.setTime(51_000);
+  s.coordinator.tick();
+  await s.coordinator.settled();
+  assert.equal(s.coordinator.snapshot()[0]?.status, 'expired');
 });
 
 test('UTF-8 ledger limit is enforced and generation reset removes old evidence', () => {

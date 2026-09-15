@@ -4,6 +4,7 @@ import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import type { GameFacts } from '../../packages/shared/conversation.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
 import type { IntentContext } from './conversation.js';
+import { gimmickGuidance } from './gimmick-guidance.js';
 
 /** Count committed completions, including a clear on the last available action. */
 export function storyClearCount(snapshot: ScenarioSnapshot, facts: GameFacts): number {
@@ -55,9 +56,11 @@ export function storyOpeningBriefing(snapshot: ScenarioSnapshot) {
   const locale = snapshot.locale;
   const publicScene = buildPublicScene(snapshot);
   const details = publicScene.overview;
+  const guidance = gimmickGuidance(snapshot, 0);
+  const firstObstacle = guidance ? `\n\n${guidance.text}` : '';
   return locale === 'ja'
-    ? `一週間後のあなたが、${snapshot.scenarioV2.title.ja}に閉じ込められた。特殊な通信で、過去のあなたに連絡しています。\n\n${details}\n\n気になる場所やものを、私に調べるよう頼んでください。分かったことから突破口を一緒に考えましょう。使えそうな身近なものがあれば、写真を送って使い方を教えてください。`
-    : `Your future self is trapped in ${snapshot.scenarioV2.title.en}, one week from now. I’m contacting you in the past through a special connection.\n\n${details}\n\nAsk me to examine a place or object that catches your attention. We can reason from what we discover. If you have a useful everyday object, send me its photo and tell me how to use it.`;
+    ? `一週間後のあなたが、${snapshot.scenarioV2.title.ja}に閉じ込められた。特殊な通信で、過去のあなたに連絡しています。\n\n${details}${firstObstacle}\n\n使えそうな身近なものがあれば、写真を送って使い方を教えてください。`
+    : `Your future self is trapped in ${snapshot.scenarioV2.title.en}, one week from now. I’m contacting you in the past through a special connection.\n\n${details}${firstObstacle}\n\nIf you have a useful everyday object, send me its photo and tell me how to use it.`;
 }
 
 export function storyFromState(

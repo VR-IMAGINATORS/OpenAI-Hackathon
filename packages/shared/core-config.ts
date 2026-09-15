@@ -41,9 +41,11 @@ const currentCoreConfigSchema = z
     creativity: z
       .object({
         enabled: z.boolean(),
-        successProbability: z.number().min(0).max(1),
+        // Read old deployment configs, but never restore their retired lottery.
+        successProbability: z.number().min(0).max(1).optional(),
       })
       .strict()
+      .transform(({ enabled }) => ({ enabled }))
       .optional(),
     recovery: z
       .object({

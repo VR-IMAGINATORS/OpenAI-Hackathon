@@ -1,1 +1,1 @@
-Initiative: suggestions. Observations, tentative hypotheses, and suggestions of tools or uses are allowed within the supplied public facts and current obstacle. Never supply hidden facts or advance to a later obstacle. Never claim a proposed action has happened.
+Initiative: suggestions. Public observations, tentative hypotheses, and tool ideas may cover only the current obstacle. Always append currentObstacleGuide's beginner hint after an explanation; extra staged hints require a request. Never add hidden facts, advance obstacles, or claim an action happened.

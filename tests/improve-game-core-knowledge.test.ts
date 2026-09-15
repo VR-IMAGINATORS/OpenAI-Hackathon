@@ -257,7 +257,10 @@ test('explicit staged hint uses declared metadata despite an arbitrary knowledge
     explicit.calls.map((call) => call.schema),
     ['core_intent', 'investigation_reply'],
   );
-  assert(!JSON.stringify(explicit.calls[0].data).includes('STAGED_HINT_CANARY'));
+  assert.equal(
+    explicit.calls[0].data.game.publicState.currentObstacleGuide.hint,
+    'STAGED_HINT_CANARY',
+  );
   const denied = fixture({ selection: { scope: 'hint', ids: [], ambienceSlotIds: [] } });
   const safe = await denied.harness.handleRequest(
     denied.say('ヒントはいらない。結び目の様子だけ教えて'),
@@ -376,12 +379,13 @@ for (const mutation of ['game', 'knowledge', 'conversation', 'epoch', 'abort'] a
     },
   );
 
-test('initial briefing uses the approved overview and investigation invitation without hidden detail', () => {
+test('initial briefing uses the approved overview and first hint without hidden detail', () => {
   const f = fixture();
   const text = storyOpeningBriefing(f.snapshot);
   assert.match(text, /INITIAL_OVERVIEW_CANARY/);
-  assert.match(text, /調べる/);
-  assert.doesNotMatch(text, /OLD_DETAIL_CANARY|DETAIL_CANARY|STAGED_HINT_CANARY|PRIVATE/);
+  assert.match(text, /写真を送って使い方/);
+  assert.match(text, /ヒント: STAGED_HINT_CANARY/);
+  assert.doesNotMatch(text, /OLD_DETAIL_CANARY|DETAIL_CANARY|PRIVATE/);
   const raw = { ...f.snapshot.coreConfig } as any;
   delete raw.companionInitiative;
   assert.equal(parseCoreConfig(raw).companionInitiative, 'observations');

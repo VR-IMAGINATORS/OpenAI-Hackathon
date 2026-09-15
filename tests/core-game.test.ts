@@ -382,7 +382,7 @@ for (const change of ['cancel', 'photo', 'controller', 'end'] as const)
     assert.equal(f.calls(), 2);
   });
 
-test('a held correction blocks the retry and cancellation prevents another model call', async () => {
+test('explicit cancellation aborts before a repair can make another model call', async () => {
   let reject!: (error: Error) => void;
   const f = await fixture(
     async () =>
@@ -393,11 +393,8 @@ test('a held correction blocks the retry and cancellation prevents another model
   const ticket = f.reserve();
   const running = f.game.judgeAction(ticket);
   const rejected = assert.rejects(running, /ACTION_INVALID/);
-  assert.equal(f.game.holdPendingAction(ticket.id, 'correction'), true);
+  assert.equal(f.game.cancelPendingAction(ticket.id), true);
   reject(new SyntaxError('broken'));
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.equal(f.calls(), 1);
-  f.game.cancelPendingAction(ticket.id);
   await rejected;
   assert.equal(f.calls(), 1);
   assert.equal(f.game.actionsUsed, 0);

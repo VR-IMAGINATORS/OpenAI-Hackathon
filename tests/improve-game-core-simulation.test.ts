@@ -301,7 +301,7 @@ test('frozen conditions and out-of-order remaining refuse before any API', async
     assert.equal(ctx.budget.calls.length, 0);
   }));
 
-test('photo danger waits and ask confirms through the same classifier and action judge', async () => {
+test('photo use reaches the action judge without a risk confirmation turn', async () => {
   const mock = createMockPlayClient();
   let judges = 0;
   const a = adapter({
@@ -310,22 +310,11 @@ test('photo danger waits and ask confirms through the same classifier and action
         data = JSON.parse(b.input[0].content[0].text);
       if (b.text.format.name === 'harness_photo')
         return response(b, {
-          decision: 'confirm_risk',
+          decision: 'execute',
           itemRefs: [{ photoId: data.photos[0] }],
           usage: '危険を承知で使う',
           message: '壊れるかもしれない。続ける？',
           reason: 'risk',
-        });
-      if (b.text.format.name === 'core_intent')
-        return response(b, {
-          decision: {
-            kind: 'execute',
-            evidenceSeq: data.conversation.eligibleEvidenceSeq,
-            itemRefs: data.game.pendingRisk.itemRefs,
-            usage: data.game.pendingRisk.usage,
-            reason: 'confirmed',
-          },
-          inferences: [],
         });
       if (b.text.format.name === 'game_result') judges++;
       return mock.respond(body, signal);
@@ -337,12 +326,9 @@ test('photo danger waits and ask confirms through the same classifier and action
       catalogIds: [input.config.objectCatalog[0]!.id],
       usage: null,
     });
-    assert.equal(a.game.actionsUsed, 0);
-    assert.equal(judges, 0);
-    const r = await a.turn({ kind: 'ask', text: 'はい、それを実行して' });
     assert.equal(judges, 1);
-    assert.equal(r.publicStateAfter.actionsUsed, 1);
-    assert.equal(r.publicStateAfter.creditsRemaining, 880);
+    assert.equal(a.game.actionsUsed, 1);
+    assert.equal(a.game.credits.remaining, 900);
   } finally {
     a.close();
   }

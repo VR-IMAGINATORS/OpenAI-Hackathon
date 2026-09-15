@@ -14,6 +14,8 @@ export interface DelegationInput {
 export interface CoordinatorOptions {
   ledger: ConversationLedger;
   consumeOnReservation?: boolean;
+  /** Input remains queued while photo recognition or another operation owns the game. */
+  canClassify?: () => boolean;
   classify: (
     context: IntentContext,
     delegation: DelegationRequest | null,
@@ -37,6 +39,7 @@ export class IntentCoordinator {
   private readonly requestContexts = new WeakMap<DelegationRequest, IntentContext>();
   private readonly now: () => number;
   private worker?: Promise<void>;
+  private deferredAt: number | null = null;
   private dirty = false;
   private stopped = false;
   private epoch = 0;
@@ -103,6 +106,7 @@ export class IntentCoordinator {
   /** Called by the runtime heartbeat, including when no more Live events arrive. */
   tick(): void {
     if (this.stopped || !this.options.ledger.active) return;
+    if (!this.refreshReadiness()) return;
     this.expire();
     this.observeContext();
     if (this.recovery && this.now() >= this.recovery.deadline) {
@@ -120,6 +124,7 @@ export class IntentCoordinator {
     this.expireAll();
     this.dirty = false;
     this.recovery = undefined;
+    this.deferredAt = null;
     this.observedKey = this.contextKey(this.options.ledger.captureUnconsumedContext());
     this.checkedKey = this.observedKey;
     this.stableSince = this.now();
@@ -190,12 +195,28 @@ export class IntentCoordinator {
     this.notify(() => this.options.onExpired?.(structuredClone(d)));
   }
   private expire() {
+    if (!this.refreshReadiness()) return;
     for (const d of this.requests.values())
       if (
         (d.status === 'pending' || d.status === 'evaluating') &&
         (this.now() >= d.deadline || (d.attempts >= 3 && d.status !== 'evaluating'))
       )
         this.markExpired(d);
+  }
+  private refreshReadiness(): boolean {
+    const at = this.now();
+    if (this.options.canClassify?.() === false) {
+      this.deferredAt ??= at;
+      return false;
+    }
+    if (this.deferredAt !== null) {
+      for (const d of this.requests.values())
+        if (d.status === 'pending' || d.status === 'evaluating')
+          d.deadline += Math.max(0, at - Math.max(this.deferredAt, d.receivedAt));
+      if (this.recovery) this.recovery.deadline += Math.max(0, at - this.deferredAt);
+      this.deferredAt = null;
+    }
+    return true;
   }
   private expireAll() {
     for (const d of this.requests.values())
@@ -256,7 +277,7 @@ export class IntentCoordinator {
       this.dirty = false;
       this.expire();
       const ledger = this.options.ledger;
-      if (ledger.judging) return;
+      if (ledger.judging || !this.refreshReadiness()) return;
       const context = ledger.captureUnconsumedContext();
       if (!context.eligibleEvidenceSeq.length) return;
       const d = [...this.requests.values()].find(

@@ -51,15 +51,6 @@ export class GameHarness {
   readonly correctedEvidence = new Set<string>();
   activeUsage = '';
   runtimeActionId: string | null = null;
-  photoAcceptance?: { revision: number; decision: PhotoDecision };
-  pendingRisk?: {
-    usage: string;
-    itemRefs: ExecuteIntent['itemRefs'];
-    mode?: ExecuteIntent['mode'];
-    environmentTargetIds?: ExecuteIntent['environmentTargetIds'];
-    message: string;
-    gameVersion: number;
-  };
   knowledge?: KnowledgeStore;
   hintEvidence = new Map<string, Set<string>>();
 
@@ -150,7 +141,7 @@ export class GameHarness {
       JSON.stringify({
         type: 'photo_result',
         facts: decision.message,
-        requiresConfirmation: decision.decision === 'confirm_risk',
+        requiresConfirmation: false,
       }),
       delegationId,
       null,
@@ -274,14 +265,11 @@ export class GameHarness {
   }
   beginPhotos(count: number) {
     const ticket = this.game.beginPhotos(count);
-    this.pendingRisk = undefined;
-    this.photoAcceptance = undefined;
     this.sync(true);
     return ticket;
   }
   cancelPending(operationId: string): boolean {
     const cancelled = this.game.cancelPendingAction(operationId);
-    this.pendingRisk = undefined;
     this.sync();
     return cancelled;
   }
@@ -304,12 +292,6 @@ export class GameHarness {
       conversation: context,
       game: {
         publicState: this.publicContext(),
-        photoAcceptance:
-          this.photoAcceptance?.revision === this.game.inputRevision
-            ? this.photoAcceptance.decision
-            : null,
-        pendingRisk:
-          this.pendingRisk?.gameVersion === this.game.gameVersion ? this.pendingRisk : null,
         status: this.game.status,
         situation: this.game.situation,
         obstacle: this.coreSnapshot.scenarioV2.obstacles[this.game.obstacleIndex],
@@ -326,11 +308,6 @@ export class GameHarness {
       retainedRequest: this.game.retainedRequest,
       onDiscardRetainedRequest: () => this.game.discardRetainedRequest(),
       gameState: this.game.state(),
-      onRiskProposal: (proposal) => {
-        if (this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion)
-          return;
-        this.pendingRisk = { ...proposal, gameVersion: this.game.gameVersion };
-      },
       onRecognitionCorrection: (correction) => {
         if (
           this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion ||
@@ -345,8 +322,6 @@ export class GameHarness {
         item.name = correction.name;
         this.game.inputRevision++;
         this.game.proposal!.inputRevision = this.game.inputRevision;
-        this.pendingRisk = undefined;
-        this.photoAcceptance = undefined;
         this.sync(true);
       },
     });
@@ -387,67 +362,8 @@ export class GameHarness {
     context: IntentContext,
     delegationId: string | null,
   ): Promise<void> {
-    const coreSnapshot = this.coreSnapshot!;
-
     this.hooks.check();
-    if (
-      this.photoAcceptance?.revision === this.game.inputRevision &&
-      this.photoAcceptance.decision.decision === 'reject' &&
-      intent.itemRefs.some((ref) => 'photoId' in ref)
-    ) {
-      const revision = this.game.inputRevision;
-      const decision = await classifyPhoto(
-        this.modelClient(),
-        {
-          acceptancePolicy: coreSnapshot.coreConfig.acceptancePolicy[coreSnapshot.locale],
-          priorDecision: this.photoAcceptance.decision,
-          publicState: this.publicContext(),
-          inventory: this.game.inventory,
-          recognizedItems: this.game.proposal?.items,
-          photos: this.game.photos.map((photo) => photo.id),
-          requestedUsage: intent.usage,
-          userSpeech: context.fragments
-            .filter(
-              (fragment) =>
-                fragment.speaker === 'user' && intent.evidenceSeq.includes(fragment.serverSeq),
-            )
-            .map((fragment) => fragment.delta)
-            .join(''),
-        },
-        !!coreSnapshot.coreConfig.creativity?.enabled,
-      );
-      this.hooks.check(context.controllerEpoch);
-      if (
-        this.game.inputRevision !== revision ||
-        this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion
-      )
-        throw new GameError(409, 'ACTION_INVALID');
-      this.photoAcceptance = { revision, decision };
-      if (decision.decision !== 'execute') {
-        if (intent.evidenceSeq.length) this.ledger!.consume(intent.evidenceSeq);
-        if (decision.decision === 'confirm_risk')
-          this.pendingRisk = {
-            usage: decision.usage,
-            itemRefs: decision.itemRefs,
-            message: decision.message,
-            gameVersion: this.game.gameVersion,
-          };
-        this.photoReply(decision, delegationId);
-        return;
-      }
-    }
     this.game.currentContextVersion = this.ledger!.captureUnconsumedContext().contextVersion;
-    if (
-      this.pendingRisk?.gameVersion === this.game.gameVersion &&
-      (intent.usage !== this.pendingRisk.usage ||
-        JSON.stringify(intent.itemRefs) !== JSON.stringify(this.pendingRisk.itemRefs) ||
-        (intent.mode ?? 'tool') !== (this.pendingRisk.mode ?? 'tool') ||
-        JSON.stringify(intent.environmentTargetIds ?? []) !==
-          JSON.stringify(this.pendingRisk.environmentTargetIds ?? []))
-    ) {
-      // A changed proposal never inherits permission given for a previous risk.
-      this.pendingRisk = undefined;
-    }
     this.hooks.diagnostic('action_reserving');
     const ticket = this.game.reserveAction(
       intent,
@@ -460,7 +376,6 @@ export class GameHarness {
     this.ledger!.updateState({ judging: true });
     this.activeUsage = intent.usage;
     this.runtimeActionId = ticket.id;
-    this.pendingRisk = undefined;
     this.hooks.diagnostic('judgment_started');
     const judgmentStarted = this.now();
     const messageId = randomUUID();
@@ -483,7 +398,7 @@ export class GameHarness {
     this.sync();
     this.hooks.trace({
       actionId: ticket.id,
-      configDigest: coreSnapshot.digest,
+      configDigest: this.coreSnapshot.digest,
       interpretation: intent.usage.slice(0, 1000),
       shortReason: result.shortReason.slice(0, 1000),
       durationMs: Math.max(0, Math.round(this.now() - judgmentStarted)),
@@ -556,7 +471,6 @@ export class GameHarness {
         return;
       if (context.contextVersion !== this.ledger.captureUnconsumedContext().contextVersion)
         continue;
-      this.photoAcceptance = { revision: photoVersion, decision };
       if (decision.decision === 'execute') {
         await this.executeCore(
           {
@@ -571,13 +485,6 @@ export class GameHarness {
           null,
         );
       } else if (decision.decision !== 'wait') {
-        if (decision.decision === 'confirm_risk')
-          this.pendingRisk = {
-            usage: decision.usage,
-            itemRefs: decision.itemRefs,
-            message: decision.message,
-            gameVersion: version,
-          };
         this.photoReply(decision);
       }
       return;
@@ -650,8 +557,7 @@ export class GameHarness {
             : {
                 type: 'consultation',
                 facts: publicText,
-                requiresConfirmation: !!decision.riskProposal,
-                ...(decision.riskProposal ? { risk: decision.riskProposal.message } : {}),
+                requiresConfirmation: false,
                 ambience: this.companionContext().ambience,
               },
         ),

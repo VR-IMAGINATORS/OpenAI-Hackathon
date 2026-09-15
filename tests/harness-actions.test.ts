@@ -89,37 +89,14 @@ const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 const transient = () =>
   Object.assign(new Error('transport'), { code: 'UPSTREAM_FAILED', status: 502 });
 
-test('pending control fences a ready result until every input is kept', async () => {
-  const answer = deferred<CoreJudgment>();
-  const f = await fixture(async () => answer.promise);
-  const ticket = f.reserve();
-  const running = f.game.judgeAction(ticket);
-  assert.equal(f.game.holdPendingAction(ticket.id, 'one'), true);
-  assert.equal(f.game.holdPendingAction(ticket.id, 'two'), true);
-  answer.resolve(partial);
-  await turn();
-  assert.equal(f.game.gameVersion, 0);
-  f.game.resolvePendingActionControl(ticket.id, 'one', 'keep');
-  await turn();
-  assert.equal(f.game.gameVersion, 0);
-  f.game.resolvePendingActionControl(ticket.id, 'two', 'keep');
-  const result = await running;
-  assert.equal(result.afterVersion, 1);
-  assert.equal(f.game.cancelPendingAction(ticket.id), false);
-  assert.deepEqual(await f.game.judgeAction(ticket), result);
-  assert.equal(f.calls(), 1);
-});
-
-test('cancellation before commit drops the old result and preserves received photos', async () => {
+test('explicit cancellation before commit drops the old result and preserves received photos', async () => {
   const answer = deferred<CoreJudgment>();
   const f = await fixture(async () => answer.promise);
   const ticket = f.reserve();
   const running = f.game.judgeAction(ticket);
   const rejected = assert.rejects(running, /ACTION_INVALID/);
-  f.game.holdPendingAction(ticket.id, 'cancel');
+  f.game.cancelPendingAction(ticket.id);
   answer.resolve(partial);
-  await turn();
-  f.game.resolvePendingActionControl(ticket.id, 'cancel', 'cancel');
   await rejected;
   assert.equal(f.game.gameVersion, 0);
   assert.equal(f.game.inventory.length, 0);
@@ -216,33 +193,17 @@ test('limits, refusals, client errors and ordinary physical failure are not retr
   assert.equal(f.game.gameVersion, 1);
 });
 
-test('terminal invalidation wakes a result waiting for control without committing', async () => {
-  const f = await fixture();
+test('terminal invalidation aborts an unfinished judgment without committing', async () => {
+  const answer = deferred<CoreJudgment>();
+  const f = await fixture(async () => answer.promise);
   const ticket = f.reserve();
-  f.game.holdPendingAction(ticket.id, 'pending');
   const running = f.game.judgeAction(ticket);
   const rejected = assert.rejects(running, /ACTION_INVALID/);
   await turn();
   f.game.end('expired');
+  answer.resolve(partial);
   await rejected;
   assert.equal(f.game.gameVersion, 0);
-});
-
-test('unresolved control times out without committing the completed judgment', async () => {
-  const f = await fixture();
-  const ticket = f.reserve();
-  f.game.holdPendingAction(ticket.id, 'unresolved');
-  const running = f.game.judgeAction(ticket);
-  // A real timer keeps this test alive while the implementation timer is unrefed.
-  const keeper = setTimeout(() => {}, 6_000);
-  try {
-    await assert.rejects(running, /ACTION_INVALID/);
-    assert.equal(f.game.gameVersion, 0);
-    assert.equal(f.game.pendingActionId, null);
-    assert.equal(f.game.clock.paused, false);
-  } finally {
-    clearTimeout(keeper);
-  }
 });
 
 test('photo origin requires the exact recognized owned batch and input revision', async () => {

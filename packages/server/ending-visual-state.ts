@@ -23,6 +23,7 @@ export function endingVisualState(packet: EndingPacket, facts: GameFacts = packe
     snapshot,
     facts: target,
     situation: '',
+    presentation: 'ending',
   });
   return { target, rules };
 }

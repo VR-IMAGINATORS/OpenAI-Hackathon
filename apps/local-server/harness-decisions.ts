@@ -6,7 +6,7 @@ import { creativeRouting } from './creative-acceptance.js';
 const text = z.string().min(1).max(2000);
 export const photoDecisionSchema = z
   .object({
-    decision: z.enum(['execute', 'clarify', 'reject', 'confirm_risk', 'wait']),
+    decision: z.enum(['execute', 'clarify', 'wait']),
     usage: z.string().max(1000),
     itemRefs: z.array(itemReferenceSchema).max(40),
     message: text,
@@ -14,12 +14,6 @@ export const photoDecisionSchema = z
   })
   .strict();
 export type PhotoDecision = z.infer<typeof photoDecisionSchema>;
-export const controlDecisionSchema = z
-  .object({
-    decision: z.enum(['keep', 'cancel', 'replace', 'unknown']),
-    replacement: z.string().max(1000),
-  })
-  .strict();
 
 export interface HarnessModel {
   respond(body: unknown): Promise<unknown>;
@@ -70,28 +64,13 @@ export function classifyPhoto(client: HarnessModel, input: unknown, creativityEn
     [
       'Choose how a companion should react to a newly received photo in an escape game.',
       'A photo authorizes an obvious use for the CURRENT obstacle. Use recent conversation and recognized items. If a cutting tool was requested and scissors arrived, execute without asking how.',
+      'Resolve short follow-ups against the recent stated purpose. Phrases such as "じゃあハサミで" or "いや、ドライバーで外そう" are concrete uses when the target or intended effect is already clear. A leading disagreement word or a brief tool name is not by itself wait or cancel.',
       'Respect any user request to wait or not use an item. Never start another obstacle. Fill in ordinary steps using existing tools and permitted equipment only.',
-      'Choose a clearly useful low-risk use when obvious; clarify only when intent is unclear or alternatives differ materially. Empty usage and itemRefs for non-action decisions are permitted.',
-      'Apply acceptancePolicy in context, normal physics, materialization limits, reach and consequences. Never grant magic or invent tools. Reject out-of-world objects with a short grounded explanation; do not invent new limits.',
-      'When priorDecision is provided, preserve its conclusion unless userSpeech gives relevant new factual information or corrects recognition. Repeated insistence, magic claims, or paraphrasing the same request is not new evidence. Reevaluate the requestedUsage under the same policy and known physics; never silently replace the item.',
-      'Low-risk experiments are allowed. If unapproved irreversible harm or tool loss is likely, return confirm_risk with the proposed usage and specific risk. Never claim success before a committed result.',
-      'References must exist in the input. message is a short public briefing: photo acceptance, missing intended use, or the specific risk requiring consent. Do not write a character response, greeting, acknowledgment or repeat the user request. Live alone chooses the spoken words. Never put private reasoning, action counters, delegation or processing mechanics in message; reason is internal.',
+      'Choose a clearly useful use when obvious; clarify only when intent is unclear or alternatives differ materially. Empty usage and itemRefs for non-action decisions are permitted.',
+      'Do not reject a concrete use at routing time because it conflicts with normal physics, materialization limits, reach, or likely consequences. Preserve the requested item and effect and route it to execution; the action judge applies the world rules and can fail it. Never grant magic or invent tools.',
+      'Do not ask for permission because an attempt could damage, consume, or lose a tool or have irreversible in-world consequences. Route a concrete use to execute; the action judge determines its real outcome and canonical state changes. Never claim success before a committed result.',
+      'References must exist in the input. message is a short public briefing for a missing intended use. Do not write a character response, greeting, acknowledgment or repeat the user request. Live alone chooses the spoken words. Never put private reasoning, action counters, delegation or processing mechanics in message; reason is internal.',
       ...(creativityEnabled ? [creativeRouting] : []),
-    ].join('\n'),
-    input,
-  );
-}
-
-export function classifyActionControl(client: HarnessModel, input: unknown) {
-  return harnessResponse(
-    client,
-    controlDecisionSchema,
-    'harness_control',
-    [
-      'Classify only actual user speech directed at the pending action.',
-      'keep means a greeting, question, acknowledgment or repeated same request, not a new action.',
-      'cancel means a request to stop or wait. replace means an explicit correction of how the pending action should be performed; replacement states only that correction.',
-      'An unfinished correction or ambiguous change is unknown. Never interpret silence or assistant text as consent. Do not invent missing intent.',
     ].join('\n'),
     input,
   );

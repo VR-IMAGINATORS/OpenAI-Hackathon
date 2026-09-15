@@ -58,7 +58,6 @@ interface PlayBudget {
   liveAttempts: number;
   responseAttempts: number;
   responseBusy: number;
-  controlBusy: number;
   live?: LiveReservation;
 }
 
@@ -106,7 +105,6 @@ export class AiService {
       liveAttempts: 0,
       responseAttempts: 0,
       responseBusy: 0,
-      controlBusy: 0,
     });
   }
 
@@ -544,23 +542,17 @@ export class AiService {
     }
   }
   respond(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-    return this.respondInLane(playId, body, false, signal);
+    return this.respondInLane(playId, body, signal);
   }
 
   /** Server-owned game calls only; never selected by an HTTP request field. */
   respondGame(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-    return this.respondInLane(playId, body, false, signal, true);
-  }
-
-  /** Internal control classification only. HTTP request bodies cannot select this lane. */
-  respondControl(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-    return this.respondInLane(playId, body, true, signal, true);
+    return this.respondInLane(playId, body, signal, true);
   }
 
   private async respondInLane(
     playId: string,
     body: unknown,
-    control: boolean,
     signal?: AbortSignal,
     game = false,
   ): Promise<unknown> {
@@ -572,16 +564,14 @@ export class AiService {
       !parsed.success ||
       !this.config.responseModels.includes(parsed.data.model) ||
       (!game && parsed.data.max_output_tokens > this.config.outputTokens) ||
-      (game && !control && parsed.data.model !== this.config.gameModel) ||
-      (control && parsed.data.text.format.name !== 'harness_control')
+      (game && parsed.data.model !== this.config.gameModel)
     )
       throw new AiServiceError(400, 'INVALID_REQUEST', '認識要求の設定を確認してください。');
     // Concurrent players can briefly occupy all slots. Waiting is not a new
     // provider attempt, and must never bypass a spent request budget.
     if (
       game &&
-      !control &&
-      (play.responseBusy - play.controlBusy >= this.config.responseConcurrentPerPlay ||
+      (play.responseBusy >= this.config.responseConcurrentPerPlay ||
         this.responseBusy >= this.config.responseConcurrentGlobal)
     ) {
       if (this.gameWaiting >= 20) this.limit();
@@ -589,7 +579,7 @@ export class AiService {
       const deadline = performance.now() + 5000;
       try {
         while (
-          play.responseBusy - play.controlBusy >= this.config.responseConcurrentPerPlay ||
+          play.responseBusy >= this.config.responseConcurrentPerPlay ||
           this.responseBusy >= this.config.responseConcurrentGlobal
         ) {
           this.active(playId);
@@ -611,16 +601,13 @@ export class AiService {
       }
     }
     if (
-      (control
-        ? play.controlBusy >= 1
-        : play.responseBusy - play.controlBusy >= this.config.responseConcurrentPerPlay) ||
+      play.responseBusy >= this.config.responseConcurrentPerPlay ||
       play.responseAttempts >= this.config.responsesPerPlay ||
       this.responseAttempts >= this.config.globalResponseAttempts ||
       this.responseBusy >= this.config.responseConcurrentGlobal
     )
       this.limit();
     play.responseBusy++;
-    if (control) play.controlBusy++;
     play.responseAttempts++;
     this.responseBusy++;
     this.responseAttempts++;
@@ -640,7 +627,6 @@ export class AiService {
     });
     const release = () => {
       play.responseBusy--;
-      if (control) play.controlBusy--;
       this.responseBusy--;
       if (play.retired) this.forget(playId);
     };
