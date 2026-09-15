@@ -21,6 +21,7 @@ const response = (value: unknown) => ({
 const film = {
   usedEvidenceIds: ['opening-clue'],
   usedActionIds: [],
+  itemCoverage: [],
   candidates: [
     { focus: 'two actions', reason: 'unavailable' },
     { focus: 'one action', reason: 'unavailable' },
@@ -30,7 +31,8 @@ const film = {
   mode: 'aftermath',
   startPrompt: 'The restrained person looks at the red mark near the closed exit.',
   endPrompt: 'The same person lowers their gaze; the exit and remaining restraints stay closed.',
-  videoPrompt: '15 seconds of breathing and a quiet reaction, with room ambience only.',
+  videoPrompt:
+    '[Shot 1] 15 seconds of breathing beside the frayed rope when present, with room ambience only.',
 };
 
 function packet(action: 'none' | 'failed' | 'successful'): EndingPacket {
@@ -112,7 +114,7 @@ function packet(action: 'none' | 'failed' | 'successful'): EndingPacket {
     endedAt: 0,
     gameVersion: action === 'none' ? 0 : 1,
     finalMessageId: null,
-    recentActionScenes: [],
+    actionScenes: [],
   };
 }
 function narrative(p: EndingPacket): EndingNarrative {
@@ -313,6 +315,17 @@ for (const variant of [
               usedEvidenceIds: textFailure ? [] : film.usedEvidenceIds,
               mode: replay ? 'actions' : 'aftermath',
               usedActionIds: replay ? ['attempt'] : [],
+              itemCoverage: p.actions.length
+                ? [
+                    {
+                      itemId: 'rope',
+                      actionId: 'attempt',
+                      shot: 1,
+                      depiction: replay ? 'use' : 'trace',
+                      reason: 'The rope pulls the chain or records its confirmed damage.',
+                    },
+                  ]
+                : [],
             });
           }
           inspections.push(request);
@@ -330,7 +343,10 @@ for (const variant of [
             assert.deepEqual(input.selectedActions, []);
             assert.equal(input.outcome, 'bad');
             assert.deepEqual(input.target, p.facts);
-            assert.deepEqual(input.items, p.inventory);
+            assert.deepEqual(
+              input.items,
+              p.inventory.map(({ id, name, status }) => ({ id, name, status })),
+            );
             assert.match(
               request.instructions,
               /No action replay, tool interaction or successful action is required/,

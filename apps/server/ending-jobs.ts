@@ -242,10 +242,13 @@ export class EndingJobs {
     timer.unref?.();
     // Freeze visual inputs at game end, before the transcript grace period or queue wait.
     const ready = video ? this.results.readySceneReferences(packet.playId, packet.gameVersion) : [];
-    const before = packet.actions.slice(-2).flatMap((action) => {
-      const reference = ready.find((r) => r.gameVersion === action.beforeVersion);
-      return reference ? [reference] : [];
-    });
+    const beforeVersions = new Set(packet.actions.map((action) => action.beforeVersion));
+    const before = ready
+      .filter((reference) => {
+        if (!beforeVersions.delete(reference.gameVersion)) return false;
+        return true;
+      })
+      .sort((a, b) => a.gameVersion - b.gameVersion);
     if (video) this.reserved++;
     const job: Job = {
       id,

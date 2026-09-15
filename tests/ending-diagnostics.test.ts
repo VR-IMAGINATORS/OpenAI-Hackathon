@@ -214,6 +214,12 @@ test('local startup reports the effective process limit and disabled/mock states
 });
 
 for (const variant of [
+  {
+    name: 'four actions replay from the early completed reference',
+    ready: [0, 1, 2, 3, 4],
+    finalStatus: 'ready',
+    fullPlay: true,
+  },
   { name: 'completed final scene', ready: [0, 1, 2], finalStatus: 'ready' },
   { name: 'queued final scene at time limit', ready: [0, 1], finalStatus: 'queued' },
   { name: 'failed final scene at time limit', ready: [0, 1], finalStatus: 'failed' },
@@ -253,6 +259,9 @@ for (const variant of [
   },
 ] as const)
   test('default ending producer: ' + variant.name, async (t) => {
+    const actionNames =
+      'fullPlay' in variant ? ['first', 'second', 'third', 'fourth'] : ['first', 'second'];
+    const finalVersion = actionNames.length;
     const readyVersions: readonly number[] = variant.ready;
     const latestVersion = readyVersions.at(-1) ?? ('late' in variant ? 2 : undefined);
     const hasLastActionReference = readyVersions.includes(1) && !('directionFailure' in variant);
@@ -278,7 +287,8 @@ for (const variant of [
       story: 'The mark from the first conversation remained on the glass.',
       evaluation: 'Two restraints were removed.',
       usedEvidenceIds: ['early'],
-      usedActionIds: hasLastActionReference ? ['second'] : [],
+      usedActionIds: 'fullPlay' in variant ? actionNames : hasLastActionReference ? ['second'] : [],
+      itemCoverage: [],
       candidates: [
         { focus: 'two actions', reason: 'compare' },
         { focus: 'one action', reason: 'clear' },
@@ -317,12 +327,12 @@ for (const variant of [
             const input = JSON.parse(request.input[0].content[0].text!);
             assert.deepEqual(
               input.availableBeforeReferences.map((r: { gameVersion: number }) => r.gameVersion),
-              readyVersions.filter((v) => v < 2),
+              readyVersions.filter((v) => v < finalVersion),
             );
-            assert.equal(input.confirmedGameVersion, 2);
+            assert.equal(input.confirmedGameVersion, finalVersion);
             assert.equal(input.references[0].gameVersion, latestVersion);
             assert.equal(input.facts.values.glass, 'clear');
-            assert.equal(input.actions.length, 2);
+            assert.equal(input.actions.length, finalVersion);
             assert.equal(input.outcome, 'normal');
             if (latestVersion! < 2) assert.match(input.references[0].role, /earlier/);
             if ('directionFailure' in variant) {
@@ -365,9 +375,9 @@ for (const variant of [
     ai.register(playId, 600_000);
     const results = new ResultStore({ now: () => 1000, maxEntryBytes: 32 * 1024 * 1024 });
     results.create({ playId, ownerDigest: 'owner', locale: 'en' });
-    const sceneIds = [randomUUID(), randomUUID(), randomUUID()];
+    const sceneIds = Array.from({ length: finalVersion + 1 }, () => randomUUID());
     const assetIds: string[] = [];
-    for (const version of [0, 1, 2]) {
+    for (const version of sceneIds.keys()) {
       const bytes = await sharp({
         create: {
           width: 1024,
@@ -414,8 +424,8 @@ for (const variant of [
       facts: { obstacleId: 'last', values: { glass: 'clear' } },
       inventory: [],
       endedAt: 0,
-      gameVersion: 2,
-      finalMessageId: sceneIds[2],
+      gameVersion: finalVersion,
+      finalMessageId: sceneIds[finalVersion],
       evidence: {
         records: [
           {
@@ -429,7 +439,7 @@ for (const variant of [
         ],
         truncated: false,
       },
-      actions: ['first', 'second'].map((actionId, i) => ({
+      actions: actionNames.map((actionId, i) => ({
         actionId,
         order: i + 1,
         obstacleId: 'last',
@@ -443,7 +453,7 @@ for (const variant of [
         cleared: true,
         narrative: 'The glass is clear.',
       })),
-      recentActionScenes: ['first', 'second'].map((actionId, i) => ({
+      actionScenes: actionNames.map((actionId, i) => ({
         actionId,
         before: { messageId: sceneIds[i], gameVersion: i },
         after: { messageId: sceneIds[i + 1], gameVersion: i + 1 },
@@ -528,7 +538,7 @@ for (const variant of [
     assert.equal(results.ending('owner', playId).status, 'ready');
     assert.equal(submits, 1);
     assert.equal(edits.length, 2);
-    const startVersion = hasLastActionReference ? 1 : latestVersion;
+    const startVersion = 'fullPlay' in variant ? 0 : hasLastActionReference ? 1 : latestVersion;
     assert.deepEqual(
       edits[0].images[0],
       results.sceneReference(playId, sceneIds[startVersion], startVersion)!.jpeg,
@@ -540,7 +550,7 @@ for (const variant of [
         : results.sceneReference(playId, sceneIds[latestVersion], latestVersion)!.jpeg,
     );
     assert.equal(edits[1].images.length, design.mode === 'aftermath' ? 1 : 2);
-    assert.match(edits[1].prompt, /"targetGameVersion":2/);
+    assert.match(edits[1].prompt, new RegExp('"targetGameVersion":' + finalVersion));
     assert.match(
       edits[1].prompt,
       new RegExp(

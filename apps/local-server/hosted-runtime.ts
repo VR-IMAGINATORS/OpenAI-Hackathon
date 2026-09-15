@@ -1018,7 +1018,7 @@ export class GameRuntime {
       endedAt,
       gameVersion: this.game.gameVersion,
       finalMessageId: reference(this.game.gameVersion)?.messageId ?? null,
-      recentActionScenes: this.game.committedActions.slice(-2).map((action) => ({
+      actionScenes: this.game.committedActions.map((action) => ({
         actionId: action.actionId,
         before: reference(action.beforeVersion),
         after: reference(action.afterVersion),

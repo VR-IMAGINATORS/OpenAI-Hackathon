@@ -16,7 +16,11 @@ import { createEndingFrames } from '../packages/server/ending-image-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import type { AiService } from '../packages/server/ai-service.js';
 import type { EndingCallKind } from '../packages/server/ending-ai-request.js';
-import { parseEndingResponseRequest } from '../packages/server/ending-ai-request.js';
+import {
+  parseEndingResponseRequest,
+  endingImageRequest,
+} from '../packages/server/ending-ai-request.js';
+import { aftermathDirection } from '../apps/local-server/ending-fallback.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 
 const signal = () => new AbortController().signal;
@@ -129,7 +133,7 @@ function packet(clue = 'The red mark was a signal left by the player.'): EndingP
     endedAt: 1000,
     gameVersion: 4,
     finalMessageId: 'final-scene',
-    recentActionScenes: [],
+    actionScenes: [],
   };
 }
 function design(
@@ -142,6 +146,15 @@ function design(
     evaluation: 'Your rope loosened two restraints; the final lock remained.',
     usedEvidenceIds: ['early-clue'],
     usedActionIds: ['action-3', 'action-4'],
+    itemCoverage: [
+      {
+        itemId: 'rope',
+        actionId: 'action-3',
+        shot: 1,
+        depiction: overrides.mode === 'aftermath' ? 'trace' : 'use',
+        reason: 'Show the rope and its confirmed fraying.',
+      },
+    ],
     candidates: [
       { focus: 'two actions', reason: 'one location' },
       { focus: 'one action', reason: 'clear contact' },
@@ -151,7 +164,8 @@ function design(
     mode: 'actions',
     startPrompt: 'A restrained person examines the known frayed rope in the same room.',
     endPrompt: 'The person pauses by the closed door and the established red mark.',
-    videoPrompt: 'A 15-second aftermath with environmental sounds, no speech or music.',
+    videoPrompt:
+      '[Shot 1] A 15-second rope sequence with environmental sounds, no speech or music.',
     ...overrides,
   };
 }
@@ -174,6 +188,223 @@ const narrative = (p = packet(), patch: Partial<EndingNarrative> = {}): EndingNa
   ...textOutput(),
   presentedEvidence: p.evidence.records,
   ...patch,
+});
+
+function wholePlay() {
+  const p = packet();
+  p.actions = p.actions.slice(0, 3);
+  const item = (id: string, afterStatus: 'available' | 'damaged' | 'consumed') => ({
+    id,
+    name: id,
+    beforeStatus: 'available' as const,
+    afterStatus,
+  });
+  p.actions[0].items = [item('tape', 'consumed')];
+  p.actions[0].usage = 'Use the tape to lift the cover.';
+  p.actions[1].items = [item('lamp', 'damaged')];
+  p.actions[1].usage =
+    'Illuminate the recess with the lamp; the lamp cracks and the lock remains shut.';
+  p.actions[2].items = [item('hook', 'available'), item('magnet', 'available')];
+  p.actions[2].usage = 'Combine the hook and magnet to lift the latch.';
+  p.inventory = [
+    { id: 'lamp', name: 'lamp', description: 'Cracked', status: 'damaged' },
+    { id: 'hook', name: 'hook', description: 'Hook', status: 'available' },
+    { id: 'magnet', name: 'magnet', description: 'Magnet', status: 'available' },
+    { id: 'spare', name: 'spare', description: 'Never used', status: 'available' },
+  ];
+  p.facts = p.actions[2].afterFacts;
+  p.gameVersion = 3;
+  const film = design({
+    usedActionIds: ['action-1', 'action-2', 'action-3'],
+    itemCoverage: [
+      {
+        itemId: 'tape',
+        actionId: 'action-1',
+        shot: 1,
+        depiction: 'use',
+        reason: 'Tape lifts cover then is consumed.',
+      },
+      {
+        itemId: 'lamp',
+        actionId: 'action-2',
+        shot: 2,
+        depiction: 'use',
+        reason: 'Lamp cracks; lock remains shut.',
+      },
+      {
+        itemId: 'hook',
+        actionId: 'action-3',
+        shot: 3,
+        depiction: 'use',
+        reason: 'Hook supports the magnet.',
+      },
+      {
+        itemId: 'magnet',
+        actionId: 'action-3',
+        shot: 3,
+        depiction: 'use',
+        reason: 'Magnet and hook lift the latch.',
+      },
+      {
+        itemId: 'spare',
+        actionId: null,
+        shot: 4,
+        depiction: 'presence',
+        reason: 'Unused spare remains at the ending.',
+      },
+    ],
+    videoPrompt:
+      '[Shot 1] Tape lifts the cover then is consumed. [Shot 2] At 00:03.000, the camera cuts to the lamp illuminating the recess; it cracks and the lock stays shut. [Shot 3] At 00:06.000, the camera cuts to the hook and magnet lifting the latch together. [Shot 4] At 00:09.000, the camera cuts to the still unescaped person and unused spare. Around 12 seconds reveal to be continued...; hold through 15 seconds.',
+  });
+  return { p, film, first: { ...before, gameVersion: 0 }, last: { ...final, gameVersion: 3 } };
+}
+
+test('full-play film covers early consumed, failed, combined and unused tools with the existing call budget', async () => {
+  const { p, film, first, last } = wholePlay();
+  const jpeg = await generatedJpeg();
+  first.jpeg = last.jpeg = jpeg;
+  const f = fakeAi((call) => {
+    if (call.kind === 'frame') {
+      const checked = endingImageRequest.safeParse(call.body);
+      assert(checked.success, JSON.stringify(checked.error?.issues));
+      return imageResponse(jpeg);
+    }
+    parseEndingResponseRequest(call.body);
+    return response(call.kind === 'direction' ? film : { verdict: 'pass', problems: [] });
+  });
+  const result = await createEndingDesign(f.ai, 'job', p, last, first, signal(), narrative(p), [
+    first,
+    { ...before, gameVersion: 1 },
+    before,
+  ]);
+  assert.deepEqual(result.usedActionIds, ['action-1', 'action-2', 'action-3']);
+  assert.deepEqual(result.itemCoverage, film.itemCoverage);
+  const input = payloadOf(f.calls[0]);
+  assert.deepEqual(input.preferredSequenceActionIds, result.usedActionIds);
+  assert.deepEqual(
+    input.itemCatalog.map((item: any) => item.id),
+    ['tape', 'lamp', 'hook', 'magnet', 'spare'],
+  );
+  assert.equal(input.actions[1].success, false, 'a failed tool use remains available');
+  assert.equal(
+    input.itemCatalog[0].status,
+    'consumed',
+    'terminal inventory cannot erase early tools',
+  );
+  const frames = await createEndingFrames(f.ai, 'job', p, result, last, first, signal());
+  assert.deepEqual(
+    f.calls.map((call) => call.kind),
+    ['direction', 'frame', 'inspection', 'frame', 'inspection'],
+  );
+  assert.equal(f.calls[0].body.max_output_tokens, 4096);
+  assert.equal(f.calls[0].body.input[0].content.length, 3);
+  const start = payloadOf(f.calls[2]);
+  const end = payloadOf(f.calls[4]);
+  assert.equal(start.targetGameVersion, 0);
+  assert.deepEqual(
+    start.items.map((item: any) => [item.id, item.status]),
+    [['tape', 'available']],
+  );
+  assert.equal(end.targetGameVersion, 3);
+  assert.equal(end.items.find((item: any) => item.id === 'tape').status, 'consumed');
+  assert.equal(end.items.find((item: any) => item.id === 'lamp').status, 'damaged');
+  assert.deepEqual(f.calls[3].body.images, [last.jpeg, frames.start]);
+});
+
+test('coverage rejects missing items, invented uses, silent prop downgrades and inconsistent shots', async () => {
+  const { p, film, first, last } = wholePlay();
+  const variants: ((value: EndingDesign) => void)[] = [
+    (value) => {
+      value.itemCoverage.shift();
+    },
+    (value) => {
+      value.itemCoverage.push(value.itemCoverage[0]);
+    },
+    (value) => {
+      value.itemCoverage[0].itemId = 'invented';
+    },
+    (value) => {
+      value.itemCoverage[0].actionId = 'action-2';
+    },
+    (value) => {
+      value.itemCoverage[4].actionId = 'action-1';
+      value.itemCoverage[4].depiction = 'use';
+    },
+    (value) => {
+      value.itemCoverage[0].actionId = null;
+      value.itemCoverage[0].depiction = 'presence';
+    },
+    (value) => {
+      value.itemCoverage[1].actionId = null;
+      value.itemCoverage[1].depiction = 'presence';
+    },
+    (value) => {
+      value.itemCoverage[0].shot = 9;
+    },
+    (value) => {
+      value.itemCoverage[0].shot = 3;
+    },
+    (value) => {
+      value.itemCoverage[2].depiction = 'trace';
+      value.itemCoverage[2].shot = 1;
+    },
+    (value) => {
+      value.itemCoverage[0].depiction = 'omitted';
+    },
+    (value) => {
+      value.itemCoverage[0].shot = null;
+    },
+    (value) => {
+      value.itemCoverage[0].reason = ' ';
+    },
+    (value) => {
+      value.usedActionIds = ['action-1', 'action-3'];
+    },
+    (value) => {
+      value.usedActionIds = [];
+      value.mode = 'aftermath';
+    },
+  ];
+  for (const mutate of variants) {
+    const invalid = structuredClone(film);
+    mutate(invalid);
+    const f = fakeAi(() => response(invalid));
+    await assert.rejects(createEndingDesign(f.ai, 'job', p, last, first, signal(), narrative(p)));
+    assert.equal(f.calls.length, 1, 'invalid accounting adds no repair request');
+  }
+});
+
+test('reference gaps allow explained traces and omissions while accounting for the entire play', async () => {
+  const { p, film, last } = wholePlay();
+  film.mode = 'aftermath';
+  film.usedActionIds = [];
+  for (const row of film.itemCoverage) {
+    if (row.depiction === 'use') {
+      row.depiction = 'trace';
+      row.reason = 'Use images missing; show the confirmed consequence only.';
+      row.shot = 4;
+    }
+  }
+  film.itemCoverage[0] = {
+    itemId: 'tape',
+    actionId: 'action-1',
+    shot: null,
+    depiction: 'omitted',
+    reason: 'Consumed at the earlier cover; no visible remnant at the final doorway.',
+  };
+  film.videoPrompt =
+    '[Shot 4] The confirmed final state: lamp damage, hook and magnet at rest, unused spare. No action replay.';
+  const f = fakeAi(() => response(film));
+  const result = await createEndingDesign(f.ai, 'job', p, last, undefined, signal(), narrative(p));
+  assert.deepEqual(result.itemCoverage, film.itemCoverage);
+  assert.deepEqual(payloadOf(f.calls[0]).allowedModes, ['aftermath']);
+  const recovery = aftermathDirection(p);
+  assert.equal(recovery.itemCoverage.length, 5);
+  assert(
+    recovery.itemCoverage.every(
+      (row) => row.depiction === 'omitted' && row.shot === null && row.reason,
+    ),
+  );
 });
 
 function manyReferences(): EndingPacket {
@@ -218,7 +449,22 @@ test('large reference enums fit the real request limit and preserve every story/
         },
       });
     }
-    return response(design({ usedEvidenceIds: ids, mode: 'aftermath', usedActionIds: [] }));
+    return response(
+      design({
+        usedEvidenceIds: ids,
+        mode: 'aftermath',
+        usedActionIds: [],
+        itemCoverage: [
+          {
+            itemId: 'rope',
+            actionId: input.actions[0].actionId,
+            shot: 1,
+            depiction: 'trace',
+            reason: 'The confirmed frayed rope.',
+          },
+        ],
+      }),
+    );
   });
   const story = await createEndingText(f.ai, 'job', p, signal());
   const expectedSources = [p.evidence.records[0].sourceId, p.evidence.records.at(-1)!.sourceId];
@@ -232,6 +478,97 @@ test('large reference enums fit the real request limit and preserve every story/
   assert.deepEqual(film.usedEvidenceIds, expectedSources);
   assert.equal(f.calls.length, 2, 'one story and one film call; no extra extraction or repair');
 });
+
+for (const longProse of [false, true])
+  test(`full-play direction and endpoint frames fit existing request limits with 40 long item/action IDs (long prose: ${longProse})`, async () => {
+    const p = manyReferences();
+    const repeatedFacts = Object.fromEntries(
+      Array.from({ length: 30 }, (_, i) => [`known-${i}`, 'x'.repeat(100)]),
+    );
+    p.actions = p.actions.map((action, i) => ({
+      ...action,
+      beforeVersion: i,
+      afterVersion: i + 1,
+      usage: longProse
+        ? 'Use the confirmed tool. '.repeat(80)
+        : 'Use the tool on the current obstacle.',
+      narrative: longProse
+        ? 'The confirmed partial result. '.repeat(65)
+        : 'A confirmed partial result.',
+      items: [
+        {
+          id: `item-${i}-` + 'i'.repeat(120),
+          name: `tool ${i}`,
+          beforeStatus: 'available',
+          afterStatus: 'damaged',
+        },
+      ],
+      beforeFacts: { obstacleId: 'last', values: { ...repeatedFacts, progress: String(i) } },
+      afterFacts: { obstacleId: 'last', values: { ...repeatedFacts, progress: String(i + 1) } },
+    }));
+    p.facts = p.actions.at(-1)!.afterFacts;
+    p.gameVersion = 40;
+    p.inventory = p.actions.flatMap((action) =>
+      action.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        status: item.afterStatus,
+        description: 'Already confirmed tool.',
+      })),
+    );
+    const jpeg = await generatedJpeg();
+    const f = fakeAi((call) => {
+      if (call.kind === 'frame') {
+        const checked = endingImageRequest.safeParse(call.body);
+        assert(checked.success, JSON.stringify(checked.error?.issues));
+        return imageResponse(jpeg);
+      }
+      parseEndingResponseRequest(call.body);
+      if (call.kind === 'inspection') return response({ verdict: 'pass', problems: [] });
+      const input = payloadOf(call);
+      assert.equal(input.actionFactsAreChanges, true);
+      assert.equal(input.actionDetailsIncomplete, longProse);
+      assert.equal(input.actions.length, 40);
+      assert.equal(input.itemCatalog.length, 40);
+      assert.equal(input.actions[0].actionId, 'a1');
+      assert.equal(input.itemCatalog[0].id, 'i1');
+      assert.deepEqual(input.actions[0].beforeFacts.values, { progress: '0' });
+      assert.deepEqual(input.actions[0].afterFacts.values, { progress: '1' });
+      assert.equal(
+        input.actions[0].usage,
+        p.actions[0].usage,
+        'early distinct tool retains a whole method',
+      );
+      assert.deepEqual(
+        input.eligibleActionIds,
+        input.actions.filter((a: any) => a.usage !== null).map((a: any) => a.actionId),
+      );
+      return response(
+        design({
+          mode: 'aftermath',
+          usedActionIds: [],
+          usedEvidenceIds: ['e1'],
+          itemCoverage: input.itemCatalog.map((item: any, i: number) => ({
+            itemId: item.id,
+            actionId: input.actions[i].actionId,
+            shot: 1,
+            depiction: 'trace',
+            reason: 'Confirmed tool damage.',
+          })),
+          videoPrompt: '[Shot 1] The damaged tools remain in the confirmed ending state.',
+        }),
+      );
+    });
+    const last = { ...final, gameVersion: 40, jpeg };
+    const film = await createEndingDesign(f.ai, 'job', p, last, before, signal(), narrative(p));
+    assert.equal(film.itemCoverage[0].itemId, p.inventory[0].id);
+    assert.equal(film.itemCoverage.at(-1)!.actionId, p.actions.at(-1)!.actionId);
+    await createEndingFrames(f.ai, 'job', p, film, last, undefined, signal());
+    assert.deepEqual(
+      f.calls.map((call) => call.kind),
+      ['direction', 'frame', 'inspection', 'frame', 'inspection'],
+    );
+  });
 
 test('long extraction IDs map back to exact original quotes without growing the schema', async () => {
   const p = manyReferences();
@@ -416,8 +753,8 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.deepEqual(a.actions, first.actions);
   assert.equal(a.tagCatalog, undefined, 'film cannot choose tags again');
   assert.equal(a.establishedEnding.text, narrative().story);
-  assert.deepEqual(a.recentActionIds, ['action-3', 'action-4']);
-  assert.deepEqual(a.preferredActionIds, ['action-3']);
+  assert.deepEqual(a.eligibleActionIds, ['action-1', 'action-2', 'action-3', 'action-4']);
+  assert.deepEqual(a.preferredSequenceActionIds, ['action-3', 'action-4']);
   assert.equal(a.presentedEvidence[0].text, first.evidence.records[0].text);
   assert.equal(b.presentedEvidence[0].text, second.evidence.records[0].text);
   assert.notEqual(a.actions[0].narrative, b.actions[0].narrative);
@@ -432,10 +769,10 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.match(f.calls[0].body.instructions, /confirmed outcome and facts override/);
   assert.match(f.calls[0].body.instructions, /Normal\/bad means not escaped/);
   assert.match(f.calls[0].body.instructions, /No speech, narration, singing or music/);
-  assert.match(f.calls[0].body.instructions, /prefer mode=actions and include a preferred action/);
+  assert.match(f.calls[0].body.instructions, /EVERY item in itemCatalog across the ENTIRE play/);
 });
 
-test('film prefers a chronological pair with supported progress and keeps single-action and aftermath fallbacks', async () => {
+test('film offers the full supported chronological span even for failed and environmental actions', async () => {
   for (const variant of [
     'latest',
     'failed',
@@ -472,21 +809,13 @@ test('film prefers a chronological pair with supported progress and keeps single
     );
     const input = payloadOf(f.calls[0]);
     assert.deepEqual(
-      input.preferredActionIds,
-      variant === 'opening-only' || variant === 'all-failed'
-        ? []
-        : variant === 'latest'
-          ? ['action-4', 'action-3']
-          : variant === 'missing-first-before'
-            ? ['action-4']
-            : ['action-3'],
-    );
-    assert.deepEqual(
       input.preferredSequenceActionIds,
-      ['opening-only', 'all-failed', 'missing-first-before'].includes(variant)
+      variant === 'opening-only'
         ? []
-        : ['action-3', 'action-4'],
-      'the pair follows chronology, includes a confirmed failure, and requires its opening reference',
+        : variant === 'missing-first-before'
+          ? ['action-4']
+          : ['action-3', 'action-4'],
+      'the span follows chronology, includes failures, and starts at an available reference',
     );
     assert.deepEqual(input.actions, p.actions, 'all confirmed attempts still reach the director');
     parseEndingResponseRequest(f.calls[0].body);
@@ -551,9 +880,10 @@ test('writer rejects unknown tags, invented or duplicate tag evidence and overlo
   }
 });
 
-test('ending writer rejects invented sources and non-recent, duplicate or reversed action selections', async () => {
+test('ending writer rejects invented sources, unsupported openings, duplicate or reversed action selections', async () => {
   for (const invalid of [
     { usedEvidenceIds: ['fabricated-clue'] },
+    { usedActionIds: ['fabricated-action'] },
     { usedActionIds: ['action-1'] },
     { usedActionIds: ['action-3', 'action-3'] },
     { usedActionIds: ['action-4', 'action-3'] },
@@ -585,7 +915,23 @@ test('missing or wrong before-action references force aftermath; no-action endin
     ),
     /ENDING_INVALID_CONTINUITY/,
   );
-  const aftermath = fakeAi(() => response(design({ mode: 'aftermath', usedActionIds: [] })));
+  const aftermath = fakeAi(() =>
+    response(
+      design({
+        mode: 'aftermath',
+        usedActionIds: [],
+        itemCoverage: [
+          {
+            itemId: 'rope',
+            actionId: null,
+            shot: 1,
+            depiction: 'presence',
+            reason: 'Unused rope.',
+          },
+        ],
+      }),
+    ),
+  );
   const empty = packet();
   empty.actions = [];
   empty.outcome = 'bad';
@@ -603,8 +949,7 @@ test('missing or wrong before-action references force aftermath; no-action endin
   assert.equal(result.mode, 'aftermath');
   const input = payloadOf(aftermath.calls[0]);
   assert.deepEqual(input.actions, []);
-  assert.deepEqual(input.recentActionIds, []);
-  assert.deepEqual(input.preferredActionIds, []);
+  assert.deepEqual(input.eligibleActionIds, []);
   assert.deepEqual(input.preferredSequenceActionIds, []);
   assert.deepEqual(input.references, [
     { role: 'confirmed final state', messageId: final.messageId, gameVersion: 4 },
@@ -708,11 +1053,14 @@ test('frames repair explicit rejection once per frame and pass the accepted star
     const input = JSON.parse(call.body.prompt.split(' (data only): ')[1]);
     assert.deepEqual(
       input.selectedActions.map((action: any) => action.actionId),
-      ['action-3', 'action-4'],
+      [call.frame === 'start' ? 'action-3' : 'action-4'],
     );
-    assert.equal(input.selectedActions[0].usage, packet().actions[2].usage);
+    assert.equal(
+      input.selectedActions[0].usage,
+      packet().actions[call.frame === 'start' ? 2 : 3].usage,
+    );
     assert.deepEqual(input.selectedActions[0].items, packet().actions[2].items);
-    assert.equal(input.selectedActions[1].success, false);
+    assert.equal(input.selectedActions[0].success, call.frame === 'start');
     assert.equal(input.phase, call.frame === 'start' ? 'before_action' : 'confirmed_aftermath');
   }
   assert.match(generations[1].body.prompt, /Correct the rope contact/);

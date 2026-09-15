@@ -1,5 +1,6 @@
 import { endingTitle, type EndingDesign } from './ending-ai.js';
 import type { EndingPacket } from './ending.js';
+import { endingItems } from './ending-coverage.js';
 
 /** Recovery directions, not a generated story. The frame pipeline supplies and checks play facts. */
 export function aftermathDirection(packet: EndingPacket): EndingDesign {
@@ -18,9 +19,17 @@ export function aftermathDirection(packet: EndingPacket): EndingDesign {
     mode: 'aftermath',
     usedActionIds: [],
     usedEvidenceIds: [],
+    itemCoverage: endingItems(packet).map((item) => ({
+      itemId: item.id,
+      actionId: null,
+      shot: null,
+      depiction: 'omitted',
+      reason:
+        'Direction unavailable; the recovery preserves final state but cannot promise a dedicated item beat.',
+    })),
     candidates: [
-      { focus: 'two actions', reason: 'Unavailable after direction generation failed.' },
-      { focus: 'one action', reason: 'Avoid replaying an unverified action direction.' },
+      { focus: 'full-play items', reason: 'Unavailable after direction generation failed.' },
+      { focus: 'compressed item beats', reason: 'Avoid replaying an unverified action direction.' },
       { focus: 'aftermath', reason: 'Preserve the confirmed ending state with minimal motion.' },
     ],
     selectionReason:

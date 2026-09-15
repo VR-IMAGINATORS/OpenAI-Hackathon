@@ -5,6 +5,7 @@ import { normalizeGeneratedImage } from './image-service.js';
 import { endingVisualState } from './ending-visual-state.js';
 import { recoverableAiError } from './ai-recovery.js';
 import type { EndingPacket } from '../../apps/local-server/ending.js';
+import { endingItems } from '../../apps/local-server/ending-coverage.js';
 import {
   endingCall,
   abortableDelay,
@@ -75,7 +76,7 @@ export async function createEndingFrames(
   };
   const title = endingTitle(packet);
   const firstAction = packet.actions.find((a) => a.actionId === design.usedActionIds[0]);
-  const selectedActions =
+  const filmActions =
     design.mode === 'actions'
       ? design.usedActionIds.flatMap((id) => {
           const action = packet.actions.find((entry) => entry.actionId === id);
@@ -127,7 +128,11 @@ export async function createEndingFrames(
       targetGameVersion,
       referenceGameVersion: source.gameVersion,
       scene: slot === 'start' ? design.startPrompt : design.endPrompt,
-      selectedActions,
+      // Intermediate methods belong in the video. Only the endpoint action is
+      // needed to paint each still; copying all action prose can exceed 16,000 chars.
+      selectedActions: (beforeAction ? filmActions.slice(0, 1) : filmActions.slice(-1)).map(
+        ({ narrative: _narrative, ...action }) => action,
+      ),
       outcome: beforeAction ? null : packet.outcome,
       title: slot === 'end' ? title : null,
       appearance: packet.snapshot?.scenarioV2.core.characterAppearance,
@@ -137,7 +142,7 @@ export async function createEndingFrames(
             name: item.name,
             status: item.beforeStatus,
           }))
-        : packet.inventory,
+        : endingItems(packet),
     };
     const stateRules = endingFrameStateRules(design.mode, !!beforeAction);
     const updateEarlierReference = source.gameVersion < targetGameVersion;

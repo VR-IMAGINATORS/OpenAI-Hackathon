@@ -40,7 +40,7 @@ function packet(): EndingPacket {
     endedAt: 0,
     gameVersion: 1,
     finalMessageId: null,
-    recentActionScenes: [],
+    actionScenes: [],
     actions: [
       {
         actionId: 'attempt',

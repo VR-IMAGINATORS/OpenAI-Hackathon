@@ -47,7 +47,7 @@ export interface EndingPacket {
   endedAt: number;
   gameVersion: number;
   finalMessageId: string | null;
-  recentActionScenes: {
+  actionScenes: {
     actionId: string;
     before: EndingSceneReference | null;
     after: EndingSceneReference | null;
