@@ -404,11 +404,23 @@ const scenario = {
         const app = document.querySelector('.messenger-app').getBoundingClientRect();
         const composer = document.querySelector('.messenger-composer').getBoundingClientRect();
         const feed = document.querySelector('.chat-messages').getBoundingClientRect();
+        const call = document.querySelector('.messenger-call');
+        const callBounds = call.getBoundingClientRect();
         return {
           fits: app.left >= 0 && app.right <= innerWidth + 1 && app.bottom <= innerHeight + 1,
           composerInside: composer.top >= app.top && composer.bottom <= app.bottom + 1,
           feedVisible: feed.height > 70 && feed.bottom <= composer.top + 1,
           noPageScroll: document.documentElement.scrollHeight <= innerHeight + 1,
+          compactCall: callBounds.height === 24,
+          callControlsInside: [...call.querySelectorAll('button')].every((button) => {
+            const bounds = button.getBoundingClientRect();
+            return (
+              bounds.top >= callBounds.top &&
+              bounds.bottom <= callBounds.bottom &&
+              bounds.left >= callBounds.left &&
+              bounds.right <= callBounds.right
+            );
+          }),
         };
       });
       assert.deepEqual(layout, {
@@ -416,6 +428,8 @@ const scenario = {
         composerInside: true,
         feedVisible: true,
         noPageScroll: true,
+        compactCall: true,
+        callControlsInside: true,
       });
     }
     await assertMessengerLayout();
@@ -650,6 +664,10 @@ const scenario = {
     assert.equal(await page.getByRole('combobox').count(), 0, 'locale is fixed during play');
     await page.reload();
     await page.getByRole('button', { name: 'Reconnect here', exact: false }).waitFor();
+    await assertMessengerLayout();
+    await page.setViewportSize({ width: 320, height: 568 });
+    await assertMessengerLayout();
+    await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(
       await page.locator('html').getAttribute('lang'),
       'en',

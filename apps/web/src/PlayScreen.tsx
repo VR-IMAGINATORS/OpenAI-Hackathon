@@ -686,16 +686,23 @@ export default function PlayScreen({
                   }[voice]}
           </strong>
           {!ended && voice !== 'connected' && (
-            <button disabled={busy} onClick={() => void connect()}>
-              {busy
-                ? t('接続準備中…', 'Connecting…')
-                : hasControl
-                  ? t('音声を接続 / 再開する', 'Connect / resume voice')
-                  : t('この画面で再接続', 'Reconnect here')}
+            <button
+              disabled={busy}
+              onClick={() => void connect()}
+              aria-label={
+                busy
+                  ? t('接続準備中…', 'Connecting…')
+                  : hasControl
+                    ? t('音声を接続 / 再開する', 'Connect / resume voice')
+                    : t('この画面で再接続', 'Reconnect here')
+              }
+            >
+              {busy ? t('接続準備中…', 'Connecting…') : t('再接続', 'Reconnect')}
             </button>
           )}
           {blockedAudio && !ended && (
             <button
+              aria-label={t('タップして相手の音声を再生', 'Tap to play incoming audio')}
               onClick={() =>
                 void live.current
                   ?.resumeAudio()
@@ -703,7 +710,7 @@ export default function PlayScreen({
                   .catch(() => setError(t('音声を再生できません。', 'Unable to play audio.')))
               }
             >
-              {t('タップして相手の音声を再生', 'Tap to play incoming audio')}
+              {t('音声を再生', 'Play audio')}
             </button>
           )}
         </section>
