@@ -6,12 +6,14 @@ import { parseCoreConfig } from '../packages/shared/core-config.js';
 import {
   createGameAI,
   projectPublicJudgment,
+  judgmentResponseSchema,
   type AIContext,
   type CoreJudgment,
 } from '../apps/local-server/game-ai.js';
 import { companionResultFacts } from '../apps/local-server/companion-response.js';
 import type { CompanionContext } from '../apps/local-server/companion-knowledge.js';
 import type { ScenarioSnapshot } from '../apps/server/scenario-catalog.js';
+import { aiFailureCode } from '../apps/local-server/ai-failure.js';
 
 const privateText = 'HIDDEN_CULPRIT_CANARY';
 const snapshot: ScenarioSnapshot = {
@@ -162,4 +164,57 @@ test('core judgment forwards the cancellation signal through the response client
   );
   await ai.judge(context, { items: [], usage: '試す', summary: '' }, controller.signal);
   assert.equal(received, controller.signal);
+});
+
+test('provider judgment permits only current transitions and real inventory IDs', () => {
+  const schema = judgmentResponseSchema(snapshot, context);
+  assert.equal(schema.safeParse(judged).success, true);
+  for (const factChanges of [
+    [{ key: 'unknown', from: 'bound', to: 'loosened' }],
+    [{ key: 'wrists', from: 'free', to: 'loosened' }],
+    [{ key: 'wrists', from: 'bound', to: 'magic' }],
+    [{ key: 'wrists', from: 'bound', to: 'bound' }],
+  ])
+    assert.equal(schema.safeParse({ ...judged, factChanges }).success, false);
+  assert.equal(
+    schema.safeParse({
+      ...judged,
+      inventoryChanges: [
+        { id: '12345678-1234-4234-8234-999999999999', status: 'consumed', description: '' },
+      ],
+    }).success,
+    false,
+  );
+  const noItems = judgmentResponseSchema(snapshot, { ...context, inventory: [] });
+  assert.equal(noItems.safeParse({ ...judged, inventoryChanges: [] }).success, true);
+  assert.equal(noItems.safeParse(judged).success, false);
+});
+
+test('explicitly incomplete or refused judgment is never parsed as a committed result', async () => {
+  for (const [raw, code] of [
+    [{ ...output(judged), status: 'incomplete' }, 'AI_OUTPUT_INCOMPLETE'],
+    [
+      { output: [{ type: 'message', content: [{ type: 'refusal', refusal: privateText }] }] },
+      'AI_OUTPUT_REFUSED',
+    ],
+    [{ output: [] }, 'AI_OUTPUT_INVALID'],
+  ] as const) {
+    const ai = createGameAI({ respond: async () => raw }, () => 'test', snapshot);
+    await assert.rejects(ai.judge(context, { items: [], usage: 'try', summary: '' }), (error) => {
+      assert.equal(aiFailureCode(error), code);
+      assert.doesNotMatch(String(error), new RegExp(privateText));
+      return true;
+    });
+  }
+});
+
+test('diagnostics retain only allowlisted technical causes', () => {
+  assert.equal(aiFailureCode({ code: 'UPSTREAM_FAILED', message: privateText }), 'UPSTREAM_FAILED');
+  assert.equal(
+    aiFailureCode({ code: 'INVALID_FACT_CHANGE', message: 'ACTION_FAILED' }),
+    'INVALID_FACT_CHANGE',
+  );
+  assert.equal(aiFailureCode(new SyntaxError(privateText)), 'AI_OUTPUT_INVALID');
+  assert.equal(aiFailureCode(new Error(privateText)), 'PROCESSING_ERROR');
+  assert.equal(aiFailureCode({ code: privateText, message: privateText }), 'PROCESSING_ERROR');
 });

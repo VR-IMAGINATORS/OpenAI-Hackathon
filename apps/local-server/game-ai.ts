@@ -55,7 +55,12 @@ export interface AIResponsesClient {
   respond(body: unknown, signal?: AbortSignal): Promise<unknown>;
 }
 function outputText(value: any): string {
-  if (!Array.isArray(value?.output)) throw new Error('AI output missing');
+  if (value?.status === 'incomplete') throw new Error('AI_OUTPUT_INCOMPLETE');
+  if (value?.status !== undefined && value.status !== 'completed')
+    throw new Error('AI_OUTPUT_INVALID');
+  if (!Array.isArray(value?.output)) throw new Error('AI_OUTPUT_INVALID');
+  if (value.output.some((item: any) => item?.content?.some((part: any) => part.type === 'refusal')))
+    throw new Error('AI_OUTPUT_REFUSED');
   const texts = value.output.flatMap((item: any) =>
     item?.type === 'message' && Array.isArray(item.content)
       ? item.content
@@ -63,8 +68,41 @@ function outputText(value: any): string {
           .map((part: any) => part.text)
       : [],
   );
-  if (texts.length !== 1) throw new Error('AI output invalid');
+  if (texts.length !== 1) throw new Error('AI_OUTPUT_INVALID');
   return texts[0];
+}
+
+/** Constrain provider choices before generation; GameSession still validates the whole result. */
+export function judgmentResponseSchema(snapshot: ScenarioSnapshot, context: AIContext) {
+  const keys = snapshot.scenarioV2.obstacles[context.obstacleIndex]!.factKeys;
+  const transitions = snapshot.scenarioV2.core.facts.flatMap((fact) => {
+    const from = context.facts?.values[fact.key];
+    if (!keys.includes(fact.key) || from === undefined) return [];
+    const destinations = fact.allowedTransitions.filter((t) => t.from === from).map((t) => t.to);
+    if (!destinations.length) return [];
+    return [
+      factChangeSchema.extend({
+        key: z.literal(fact.key),
+        from: z.literal(from),
+        to: z.enum(destinations),
+      }),
+    ];
+  });
+  const changes = transitions.length ? z.union(transitions) : factChangeSchema;
+  const ids = context.inventory.map((item) => item.id);
+  const inventoryChange = judgmentSchema.shape.inventoryChanges.element.extend({
+    id: ids.length ? z.enum(ids) : z.string().uuid(),
+    description: z.string().max(80),
+  });
+  const schema = coreJudgmentSchema.extend({
+    // This prose is discarded by public projection. Keep the 1000-token response for the decision.
+    narrative: z.string().max(120),
+    situation: z.string().max(120),
+    shortReason: z.string().min(1).max(120),
+    factChanges: z.array(changes).max(transitions.length),
+    inventoryChanges: z.array(inventoryChange).max(ids.length),
+  });
+  return context.creativity ? schema.extend({ creativity: creativeAssessmentSchema }) : schema;
 }
 /** Discard prose produced with private mechanics; only authored visible facts may surface. */
 export function projectPublicJudgment(
@@ -227,13 +265,9 @@ export function createGameAI(
     judge: async (context, proposal, signal) => {
       const judgment = await request(
         context,
-        snapshot
-          ? context.creativity
-            ? creativeJudgmentSchema
-            : coreJudgmentSchema
-          : judgmentSchema,
+        snapshot ? judgmentResponseSchema(snapshot, context) : judgmentSchema,
         (snapshot
-          ? 'factChangesは宣言された現在障害のfactKeysの許可遷移のみ。失敗でも部分進展を保存できる。shortReasonは短い判定理由。'
+          ? 'factChangesは宣言された現在障害のfactKeysの許可遷移のみ。変化のない項目は含めず、同じkeyを二度出さない。失敗でも部分進展を保存できる。文章欄はそれぞれ一文にし、状態の判定を優先する。shortReasonは短い判定理由。'
           : '') +
           '固定された認識案について現在の障害のgoalを達成するか判定。completionFactがある場合、完全達成したsuccess=trueと、そのfactを指定valueにする遷移は必ず一致させる。部分進展はsuccess=falseのまま通常の物性とmechanismに沿って保存する。ヒントは正解の限定列挙ではなく、他の説明可能な工夫も認める。inventoryChangesには既存の在庫idだけ使用。新規道具追加・障害追加・勝敗全体の確定は禁止。narrativeは指定言語（指定がなければ日本語）の短い結果。situationとnarrativeは現在障害への確定候補の物理的結果だけを述べ、真相・次の障害・まだ行っていない行動や追加の出来事を創作しない。',
         proposal,

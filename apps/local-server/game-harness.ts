@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { aiFailureCode } from './ai-failure.js';
 import { KnowledgeStore, buildCompanionContext } from './companion-knowledge.js';
 import { companionResultFacts } from './companion-response.js';
 import { classifyCoreIntent } from './core-intent-ai.js';
@@ -459,6 +460,9 @@ export class GameHarness {
     try {
       result = await this.game.judgeAction(ticket);
       this.hooks.diagnostic('judgment_committed');
+    } catch (error) {
+      this.hooks.diagnostic('judgment_failed', aiFailureCode(error));
+      throw error;
     } finally {
       if (this.runtimeActionId === ticket.id) {
         this.runtimeActionId = null;

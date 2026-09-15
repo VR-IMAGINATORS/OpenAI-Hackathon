@@ -165,7 +165,11 @@ for (const changes of [
       const snapshot = structuredClone(coreSnapshot);
       snapshot.scenarioV2.obstacles[0].factKeys = ['wrists'];
       const f = await fixture(async () => ({ ...partial, factChanges: changes }), snapshot);
-      await assert.rejects(f.game.judgeAction(f.reserve()), /ACTION_FAILED/);
+      await assert.rejects(f.game.judgeAction(f.reserve()), (error: any) => {
+        assert.equal(error.message, 'ACTION_FAILED');
+        assert.equal(error.code, 'INVALID_FACT_CHANGE');
+        return true;
+      });
       assert.equal(f.game.gameVersion, 0);
       assert.equal(f.game.actionsUsed, 0);
       assert.equal(f.game.facts.values.wrists, 'bound');

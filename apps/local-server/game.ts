@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { aiFailureCode } from './ai-failure.js';
 import {
   executeIntentSchema,
   actionResultSchema,
@@ -673,7 +674,7 @@ export class GameSession {
             : 'うまく確認できなかった。もう一度お願いできる？';
       }
       if (error instanceof GameError) throw error;
-      throw new GameError(502, 'ACTION_FAILED');
+      throw new GameError(502, 'ACTION_FAILED', aiFailureCode(error));
     } finally {
       context.photos = [];
       this.releaseActionControls(record);

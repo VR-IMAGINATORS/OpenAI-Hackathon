@@ -1,4 +1,5 @@
 import { GameHarness } from './game-harness.js';
+import { aiFailureCode } from './ai-failure.js';
 import { VoiceNotificationScheduler } from './voice-notifications.js';
 import { OpeningBriefingDelivery } from './opening-briefing.js';
 import { FinalVoicePlayback } from './final-voice-playback.js';
@@ -308,12 +309,11 @@ export class GameRuntime {
         },
         onRecoveryExpired: () => this.recoveryNotice('recovery_expired'),
         onError: (error) => {
-          const code =
-            error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message)
-              ? error.message
-              : 'PROCESSING_ERROR';
+          const code = aiFailureCode(error);
           this.recordDiagnostic('error', code);
           if (this.valid() && code !== 'ACTION_INVALID') {
+            // Safe operational evidence, including production where detailed game trace is disabled.
+            console.warn('game_processing_failed', { code });
             this.game.error = this.words(
               'ごめん、うまく確認できなかった。もう一度教えて。',
               'Sorry, I could not confirm that. Please tell me again.',
