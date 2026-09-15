@@ -1,5 +1,6 @@
 import type { IntentContext } from './conversation.js';
 import { z } from 'zod';
+import { structuredResponse, gameOutputTokens } from './structured-response.js';
 import {
   executeIntentSchema,
   riskProposalSchema,
@@ -85,18 +86,6 @@ const envelope = wireEnvelope.extend({
   inferences: z.array(providerInference).max(5).default([]),
 });
 export const coreIntentResponseSchema = z.toJSONSchema(wireEnvelope);
-function responseText(response: unknown): string {
-  const output = z.object({ output: z.array(z.unknown()) }).parse(response).output;
-  const texts = output.flatMap((item: any) =>
-    item?.type === 'message' && Array.isArray(item.content)
-      ? item.content
-          .filter((part: any) => part.type === 'output_text')
-          .map((part: any) => part.text)
-      : [],
-  );
-  if (texts.length !== 1 || typeof texts[0] !== 'string') throw new Error('Invalid intent output');
-  return texts[0];
-}
 export async function classifyCoreIntent(options: {
   respond: (body: unknown) => Promise<unknown>;
   model: string;
@@ -225,36 +214,39 @@ export async function classifyCoreIntent(options: {
     ...(snapshot.coreConfig.creativity?.enabled ? [creativeRouting] : []),
   ].join('\n');
   if (instructions.length > 16000) return { kind: 'wait', reason: '会話設定が長すぎます。' };
-  const response = await options.respond({
-    model: options.model,
-    reasoning: { effort: 'low' },
-    store: false,
-    max_output_tokens: 1000,
-    instructions,
-    input: [
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text },
-          ...(options.photoInput === 'recognized-text'
-            ? []
-            : options.photos.map((photo) => ({
-                type: 'input_image',
-                image_url: 'data:image/jpeg;base64,' + photo.jpeg.toString('base64'),
-              }))),
-        ],
-      },
-    ],
-    text: {
-      format: {
-        type: 'json_schema',
-        name: 'core_intent',
-        strict: true,
-        schema: coreIntentResponseSchema,
+  const parsed = await structuredResponse(
+    options.respond,
+    {
+      model: options.model,
+      reasoning: { effort: 'low' },
+      store: false,
+      max_output_tokens: gameOutputTokens,
+      instructions,
+      input: [
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text },
+            ...(options.photoInput === 'recognized-text'
+              ? []
+              : options.photos.map((photo) => ({
+                  type: 'input_image',
+                  image_url: 'data:image/jpeg;base64,' + photo.jpeg.toString('base64'),
+                }))),
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'core_intent',
+          strict: true,
+          schema: coreIntentResponseSchema,
+        },
       },
     },
-  });
-  const parsed = envelope.parse(JSON.parse(responseText(response)));
+    (value) => envelope.parse(value),
+  );
   const requestControl =
     parsed.decision.kind === 'retry_request' || parsed.decision.kind === 'cancel_request';
   let decision: IntentDecision;

@@ -81,6 +81,11 @@ export const responseRequest = z
         .flatMap((i) => i.content)
         .reduce((n, i) => n + (i.type === 'input_text' ? i.text.length : 0), 0) <= 16000,
   );
+/** Internal game calls have a reasoning budget; HTTP callers keep responseRequest. */
+export const gameResponseRequest = responseRequest.safeExtend({
+  max_output_tokens: z.number().int().positive().max(4096),
+});
+
 export interface OpenAITransport {
   createLiveSession(body: unknown): Promise<z.infer<typeof liveAnswer>>;
   createResponse(body: unknown, signal?: AbortSignal): Promise<unknown>;

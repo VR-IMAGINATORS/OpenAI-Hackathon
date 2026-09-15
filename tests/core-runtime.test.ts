@@ -51,6 +51,7 @@ async function setup(
   locale: 'ja' | 'en' = 'ja',
   initialCredits = 1000,
   creativeProbability?: number,
+  recognizeResponse?: (input: any) => unknown,
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0, photo: 0, control: 0, reply: 0 };
@@ -125,6 +126,7 @@ async function setup(
         }
         calls.recognize++;
         await recognizeGate;
+        if (recognizeResponse) return response(recognizeResponse(context));
         return response({
           items: [{ photoId: context.photos[0].id, inventoryId: null, name: 'ハサミ' }],
           usage: '',
@@ -1040,6 +1042,67 @@ const recoveredJudgment = {
   factChanges: [{ key: 'wrists', from: 'bound', to: 'loosened' }],
 };
 
+for (const stage of ['recognize', 'photo', 'classify', 'judge'] as const) {
+  test(`a malformed ${stage} response recovers inside the full voice flow without an error notice`, async (t) => {
+    const attempts = { recognize: 0, photo: 0, classify: 0, judge: 0 };
+    const h = await setup(
+      t,
+      (context) => {
+        if (++attempts.classify === 1 && stage === 'classify') return { kind: 'INVALID' };
+        return execute(context);
+      },
+      undefined,
+      false,
+      undefined,
+      () => {
+        if (++attempts.photo === 1 && stage === 'photo') return {};
+        return {
+          decision: 'clarify',
+          usage: '',
+          itemRefs: [],
+          message: '使い方を待っている。',
+          reason: 'No directive yet',
+        };
+      },
+      () => {
+        if (++attempts.judge === 1 && stage === 'judge') return {};
+        return recoveredJudgment;
+      },
+      'ja',
+      1000,
+      undefined,
+      (context) => {
+        if (++attempts.recognize === 1 && stage === 'recognize') return { items: null };
+        return {
+          items: context.photos.map((p: any) => ({
+            photoId: p.id,
+            inventoryId: null,
+            name: 'ハサミ',
+          })),
+          usage: '',
+          summary: 'ハサミ',
+        };
+      },
+    );
+    await h.runtime.photos(randomUUID(), [h.photo]);
+    await until(() => h.calls.photo === (stage === 'photo' ? 2 : 1));
+    await tick();
+    await h.say('そのハサミでロープを切って');
+    await h.delegate();
+    await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+    assert.equal(attempts[stage], 2);
+    assert.equal(h.runtime.game.credits.remaining, 880);
+    assert.equal(h.runtime.game.inventory.length, 1);
+    assert.equal(h.runtime.game.error, null);
+    assert.equal(h.runtime.game.retainedRequest, null);
+    const briefings = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands).map((c) =>
+      JSON.parse(c.facts),
+    );
+    assert.equal(briefings.filter((b) => b.type === 'action_result').length, 1);
+    assert.equal(briefings.filter((b) => b.type === 'request_unavailable').length, 0);
+  });
+}
+
 test('runtime repairs malformed judgment silently, then publishes and charges once', async (t) => {
   const judgments: any[] = [];
   const h = await setup(t, execute, undefined, false, undefined, undefined, (context) => {
@@ -1067,6 +1130,32 @@ test('runtime repairs malformed judgment silently, then publishes and charges on
   );
   assert.equal(briefings.length, 1);
   assert.equal(JSON.parse(briefings[0]!.facts).type, 'action_result');
+});
+
+test('exhausted classification reports once, preserves user evidence and does not repeat the error at expiry', async (t) => {
+  let allow = false;
+  const h = await setup(t, (context) => (allow ? execute(context) : { kind: 'INVALID' }));
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
+  await h.say('ハサミでロープを切って');
+  await h.delegate();
+  const unavailable = () =>
+    liveBriefings(h.runtime.pollCommands(h.generation, 0).commands)
+      .map((c) => JSON.parse(c.facts))
+      .filter((c) => c.type === 'request_unavailable');
+  await until(() => unavailable().length === 1);
+  assert.equal(h.calls.classify, 2);
+  h.setNow(24002);
+  h.runtime.tick();
+  await tick();
+  assert.equal(unavailable().length, 1);
+  assert.equal(h.calls.classify, 2);
+  allow = true;
+  await h.delegate();
+  await until(() => h.runtime.game.actionsUsed === 1);
+  assert.equal(h.calls.classify, 3);
+  assert.equal(h.runtime.game.credits.remaining, 880);
 });
 
 for (const origin of ['photo', 'voice'] as const) {

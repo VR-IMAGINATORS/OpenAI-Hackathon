@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { structuredResponse, gameOutputTokens, gameRepairTokens } from './structured-response.js';
 import {
   proposalSchema,
   judgmentSchema,
@@ -56,24 +57,25 @@ export interface GameAI {
 export interface AIResponsesClient {
   respond(body: unknown, signal?: AbortSignal): Promise<unknown>;
 }
-function outputText(value: any): string {
-  if (value?.status === 'incomplete') throw new Error('AI_OUTPUT_INCOMPLETE');
-  if (value?.status !== undefined && value.status !== 'completed')
-    throw new Error('AI_OUTPUT_INVALID');
-  if (!Array.isArray(value?.output)) throw new Error('AI_OUTPUT_INVALID');
-  if (value.output.some((item: any) => item?.content?.some((part: any) => part.type === 'refusal')))
-    throw new Error('AI_OUTPUT_REFUSED');
-  const texts = value.output.flatMap((item: any) =>
-    item?.type === 'message' && Array.isArray(item.content)
-      ? item.content
-          .filter((part: any) => part.type === 'output_text' && typeof part.text === 'string')
-          .map((part: any) => part.text)
-      : [],
-  );
-  if (texts.length !== 1) throw new Error('AI_OUTPUT_INVALID');
-  return texts[0];
-}
 
+function recognitionResponseSchema(context: AIContext) {
+  const sources: z.ZodType<RecognizedProposal['items'][number]>[] = [];
+  const names = { name: z.string().max(120) };
+  const photos = context.photos.map((p) => p.id);
+  const inventory = context.inventory.filter((i) => i.status !== 'consumed').map((i) => i.id);
+  if (photos.length)
+    sources.push(z.object({ ...names, photoId: z.enum(photos), inventoryId: z.null() }).strict());
+  if (inventory.length)
+    sources.push(
+      z.object({ ...names, photoId: z.null(), inventoryId: z.enum(inventory) }).strict(),
+    );
+  return proposalSchema.extend({
+    items: z
+      .array(sources.length ? z.union(sources) : proposalSchema.shape.items.element)
+      .max(sources.length ? 40 : 0),
+    summary: z.string().max(120),
+  });
+}
 /** Constrain provider choices before generation; GameSession still validates the whole result. */
 export function judgmentResponseSchema(snapshot: ScenarioSnapshot, context: AIContext) {
   const keys = snapshot.scenarioV2.obstacles[context.obstacleIndex]!.factKeys;
@@ -97,7 +99,7 @@ export function judgmentResponseSchema(snapshot: ScenarioSnapshot, context: AICo
     description: z.string().max(80),
   });
   const schema = coreJudgmentSchema.extend({
-    // This prose is discarded by public projection. Keep the 1000-token response for the decision.
+    // This prose is discarded by public projection. Leave output space for the decision.
     narrative: z.string().max(120),
     situation: z.string().max(120),
     shortReason: z.string().min(1).max(120),
@@ -220,7 +222,8 @@ export function createGameAI(
     ];
     if ('text' in input[0]! && input[0].text.length > 16000)
       throw new Error('JUDGMENT_CONTEXT_LIMIT');
-    const value = await client.respond(
+    return structuredResponse(
+      (body) => client.respond(body, signal),
       {
         model: model(),
         reasoning: { effort: 'low' },
@@ -255,17 +258,17 @@ export function createGameAI(
           },
         },
         store: false,
-        max_output_tokens: 1000,
+        max_output_tokens: context.judgmentRepair ? gameRepairTokens : gameOutputTokens,
       },
-      signal,
+      (value) => schema.parse(value),
+      !proposal, // GameSession owns the complete judgment retry; never multiply attempts.
     );
-    return schema.parse(JSON.parse(outputText(value)));
   }
   return {
     recognize: (context) =>
       request(
         context,
-        proposalSchema,
+        recognitionResponseSchema(context),
         '写真から道具と最新の発言による用途を認識。物理的な成立性だけを理由に認識対象から除外せず、伝えられた用途を勝手に一般的な用途へ置き換えない。相談や雑談だけならusageを空にする。photoId又はinventoryIdのどちらか一方を必ず指定。写真や在庫にない物は禁止。summaryは画面に表示する短い認識案。攻略の成功は確定しない。',
       ),
     judge: async (context, proposal, signal) => {

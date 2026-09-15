@@ -34,7 +34,11 @@ export function aiFailureCode(error: unknown): string {
 
 export function canRetryJudgment(error: unknown): boolean {
   const code = aiFailureCode(error);
-  if (code === 'UPSTREAM_FAILED') return (error as { status?: number }).status! >= 500;
+  if (code === 'UPSTREAM_FAILED') {
+    const upstream = error as { status?: number; upstreamStatus?: number };
+    const status = upstream.upstreamStatus ?? upstream.status;
+    return status !== undefined && (status >= 500 || status === 408);
+  }
   return [
     'AI_OUTPUT_INVALID',
     'AI_OUTPUT_INCOMPLETE',

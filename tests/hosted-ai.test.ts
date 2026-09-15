@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AiService, AiServiceError } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
-import { createOpenAITransport, type OpenAITransport } from '../packages/server/openai.js';
+import {
+  createOpenAITransport,
+  UpstreamError,
+  type OpenAITransport,
+} from '../packages/server/openai.js';
 
 const liveBody = {
   session: {
@@ -47,6 +51,141 @@ function config() {
 }
 const code = (expected: string) => (error: unknown) =>
   error instanceof AiServiceError && error.code === expected;
+
+test('internal game reasoning budget is bounded separately from public Responses', async () => {
+  const seen: any[] = [];
+  const ai = new AiService(
+    { ...config(), gameOutputTokens: 3000 },
+    fake({
+      createResponse: async (body) => {
+        seen.push(body);
+        return { output: [] };
+      },
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const body = { ...responseBody, model: config().gameModel, max_output_tokens: 4096 };
+  await assert.rejects(ai.respond('one', body), code('INVALID_REQUEST'));
+  await ai.respondGame('one', body);
+  assert.equal(seen[0].max_output_tokens, 3000);
+  await assert.rejects(
+    ai.respondGame('one', { ...body, max_output_tokens: 4097 }),
+    code('INVALID_REQUEST'),
+  );
+  await assert.rejects(
+    ai.respondGame('one', {
+      ...body,
+      input: [{ role: 'user', content: [{ type: 'input_text', text: 'x'.repeat(16001) }] }],
+    }),
+    code('INVALID_REQUEST'),
+  );
+  assert.equal(ai.snapshot().responseAttempts, 1);
+});
+
+test('a game request waits for transient capacity without spending an extra attempt', async () => {
+  const gate = deferred<unknown>();
+  let calls = 0;
+  const ai = new AiService(
+    { ...config(), timeoutMs: 1000, responseConcurrentGlobal: 1 },
+    fake({
+      createResponse: async () => (++calls === 1 ? gate.promise : { output: [] }),
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  ai.register('two', 1000);
+  const body = { ...responseBody, model: config().gameModel, max_output_tokens: 2048 };
+  const first = ai.respondGame('one', body);
+  const second = ai.respondGame('two', body);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(calls, 1);
+  assert.equal(ai.snapshot().responseAttempts, 1);
+  gate.resolve({ output: [] });
+  await Promise.all([first, second]);
+  assert.equal(calls, 2);
+  assert.equal(ai.snapshot().responseBusy, 0);
+  assert.equal(ai.snapshot().responseAttempts, 2);
+});
+
+test('waiting game requests honor cancellation and hard attempt limits', async () => {
+  const gate = deferred<unknown>();
+  const ai = new AiService(
+    { ...config(), timeoutMs: 1000, responsesPerPlay: 1 },
+    fake({
+      createResponse: () => gate.promise,
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const body = { ...responseBody, model: config().gameModel };
+  const first = ai.respondGame('one', body);
+  await assert.rejects(ai.respondGame('one', body), code('REQUEST_LIMIT'));
+  gate.resolve({ output: [] });
+  await first;
+  assert.equal(ai.snapshot().responseAttempts, 1);
+
+  const pending = deferred<unknown>();
+  const waiting = new AiService(
+    { ...config(), timeoutMs: 1000 },
+    fake({ createResponse: () => pending.promise }),
+    () => 0,
+  );
+  waiting.register('one', 1000);
+  const running = waiting.respondGame('one', body);
+  const controller = new AbortController();
+  const stopped = assert.rejects(
+    waiting.respondGame('one', body, controller.signal),
+    code('CONTROL_CANCELLED'),
+  );
+  controller.abort();
+  await stopped;
+  assert.equal(waiting.snapshot().responseAttempts, 1);
+  pending.resolve({ output: [] });
+  await running;
+});
+
+test('response timeout aborts the transport so a cooperative client releases capacity for recovery', async () => {
+  let calls = 0;
+  let received: AbortSignal | undefined;
+  const ai = new AiService(
+    { ...config(), timeoutMs: 30 },
+    fake({
+      createResponse: async (_body, signal) => {
+        if (++calls > 1) return { output: [] };
+        received = signal;
+        return new Promise((_, reject) =>
+          signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+        );
+      },
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const body = { ...responseBody, model: config().gameModel };
+  await assert.rejects(ai.respondGame('one', body), code('UPSTREAM_FAILED'));
+  assert.equal(received!.aborted, true);
+  assert.equal(ai.snapshot().responseBusy, 0);
+  await ai.respondGame('one', body);
+  assert.equal(calls, 2);
+});
+
+test('original upstream status survives the service error boundary', async () => {
+  const ai = new AiService(
+    config(),
+    fake({
+      createResponse: async () => {
+        throw new UpstreamError(502, 400);
+      },
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  await assert.rejects(
+    ai.respond('one', responseBody),
+    (error) => error instanceof AiServiceError && error.upstreamStatus === 400,
+  );
+});
 
 test('hosted AI config is fail-closed in live mode and has five-player defaults', () => {
   assert.throws(() => loadAiConfig({ AI_MODE: 'live' }), /OPENAI_API_KEY required/);
@@ -378,7 +517,8 @@ test('aborting control settles the caller but retains real busy until transport 
   const rejected = assert.rejects(running, code('CONTROL_CANCELLED'));
   controller.abort();
   await rejected;
-  assert.equal(receivedSignal, controller.signal);
+  assert.equal(receivedSignal!.aborted, true);
+  assert.equal(receivedSignal!.reason, controller.signal.reason);
   assert.equal(ai.snapshot().responseBusy, 1);
   await assert.rejects(ai.respondControl('one', controlBody), code('REQUEST_LIMIT'));
   await ai.retire('one');
@@ -390,13 +530,14 @@ test('aborting control settles the caller but retains real busy until transport 
 });
 
 test('cooperative control abort frees its lane and pre-aborted calls spend no attempt', async () => {
+  let calls = 0;
   const ai = new AiService(
     { ...config(), timeoutMs: 1000 },
     fake({
       createResponse: async (_body, signal) => {
-        if (!signal) return { output: [] };
+        if (++calls > 1) return { output: [] };
         return new Promise((_, reject) =>
-          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+          signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
         );
       },
     }),

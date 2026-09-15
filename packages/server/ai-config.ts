@@ -19,6 +19,7 @@ export interface AiConfig {
   globalLiveAttempts: number;
   globalResponseAttempts: number;
   outputTokens: number;
+  gameOutputTokens: number;
   timeoutMs: number;
   imageModel: string;
   inspectionModel: string;
@@ -91,6 +92,7 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
     globalLiveAttempts: positiveInteger(values, 'AI_GLOBAL_LIVE_ATTEMPTS', 50),
     globalResponseAttempts: positiveInteger(values, 'AI_GLOBAL_RESPONSE_ATTEMPTS', 1000),
     outputTokens: positiveInteger(values, 'AI_MAX_OUTPUT_TOKENS', 1000, 1000),
+    gameOutputTokens: positiveInteger(values, 'AI_GAME_MAX_OUTPUT_TOKENS', 4096, 4096),
     timeoutMs: 30000,
   };
 }

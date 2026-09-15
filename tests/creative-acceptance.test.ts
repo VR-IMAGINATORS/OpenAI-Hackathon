@@ -13,7 +13,7 @@ import { createGameAI } from '../apps/local-server/game-ai.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { parseCoreConfig } from '../packages/shared/core-config.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
-import { responseRequest } from '../packages/server/openai.js';
+import { gameResponseRequest } from '../packages/server/openai.js';
 import { classifyPhoto } from '../apps/local-server/harness-decisions.js';
 
 const stretch: CreativeAssessment = {
@@ -140,7 +140,7 @@ async function fixture(
     createGameAI(
       {
         respond: async (body: any) => {
-          responseRequest.parse(body);
+          gameResponseRequest.parse(body);
           const data = JSON.parse(body.input[0].content[0].text);
           if (!data.proposal)
             return output({

@@ -146,7 +146,7 @@ export class GameRuntime {
     this.game = new GameSession(
       scenario,
       createGameAI(
-        { respond: (body, signal) => ai.respond(id, body, signal) },
+        { respond: (body, signal) => ai.respondGame(id, body, signal) },
         () => models.gameModel,
         coreSnapshot,
       ),
@@ -216,7 +216,7 @@ export class GameRuntime {
         game: this.game,
         snapshot: coreSnapshot,
         ledger: this.ledger,
-        client: { respond: (body, signal) => ai.respond(id, body, signal) },
+        client: { respond: (body, signal) => ai.respondGame(id, body, signal) },
         model: models.gameModel,
         now,
         hooks: {

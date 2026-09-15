@@ -500,9 +500,20 @@ export class GameHarness {
   }
 
   modelClient() {
+    const epoch = this.hooks.epoch();
+    const generation = this.game.generation;
+    const version = this.game.gameVersion;
+    const revision = this.game.inputRevision;
     return {
       respond: async (body: unknown) => {
         this.activeSignal?.throwIfAborted();
+        this.hooks.check(epoch);
+        if (
+          generation !== this.game.generation ||
+          version !== this.game.gameVersion ||
+          revision !== this.game.inputRevision
+        )
+          throw new GameError(409, 'ACTION_INVALID');
         const response = await this.client.respond(body, this.activeSignal);
         this.activeSignal?.throwIfAborted();
         return response;

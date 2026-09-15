@@ -22,7 +22,7 @@ async function setup(t: TestContext) {
     AI_MODE: 'mock',
   });
   let recognitions = 0;
-  let recognitionFailure = false;
+  let recognitionFailures = 0;
   let photoGate: Promise<void> | undefined;
   const hosted = createHostedApp(config, {
     log: () => {},
@@ -58,8 +58,8 @@ async function setup(t: TestContext) {
           };
         else {
           recognitions++;
-          if (recognitionFailure) {
-            recognitionFailure = false;
+          if (recognitionFailures > 0) {
+            recognitionFailures--;
             throw new Error('Synthetic recognition failure');
           }
           result = {
@@ -135,7 +135,7 @@ async function setup(t: TestContext) {
     png,
     recognitions: () => recognitions,
     failRecognition() {
-      recognitionFailure = true;
+      recognitionFailures = 2;
     },
     holdPhoto(gate: Promise<void>) {
       photoGate = gate;

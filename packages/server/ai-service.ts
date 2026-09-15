@@ -9,6 +9,7 @@ import {
   liveAnswer,
   liveRequest,
   responseRequest,
+  gameResponseRequest,
   UpstreamError,
   type OpenAITransport,
 } from './openai.js';
@@ -18,6 +19,7 @@ export class AiServiceError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly upstreamStatus?: number,
   ) {
     super(message);
   }
@@ -77,6 +79,7 @@ export class AiService {
   private responseAttempts = 0;
   private liveBusy = 0;
   private responseBusy = 0;
+  private gameWaiting = 0;
   constructor(
     readonly config: AiConfig,
     transport?: OpenAITransport,
@@ -544,9 +547,14 @@ export class AiService {
     return this.respondInLane(playId, body, false, signal);
   }
 
+  /** Server-owned game calls only; never selected by an HTTP request field. */
+  respondGame(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
+    return this.respondInLane(playId, body, false, signal, true);
+  }
+
   /** Internal control classification only. HTTP request bodies cannot select this lane. */
   respondControl(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
-    return this.respondInLane(playId, body, true, signal);
+    return this.respondInLane(playId, body, true, signal, true);
   }
 
   private async respondInLane(
@@ -554,18 +562,54 @@ export class AiService {
     body: unknown,
     control: boolean,
     signal?: AbortSignal,
+    game = false,
   ): Promise<unknown> {
     if (signal?.aborted)
       throw new AiServiceError(409, 'CONTROL_CANCELLED', '制御の確認を中止しました。');
     const play = this.active(playId);
-    const parsed = responseRequest.safeParse(body);
+    const parsed = (game ? gameResponseRequest : responseRequest).safeParse(body);
     if (
       !parsed.success ||
       !this.config.responseModels.includes(parsed.data.model) ||
-      parsed.data.max_output_tokens > this.config.outputTokens ||
+      (!game && parsed.data.max_output_tokens > this.config.outputTokens) ||
+      (game && !control && parsed.data.model !== this.config.gameModel) ||
       (control && parsed.data.text.format.name !== 'harness_control')
     )
       throw new AiServiceError(400, 'INVALID_REQUEST', '認識要求の設定を確認してください。');
+    // Concurrent players can briefly occupy all slots. Waiting is not a new
+    // provider attempt, and must never bypass a spent request budget.
+    if (
+      game &&
+      !control &&
+      (play.responseBusy - play.controlBusy >= this.config.responseConcurrentPerPlay ||
+        this.responseBusy >= this.config.responseConcurrentGlobal)
+    ) {
+      if (this.gameWaiting >= 20) this.limit();
+      this.gameWaiting++;
+      const deadline = performance.now() + 5000;
+      try {
+        while (
+          play.responseBusy - play.controlBusy >= this.config.responseConcurrentPerPlay ||
+          this.responseBusy >= this.config.responseConcurrentGlobal
+        ) {
+          this.active(playId);
+          if (signal?.aborted)
+            throw new AiServiceError(409, 'CONTROL_CANCELLED', '処理を中止しました。');
+          if (
+            play.responseAttempts >= this.config.responsesPerPlay ||
+            this.responseAttempts >= this.config.globalResponseAttempts ||
+            performance.now() >= deadline
+          )
+            this.limit();
+          await new Promise<void>((resolve) => setTimeout(resolve, 25));
+        }
+        this.active(playId);
+        if (signal?.aborted)
+          throw new AiServiceError(409, 'CONTROL_CANCELLED', '処理を中止しました。');
+      } finally {
+        this.gameWaiting--;
+      }
+    }
     if (
       (control
         ? play.controlBusy >= 1
@@ -580,10 +624,19 @@ export class AiService {
     play.responseAttempts++;
     this.responseBusy++;
     this.responseAttempts++;
+    const controller = new AbortController();
+    const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    const request = game
+      ? {
+          ...parsed.data,
+          max_output_tokens: Math.min(parsed.data.max_output_tokens, this.config.gameOutputTokens),
+        }
+      : parsed.data;
     const raw = Promise.resolve().then(() => {
       if (signal?.aborted)
         throw new AiServiceError(409, 'CONTROL_CANCELLED', '制御の確認を中止しました。');
-      return this.transport.createResponse(parsed.data, signal);
+      return this.transport.createResponse(request, requestSignal);
     });
     const release = () => {
       play.responseBusy--;
@@ -602,7 +655,10 @@ export class AiService {
         error instanceof UpstreamError ? error.status : 502,
         'UPSTREAM_FAILED',
         'AIへの接続に失敗しました。',
+        error instanceof UpstreamError ? error.upstreamStatus : undefined,
       );
+    } finally {
+      clearTimeout(timeout);
     }
   }
   private closeReservation(live: LiveReservation): Promise<boolean> {

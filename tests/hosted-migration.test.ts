@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseScenario } from '../packages/shared/scenario.js';
 import { createGameAI } from '../apps/local-server/game-ai.js';
-import { responseRequest } from '../packages/server/openai.js';
+import { gameResponseRequest } from '../packages/server/openai.js';
 import { parseTunnelUrl, publicOrigin } from '../tools/tunnel.js';
 const scenario = parseScenario(JSON.parse(readFileSync('scenarios/default.json', 'utf8')));
 test('game Responses payload matches bounded provider schema and rejects malformed output', async () => {
@@ -11,7 +11,7 @@ test('game Responses payload matches bounded provider schema and rejects malform
   const ai = createGameAI(
     {
       async respond(body) {
-        responseRequest.parse(body);
+        gameResponseRequest.parse(body);
         count++;
         return {
           output: [
