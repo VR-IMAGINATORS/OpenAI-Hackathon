@@ -10,6 +10,12 @@ import type { Scenario } from '../../packages/shared/scenario.js';
 import { factChangeSchema, type GameFacts } from '../../packages/shared/conversation.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import type { GamePhoto } from './photo.js';
+import {
+  creativeAssessmentSchema,
+  creativeJudgmentInstructions,
+  type CreativeAssessment,
+  type PreviousCreativeAttempt,
+} from './creative-acceptance.js';
 export interface AIContext {
   scenario: Scenario;
   obstacleIndex: number;
@@ -18,12 +24,25 @@ export interface AIContext {
   photos: GamePhoto[];
   transcript: string;
   facts?: GameFacts;
+  creativity?: { previousAttempts: PreviousCreativeAttempt[] };
 }
 export const coreJudgmentSchema = judgmentSchema.extend({
   factChanges: z.array(factChangeSchema).max(30),
   shortReason: z.string().min(1).max(1000),
 });
-export type CoreJudgment = z.infer<typeof coreJudgmentSchema>;
+export const creativeJudgmentSchema = coreJudgmentSchema.extend({
+  creativity: creativeAssessmentSchema,
+});
+export type CoreJudgment = z.infer<typeof coreJudgmentSchema> & {
+  creativity?: CreativeAssessment;
+};
+// In-process GameAI adapters may still return the ordinary judgment contract.
+// The provider path below requires the new fields whenever creativity is enabled.
+export function parseCoreJudgment(value: unknown): CoreJudgment {
+  return value && typeof value === 'object' && 'creativity' in value
+    ? creativeJudgmentSchema.parse(value)
+    : coreJudgmentSchema.parse(value);
+}
 export interface GameAI {
   recognize(context: AIContext): Promise<RecognizedProposal>;
   judge(
@@ -146,6 +165,7 @@ export function createGameAI(
           inventory,
           transcript,
           proposal,
+          ...(proposal && context.creativity ? { creativity: context.creativity } : {}),
           photos: photos.map((p) => ({ id: p.id })),
         }),
       },
@@ -154,6 +174,8 @@ export function createGameAI(
         image_url: 'data:image/jpeg;base64,' + photo.jpeg.toString('base64'),
       })),
     ];
+    if ('text' in input[0]! && input[0].text.length > 16000)
+      throw new Error('JUDGMENT_CONTEXT_LIMIT');
     const value = await client.respond(
       {
         model: model(),
@@ -174,7 +196,8 @@ export function createGameAI(
               snapshot.scenarioV2.core.judgmentPolicy +
               '\n' +
               snapshot.coreConfig.acceptancePolicy[snapshot.locale]
-            : ''),
+            : '') +
+          (proposal && context.creativity ? '\n' + creativeJudgmentInstructions : ''),
         input: [{ role: 'user', content: input }],
         text: {
           format: {
@@ -196,12 +219,16 @@ export function createGameAI(
       request(
         context,
         proposalSchema,
-        '写真から道具と最新の発言による用途を認識。相談や雑談だけならusageを空にする。photoId又はinventoryIdのどちらか一方を必ず指定。写真や在庫にない物は禁止。summaryは画面に表示する短い認識案。攻略の成功は確定しない。',
+        '写真から道具と最新の発言による用途を認識。物理的な成立性だけを理由に認識対象から除外せず、伝えられた用途を勝手に一般的な用途へ置き換えない。相談や雑談だけならusageを空にする。photoId又はinventoryIdのどちらか一方を必ず指定。写真や在庫にない物は禁止。summaryは画面に表示する短い認識案。攻略の成功は確定しない。',
       ),
     judge: async (context, proposal, signal) => {
       const judgment = await request(
         context,
-        snapshot ? coreJudgmentSchema : judgmentSchema,
+        snapshot
+          ? context.creativity
+            ? creativeJudgmentSchema
+            : coreJudgmentSchema
+          : judgmentSchema,
         (snapshot
           ? 'factChangesは宣言された現在障害のfactKeysの許可遷移のみ。失敗でも部分進展を保存できる。shortReasonは短い判定理由。'
           : '') +
@@ -210,7 +237,7 @@ export function createGameAI(
         signal,
       );
       return snapshot
-        ? projectPublicJudgment(snapshot, context, coreJudgmentSchema.parse(judgment))
+        ? projectPublicJudgment(snapshot, context, parseCoreJudgment(judgment))
         : judgment;
     },
   };

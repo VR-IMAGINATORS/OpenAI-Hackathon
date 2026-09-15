@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { GameRuntime } from '../apps/local-server/hosted-runtime.js';
@@ -45,6 +46,7 @@ for (const locale of ['ja', 'en'] as const) {
                         type: 'output_text',
                         text: JSON.stringify({
                           success: true,
+                          creativity: ordinaryCreativity,
                           narrative: `Confirmed clear: ${input.obstacle.id}`,
                           situation: `Tool used on ${input.obstacle.id}`,
                           factChanges: [{ key, from: input.facts.values[key], to: value }],

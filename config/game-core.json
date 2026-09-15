@@ -65,6 +65,10 @@
       "en": "Oh, we're starting to run short on time."
     }
   },
+  "creativity": {
+    "enabled": true,
+    "successProbability": 0.3333333333333333
+  },
   "acceptancePolicy": {
     "ja": "身近な物の通常の物性と筋の通る工夫を認める。溶岩など日常から大きく離れた物は認めない。舞台の物理的制約と扱える主体を守り、特殊能力を加えない。",
     "en": "Allow everyday objects and physically plausible creative uses. Reject extraordinary objects such as lava. Preserve world constraints and the companion’s capabilities; do not add special powers."

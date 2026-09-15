@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
@@ -93,6 +94,7 @@ test('core voice instructions execute once through HTTP and deliver final-genera
           assert.ok(context.inventory.length >= judgmentCalls);
           result = {
             success: true,
+            creativity: ordinaryCreativity,
             narrative: '工夫した道具で障害を突破した。',
             situation: '先へ進めるようになった。',
             inventoryChanges: [],

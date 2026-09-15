@@ -1,5 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import { randomUUID } from 'node:crypto';
 import { StoryEvidenceLedger } from '../apps/local-server/story-evidence.js';
 import { GameRuntime } from '../apps/local-server/hosted-runtime.js';
@@ -121,7 +122,9 @@ async function runtimeFixture(t: TestContext, core = true, photoBudget = 3) {
             narrative: `道具で${context.obstacle.title}に働きかけた。`,
             situation: '道具はまだ手元にある。',
             inventoryChanges: [],
-            ...(core ? { factChanges: [], shortReason: 'うまく使えた' } : {}),
+            ...(core
+              ? { factChanges: [], shortReason: 'うまく使えた', creativity: ordinaryCreativity }
+              : {}),
           });
         return response({
           items: [{ photoId: context.photos[0].id, inventoryId: null, name: 'ひも' }],

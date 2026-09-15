@@ -35,6 +35,13 @@ const currentCoreConfigSchema = z
   .object({
     schemaVersion: z.literal(2),
     acceptancePolicy: localizedTextSchema,
+    creativity: z
+      .object({
+        enabled: z.boolean(),
+        successProbability: z.number().min(0).max(1),
+      })
+      .strict()
+      .optional(),
     recovery: z
       .object({
         retrying: localizedTextSchema,
