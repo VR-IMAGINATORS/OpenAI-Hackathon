@@ -45,6 +45,8 @@ async function setup(t: TestContext) {
             reason: 'Use is unclear',
           };
         } else if (schemaName === 'knowledge_selection') result = { ids: [] };
+        else if (schemaName === 'investigation_reply')
+          result = { answer: 'I am still here.', inferences: [] };
         else if (schemaName === 'core_intent')
           result = {
             decision: {
