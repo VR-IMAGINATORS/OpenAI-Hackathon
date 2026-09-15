@@ -49,6 +49,45 @@ export const scenarioKnowledgeEntrySchema = z
   });
 export type ScenarioKnowledgeEntry = z.infer<typeof scenarioKnowledgeEntrySchema>;
 export const observationTargetSchema = z.object({ id: key, description: localized }).strict();
+export const knowledgeMetadataSchema = z
+  .object({
+    knowledgeId: key,
+    targetId: key,
+    layer: z.enum(['overview', 'detail', 'hint', 'background']),
+  })
+  .strict();
+export const ambienceSlotSchema = z
+  .object({
+    id: key,
+    targetId: key,
+    attribute: key,
+    allowedValues: z.array(localized).min(1).max(30),
+    nonGameplayRationale: localized,
+  })
+  .strict();
+export const publicVisualSchema = z
+  .object({
+    id: key,
+    description: localized,
+    prerequisites: z.array(z.object({ factKey: key, value: key }).strict()).max(30),
+  })
+  .strict();
+export const investigationProfileSchema = z
+  .object({
+    initialOverview: localized,
+    knowledgeMetadata: z.array(knowledgeMetadataSchema).max(100),
+    ambienceSlots: z.array(ambienceSlotSchema).max(30),
+    publicVisuals: z.array(publicVisualSchema).max(100),
+    sourceRef: z
+      .object({
+        sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
+        candidateId: key,
+        revision: version.min(1),
+      })
+      .strict(),
+  })
+  .strict();
+export type InvestigationProfile = z.infer<typeof investigationProfileSchema>;
 export const inferenceSchema = z
   .object({
     id: key,
@@ -59,6 +98,15 @@ export const inferenceSchema = z
   })
   .strict();
 export type Inference = z.infer<typeof inferenceSchema>;
+export const ambienceValueSchema = z
+  .object({
+    slotId: key,
+    value: text,
+    createdAtVersion: version,
+    sourceRequestId: id,
+  })
+  .strict();
+export type AmbienceValue = z.infer<typeof ambienceValueSchema>;
 export const knowledgeStateSchema = z
   .object({
     version,
@@ -71,6 +119,7 @@ export const knowledgeStateSchema = z
       )
       .max(100),
     inferences: z.array(inferenceSchema).max(100),
+    ambience: z.array(ambienceValueSchema).max(30).default([]),
   })
   .strict();
 export type KnowledgeState = z.infer<typeof knowledgeStateSchema>;

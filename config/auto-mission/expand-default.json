@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "sourcePath": "../../scenarios/story-catalog.json",
+  "candidateIndex": 0,
+  "coreConfigPath": "../../config/game-core.json",
+  "locale": "ja",
+  "initiative": "observations",
+  "generator": {
+    "model": "gpt-6-astra",
+    "reasoningEffort": "medium",
+    "maxOutputTokens": 12000
+  },
+  "playerModels": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+  "personas": ["investigation", "broad", "early"],
+  "gameModel": "gpt-5.6-terra",
+  "maxTurns": 25,
+  "objectCatalog": [
+    {
+      "id": "paper",
+      "name": "紙",
+      "ordinaryProperties": [
+        "A4サイズ210mm×297mm、厚さ約0.1mmの普通紙1枚",
+        "折れる、丸められる、水で弱くなる"
+      ]
+    },
+    {
+      "id": "pen",
+      "name": "ペン",
+      "ordinaryProperties": [
+        "長さ140mm、外径10mmの硬い樹脂製ボールペン",
+        "筆記できる",
+        "先端から60mmは外径10mm以内の棒状で、軽い1N程度の押圧を伝えられる"
+      ]
+    },
+    {
+      "id": "scissors",
+      "name": "ハサミ",
+      "ordinaryProperties": [
+        "全長160mm、刃渡り60mmの一般的な手動ハサミ",
+        "刃が届く一重の紙や薄い綿紐を切れる",
+        "刃の先端20mmの厚さは3mm以下、硬い金属は切れない"
+      ]
+    },
+    {
+      "id": "towel",
+      "name": "タオル",
+      "ordinaryProperties": [
+        "30cm四方の乾いた綿タオル",
+        "柔らかい、折り重ねられる、少量の水を吸える",
+        "少なくとも50mLの水を吸うが、防火・高温耐熱の性能は保証しない"
+      ]
+    },
+    {
+      "id": "cup",
+      "name": "コップ",
+      "ordinaryProperties": [
+        "高さ100mm、外径80mm、実用容量200mLの空の樹脂コップ",
+        "底が閉じ液漏れせず、口から注水と排水ができる",
+        "軽量で片手で持てる"
+      ]
+    },
+    {
+      "id": "spoon",
+      "name": "スプーン",
+      "ordinaryProperties": [
+        "普通の金属製スプーン",
+        "柄は長さ100mm、幅20mm、厚さ1mmの平たい棒状",
+        "小さな物をすくえる、軽い金具を押し上げる程度で曲がらない"
+      ]
+    },
+    {
+      "id": "rubber-band",
+      "name": "輪ゴム",
+      "ordinaryProperties": [
+        "周長約100mmの普通の輪ゴム",
+        "軽い張力で伸縮するが重い構造物を固定できない"
+      ]
+    },
+    {
+      "id": "string",
+      "name": "紐",
+      "ordinaryProperties": [
+        "長さ1m、直径2mmの柔らかい綿紐",
+        "結べる、軽い物を引ける、水中や空中で硬い棒として押せない"
+      ]
+    },
+    {
+      "id": "grabber",
+      "name": "マジックハンド",
+      "ordinaryProperties": [
+        "全長70cmの手動式つかみ具",
+        "手元のレバーで先端の二つの爪が開閉する",
+        "電動機能や切断機能はない"
+      ]
+    },
+    {
+      "id": "flat-screwdriver",
+      "name": "マイナスドライバー",
+      "ordinaryProperties": ["長さ15cmの金属軸と樹脂ハンドル", "先端が平たく硬い", "普通の手動工具"]
+    },
+    {
+      "id": "coin",
+      "name": "硬貨",
+      "ordinaryProperties": ["直径約24mm、厚さ約2mmの丸い金属板", "硬く薄い", "電子機能はない"]
+    },
+    {
+      "id": "toothbrush",
+      "name": "歯ブラシ",
+      "ordinaryProperties": [
+        "長さ18cmの樹脂の柄",
+        "先端に柔らかい樹脂毛が並ぶ",
+        "普通の手動歯ブラシ"
+      ]
+    },
+    {
+      "id": "clothespin",
+      "name": "洗濯ばさみ",
+      "ordinaryProperties": [
+        "長さ6cmの樹脂製クリップ",
+        "金属ばねの力で二枚の先端が閉じる",
+        "指でつまんで開閉する"
+      ]
+    }
+  ]
+}

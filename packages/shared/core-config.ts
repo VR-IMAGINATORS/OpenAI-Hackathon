@@ -3,6 +3,8 @@ import { warningPolicySchema } from './harness.js';
 
 export const localeSchema = z.enum(['ja', 'en']);
 export type Locale = z.infer<typeof localeSchema>;
+export const companionInitiativeSchema = z.enum(['observations', 'hypotheses', 'suggestions']);
+export type CompanionInitiative = z.infer<typeof companionInitiativeSchema>;
 const text = z.string().trim().min(1).max(2000);
 export const localizedTextSchema = z.object({ ja: text, en: text }).strict();
 export type LocalizedText = z.infer<typeof localizedTextSchema>;
@@ -34,6 +36,7 @@ const localeConversationSchema = z
 const currentCoreConfigSchema = z
   .object({
     schemaVersion: z.literal(2),
+    companionInitiative: companionInitiativeSchema.default('observations'),
     acceptancePolicy: localizedTextSchema,
     creativity: z
       .object({

@@ -330,22 +330,7 @@ export class GameSession {
           generation = this.generation;
         const context = this.context();
         try {
-          const proposal = proposalSchema.parse(await this.ai.recognize(context));
-          if (this.terminal || this.generation !== generation || this.inputRevision !== revision)
-            continue;
-          for (const item of proposal.items) {
-            if ((item.photoId === null) === (item.inventoryId === null))
-              throw new Error('Invalid item source');
-            if (item.photoId && !this.photos.some((p) => p.id === item.photoId))
-              throw new Error('Unknown photo');
-            if (
-              item.inventoryId &&
-              !this.inventory.some((p) => p.id === item.inventoryId && p.status !== 'consumed')
-            )
-              throw new Error('Unknown inventory');
-          }
-          this.proposal = { ...proposal, revision: ++this.revision, inputRevision: revision };
-          this.error = null;
+          this.commitRecognizedPhotos(await this.ai.recognize(context), { generation, revision });
         } catch {
           if (this.inputRevision === revision && !this.terminal)
             this.error = '認識できませんでした。写真や音声を訂正して再試行してください。';
@@ -356,6 +341,35 @@ export class GameSession {
       this.clock.resume('recognition');
       this.check();
     }
+  }
+  /** Internal recognition boundary shared by image and synthetic GameAI adapters. */
+  commitRecognizedPhotos(
+    raw: unknown,
+    expected: { generation: number; revision: number },
+  ): boolean {
+    if (this.proposal?.inputRevision === expected.revision) return false;
+    const proposal = proposalSchema.parse(raw);
+    if (
+      this.terminal ||
+      this.generation !== expected.generation ||
+      this.inputRevision !== expected.revision
+    )
+      return false;
+    for (const item of proposal.items) {
+      if ((item.photoId === null) === (item.inventoryId === null))
+        throw new Error('Invalid item source');
+      if (item.photoId && !this.photos.some((p) => p.id === item.photoId))
+        throw new Error('Unknown photo');
+      if (
+        item.inventoryId &&
+        !this.inventory.some((p) => p.id === item.inventoryId && p.status !== 'consumed')
+      )
+        throw new Error('Unknown inventory');
+    }
+
+    this.proposal = { ...proposal, revision: ++this.revision, inputRevision: expected.revision };
+    this.error = null;
+    return true;
   }
   private invalidateCoreActions() {
     this.actionEpoch++;

@@ -1,0 +1,1396 @@
+{
+  "version": 2,
+  "investigation": {
+    "initialOverview": {
+      "ja": "布の目隠しが視界を塞いでいます。遠い足音が止まり、衣服の端末からメイの声が届きます。「肩のカメラで確認できます。まず、今の拘束から見ていきましょう。」ここには、現在のあなたへ届く黒い録音が残されています。残した人物は、まだ分かりません。",
+      "en": "A cloth blindfold blocks your sight. Distant footsteps stop, and Mei speaks through the device on your clothing. “I can observe through the shoulder camera. Let's focus on the restraint.” A black recording left here reaches you in the present. Its author remains unknown."
+    },
+    "knowledgeMetadata": [
+      {
+        "knowledgeId": "opening-clue",
+        "targetId": "recording-context",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-blocked",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-partial",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-cleared",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-blocked",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-partial",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-cleared",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-blocked",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-partial",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-cleared",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "overview"
+      },
+      {
+        "knowledgeId": "blindfold-full-detail",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "detail"
+      },
+      {
+        "knowledgeId": "control-window-full-detail",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "detail"
+      },
+      {
+        "knowledgeId": "exit-full-detail",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "detail"
+      },
+      {
+        "knowledgeId": "recording-uncertainty",
+        "targetId": "recording-context",
+        "layer": "background"
+      },
+      {
+        "knowledgeId": "connection-background",
+        "targetId": "emergency-device-context",
+        "layer": "background"
+      },
+      {
+        "knowledgeId": "warehouse-visible-detail",
+        "targetId": "warehouse-context",
+        "layer": "detail"
+      },
+      {
+        "knowledgeId": "evacuation-map-background",
+        "targetId": "warehouse-context",
+        "layer": "background"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-hint-1",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-hint-1-partial",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-hint-2",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-hint-2-partial",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-hint-3",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-pressure-latch-hint-3-partial",
+        "targetId": "gimmick-pressure-latch",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-hint-1",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-hint-1-partial",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-hint-2",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-hint-2-partial",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-hint-3",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-magnetic-rail-hint-3-partial",
+        "targetId": "gimmick-magnetic-rail",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-hint-1",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-hint-1-partial",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-hint-2",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-hint-2-partial",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-hint-3",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "hint"
+      },
+      {
+        "knowledgeId": "gimmick-thermal-leak-hint-3-partial",
+        "targetId": "gimmick-thermal-leak",
+        "layer": "hint"
+      }
+    ],
+    "ambienceSlots": [],
+    "publicVisuals": [
+      {
+        "id": "initial-camera-view",
+        "description": {
+          "ja": "人間の主観視点ではない背後からの構図。炭色のフード付きジャケットと灰色のパンツを着た中性的な成人に布の目隠しが付いている。顔は見せない。暗いコンクリート床と、衣服の薄い緊急端末の青白い表示灯。後続の扉や便利な道具、録音の内容は描かない。説明文字はない。",
+          "en": "A rear view, not human first-person vision. An androgynous adult in a charcoal hooded jacket and gray trousers wears a cloth blindfold; their face is not shown. Dark concrete flooring and the pale blue indicator of the thin clothing-mounted emergency device are visible. No later doors, convenient tools, recording contents or explanatory text appear."
+        },
+        "prerequisites": [
+          {
+            "factKey": "gimmick-pressure-latch",
+            "value": "blocked"
+          }
+        ]
+      },
+      {
+        "id": "confirmed-open-exit",
+        "description": {
+          "ja": "確認済みの最終出口。横向きの閂は受けから抜け、扉は開放ばねによって退避路側へ開いている。開口部の先には障害のない屋外退避路が続く。新しい鍵、人物、追跡者、障害物は描かず、すでに退避したとも示さない。",
+          "en": "The confirmed open final exit. The horizontal bolt is clear of its receiver, and the opening spring has swung the door toward the escape path. Beyond the opening is the unobstructed outdoor escape path. No new lock, person, pursuer or obstacle is depicted, and the image does not imply that departure has already occurred."
+        },
+        "prerequisites": [
+          {
+            "factKey": "gimmick-pressure-latch",
+            "value": "cleared"
+          },
+          {
+            "factKey": "gimmick-magnetic-rail",
+            "value": "cleared"
+          },
+          {
+            "factKey": "gimmick-thermal-leak",
+            "value": "cleared"
+          }
+        ]
+      }
+    ],
+    "sourceRef": {
+      "sourceDigest": "9d60a8bb0622608e08b519302f978a2cc6907944768f313f0f3c115166c84063",
+      "candidateId": "expanded-9d60a8bb0622608e",
+      "revision": 1
+    }
+  },
+  "knowledge": [
+    {
+      "id": "opening-clue",
+      "localizedText": {
+        "ja": "ここには、今のあなたへ届く黒い録音が残されています。誰が残したのか、まだ分かりません。",
+        "en": "A black recording left here reaches you in the present. We do not yet know who left it."
+      },
+      "kind": "known",
+      "prerequisites": [],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "最初に気づいていること",
+        "en": "What I noticed at the start"
+      }
+    },
+    {
+      "id": "gimmick-pressure-latch-blocked",
+      "localizedText": {
+        "ja": "目隠しは上下へずらせず、耳の下の結びも指ではほどけません。ほかに身体の拘束はありません。帯と結びは肩のカメラで確認できます。",
+        "en": "The blindfold cannot slide up or down, and fingers cannot untie the knot below the ear. There are no other bodily restraints. The shoulder camera can examine the straps and knot."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻す",
+        "en": "Remove the blindfold to restore vision"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-partial",
+      "localizedText": {
+        "ja": "帯や固めた結びへの有効な変化があるが、全体の張力はまだ残り、目隠しは外れていない。変化した箇所は確定した状況に従う。",
+        "en": "The strap or hardened knot has changed, but tension remains and the blindfold is still on. Follow the confirmed situation for the exact change."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻す",
+        "en": "Remove the blindfold to restore vision"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-cleared",
+      "localizedText": {
+        "ja": "共通の結びを支える張力が失われ、顎下のずれ止めごと目隠し全体が外れて視界が戻る。",
+        "en": "The common knot loses its supporting tension; the entire blindfold, including its under-chin strap, comes off and human vision returns."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻す",
+        "en": "Remove the blindfold to restore vision"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-hint-1",
+      "localizedText": {
+        "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
+        "en": "The head strap and under-chin strap meet at a hardened knot."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻すのヒント段階1",
+        "en": "Remove the blindfold to restore vision: hint level 1"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-hint-1-partial",
+      "localizedText": {
+        "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
+        "en": "The head strap and under-chin strap meet at a hardened knot."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻すのヒント段階1",
+        "en": "Remove the blindfold to restore vision: hint level 1"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-hint-2",
+      "localizedText": {
+        "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
+        "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻すのヒント段階2",
+        "en": "Remove the blindfold to restore vision: hint level 2"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-hint-2-partial",
+      "localizedText": {
+        "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
+        "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻すのヒント段階2",
+        "en": "Remove the blindfold to restore vision: hint level 2"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-hint-3",
+      "localizedText": {
+        "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
+        "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻すのヒント段階3",
+        "en": "Remove the blindfold to restore vision: hint level 3"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-pressure-latch-hint-3-partial",
+      "localizedText": {
+        "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
+        "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しを外して視界を取り戻すのヒント段階3",
+        "en": "Remove the blindfold to restore vision: hint level 3"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "gimmick-magnetic-rail-blocked",
+      "localizedText": {
+        "ja": "閉じた内扉の脇に、小さな格子付き操作窓があります。奥には引き輪と連結金具が見えます。格子が覆うのは操作窓だけです。",
+        "en": "A small barred control window sits beside the closed inner door. A ring and linkage are visible behind it. The bars cover only the control window."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保する",
+        "en": "Open the inner door to clear the passage"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-partial",
+      "localizedText": {
+        "ja": "輪や連結金具に有効な変化があるが、閂が引き込まれきらず内扉はまだ通れない。具体的な到達・把持・移動は確定した状況に従う。",
+        "en": "The ring or linkage has changed, but the bolt is not fully retracted and the doorway is not yet passable. Use the confirmed situation for exact reach, grip or movement."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保する",
+        "en": "Open the inner door to clear the passage"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-cleared",
+      "localizedText": {
+        "ja": "連結金具が閂を引き込み、内扉が手前へ開いて出口までの経路が通る。",
+        "en": "The linkage retracts the bolt; the inner door opens toward the near side and the route to the exit becomes passable."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保する",
+        "en": "Open the inner door to clear the passage"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-hint-1",
+      "localizedText": {
+        "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
+        "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保するのヒント段階1",
+        "en": "Open the inner door to clear the passage: hint level 1"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-hint-1-partial",
+      "localizedText": {
+        "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
+        "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保するのヒント段階1",
+        "en": "Open the inner door to clear the passage: hint level 1"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-hint-2",
+      "localizedText": {
+        "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
+        "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保するのヒント段階2",
+        "en": "Open the inner door to clear the passage: hint level 2"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-hint-2-partial",
+      "localizedText": {
+        "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
+        "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保するのヒント段階2",
+        "en": "Open the inner door to clear the passage: hint level 2"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-hint-3",
+      "localizedText": {
+        "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
+        "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保するのヒント段階3",
+        "en": "Open the inner door to clear the passage: hint level 3"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-magnetic-rail-hint-3-partial",
+      "localizedText": {
+        "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
+        "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉を開けて通路を確保するのヒント段階3",
+        "en": "Open the inner door to clear the passage: hint level 3"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "gimmick-thermal-leak-blocked",
+      "localizedText": {
+        "ja": "最後の出口は、ネジ一本で留まった金具が横向きの閂を塞いでいます。固定部品と、そのそばの方向表示を確認できます。",
+        "en": "At the final exit, a bracket held by one screw blocks a horizontal bolt. The fastenings and nearby directional markings are available to examine."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "金具で固定された出口を開ける",
+        "en": "Open the exit secured by the metal bracket"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-partial",
+      "localizedText": {
+        "ja": "ネジ・金具・閂への有効な変化があるが、閂が受けに残り出口は開いていない。どこまで外れたかは確定した状況に従う。",
+        "en": "The screw, bracket or bolt has changed, but the bolt remains in its receiver and the exit is not open. Follow the confirmed situation for what has been loosened or removed."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "金具で固定された出口を開ける",
+        "en": "Open the exit secured by the metal bracket"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-cleared",
+      "localizedText": {
+        "ja": "閂が受けから抜け、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+        "en": "The bolt leaves its receiver and the opening spring swings the door toward the escape path without human hands. There is no additional lock or obstacle; the sole final exit now leads to a safe escape path."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "cleared"
+        }
+      ],
+      "revealMode": "automatic",
+      "requestCue": {
+        "ja": "金具で固定された出口を開ける",
+        "en": "Open the exit secured by the metal bracket"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-hint-1",
+      "localizedText": {
+        "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
+        "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "金具で固定された出口を開けるのヒント段階1",
+        "en": "Open the exit secured by the metal bracket: hint level 1"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-hint-1-partial",
+      "localizedText": {
+        "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
+        "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "金具で固定された出口を開けるのヒント段階1",
+        "en": "Open the exit secured by the metal bracket: hint level 1"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-hint-2",
+      "localizedText": {
+        "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
+        "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "金具で固定された出口を開けるのヒント段階2",
+        "en": "Open the exit secured by the metal bracket: hint level 2"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-hint-2-partial",
+      "localizedText": {
+        "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
+        "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "金具で固定された出口を開けるのヒント段階2",
+        "en": "Open the exit secured by the metal bracket: hint level 2"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-hint-3",
+      "localizedText": {
+        "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
+        "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "金具で固定された出口を開けるのヒント段階3",
+        "en": "Open the exit secured by the metal bracket: hint level 3"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "gimmick-thermal-leak-hint-3-partial",
+      "localizedText": {
+        "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
+        "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+      },
+      "kind": "hidden",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "partial"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "金具で固定された出口を開けるのヒント段階3",
+        "en": "Open the exit secured by the metal bracket: hint level 3"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "blindfold-full-detail",
+      "localizedText": {
+        "ja": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。これはカメラによる観察で、人間の視界はまだ塞がれている。",
+        "en": "The blindfold's head strap and under-chin retaining strap meet at one knot, preventing it from sliding up or down. The knot below the ear is hardened with resin and cannot be untied with fingers. Turning the head sideways lets the shoulder camera see the main strap leading to the knot, held away from skin and hair, and a short loose tail. There are no other bodily restraints. This is camera observation; human sight remains blocked."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "目隠しの帯と耳の下の様子を詳しく",
+        "en": "Examine the blindfold straps and the area below the ear"
+      },
+      "observationTargetId": "gimmick-pressure-latch"
+    },
+    {
+      "id": "control-window-full-detail",
+      "localizedText": {
+        "ja": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。人が通る場所と道具で操作する場所は、隣り合っているが別になっている。",
+        "en": "Beside the inner passage door is a small barred control window. Its bars cover only the window, not the doorway used by a person. A linkage connects the ring behind the bars to the door bolt, and an arrow points toward the near side. A tool seems able to pass through the narrow gaps. The passage for a person and the opening for tool operation are adjacent but separate."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "内扉と操作窓の配置を詳しく",
+        "en": "Examine the inner door and control-window layout"
+      },
+      "observationTargetId": "gimmick-magnetic-rail"
+    },
+    {
+      "id": "exit-full-detail",
+      "localizedText": {
+        "ja": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。金具を留めるネジと、扉を閉じたままにする閂は別の部品として確認できる。",
+        "en": "At the final exit, one large slotted screw secures a bracket blocking a horizontal bolt. The screw slot, a counterclockwise arrow and the bolt's travel direction are visible. An opening spring pushes the door toward the escape path. The screw securing the bracket and the bolt keeping the door closed are visibly separate components."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-magnetic-rail",
+          "value": "cleared"
+        },
+        {
+          "factKey": "gimmick-thermal-leak",
+          "value": "blocked"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "出口の固定部品と表示を詳しく",
+        "en": "Examine the exit's fastenings and markings"
+      },
+      "observationTargetId": "gimmick-thermal-leak"
+    },
+    {
+      "id": "recording-uncertainty",
+      "localizedText": {
+        "ja": "黒い録音が現在へ届くことと、それを誰が残したかは別の問題だ。今ある観察だけでは、録音の送り手と監禁した人物が同一かどうかも分からない。録音の謎を解くことは、拘束を解除するための条件ではない。",
+        "en": "The recording reaching the present does not establish who left it. Current observations do not tell us whether its sender and the captor are the same person. Solving the recording's mystery is not a condition for releasing the restraints."
+      },
+      "kind": "hidden",
+      "prerequisites": [],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "黒い録音について何が分かっているか",
+        "en": "What is established about the black recording?"
+      },
+      "observationTargetId": "recording-context"
+    },
+    {
+      "id": "connection-background",
+      "localizedText": {
+        "ja": "メイは衣服の緊急端末で動く専属AIだ。通常通信が遮断されたため、一週間前の同じ持ち主の同期記録へ一度だけ届く非常回線を使っている。行き来するのは声・写真・使用指示だけで、人や実物は移動しない。過去の予定を変えても、この接続先の未来が即座に消える保証はない。端末の青白い表示灯は、人型のメイがそこにいることを意味しない。",
+        "en": "Mei is your personal AI running on the emergency device attached to your clothing. With ordinary communications blocked, she uses a one-time emergency line to the same owner's synchronization record from one week earlier. Only voice, photos and instructions travel; people and physical objects do not. Changing past plans does not guarantee that this connected future immediately disappears. The device's pale blue indicator does not represent a humanoid Mei."
+      },
+      "kind": "hidden",
+      "prerequisites": [],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "メイと一週間前への接続について",
+        "en": "Ask about Mei and the connection to one week earlier"
+      },
+      "observationTargetId": "emergency-device-context"
+    },
+    {
+      "id": "warehouse-visible-detail",
+      "localizedText": {
+        "ja": "目隠しが外れた今、床に固定された椅子と棚、奥へ続く通路を自分の目で確認できる。窓はなく、使える道具は置かれていない。壁には避難経路図がある。倉庫が暗いことと、目隠しで見えなかったことは別で、現在の観察に新たな照明道具は必要ない。",
+        "en": "With the blindfold removed, you can now see the floor-fixed chair, shelving and passage with your own eyes. There are no windows or usable tools lying here. An evacuation map is on the wall. The warehouse's darkness is distinct from the blindfold's obstruction; these observations require no additional lighting tool."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "倉庫の見える範囲を見回す",
+        "en": "Look around the visible warehouse"
+      },
+      "observationTargetId": "warehouse-context"
+    },
+    {
+      "id": "evacuation-map-background",
+      "localizedText": {
+        "ja": "壁の避難経路図は、最後の出口のすぐ外が障害のない屋外退避路だと示している。別の通路や隠し出口を探す指示ではない。図から犯人の正体や倉庫の正確な所在地を決めつけることもできない。",
+        "en": "The wall's evacuation map shows an unobstructed outdoor escape path immediately beyond the final exit. It is not an instruction to find another passage or hidden exit. It also does not establish the captor's identity or the warehouse's exact location."
+      },
+      "kind": "observable",
+      "prerequisites": [
+        {
+          "factKey": "gimmick-pressure-latch",
+          "value": "cleared"
+        }
+      ],
+      "revealMode": "on_request",
+      "requestCue": {
+        "ja": "壁の避難経路図について",
+        "en": "Examine the evacuation map on the wall"
+      },
+      "observationTargetId": "warehouse-context"
+    }
+  ],
+  "observationTargets": [
+    {
+      "id": "gimmick-pressure-latch",
+      "description": {
+        "ja": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。",
+        "en": "The blindfold's head strap and under-chin retaining strap meet at one knot, preventing it from sliding up or down. The knot below the ear is hardened with resin and cannot be untied with fingers. Turning the head sideways lets the shoulder camera see the main strap leading to the knot, held away from skin and hair, and a short loose tail. There are no other bodily restraints."
+      }
+    },
+    {
+      "id": "gimmick-magnetic-rail",
+      "description": {
+        "ja": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。",
+        "en": "Beside the inner passage door is a small barred control window. Its bars cover only the window, not the doorway used by a person. A linkage connects the ring behind the bars to the door bolt, and an arrow points toward the near side. A tool seems able to pass through the narrow gaps."
+      }
+    },
+    {
+      "id": "gimmick-thermal-leak",
+      "description": {
+        "ja": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。",
+        "en": "At the final exit, one large slotted screw secures a bracket blocking a horizontal bolt. The screw slot, a counterclockwise arrow and the bolt's travel direction are visible. An opening spring pushes the door toward the escape path."
+      }
+    },
+    {
+      "id": "recording-context",
+      "description": {
+        "ja": "現在へ届く黒い録音について、判明していることと未確定のこと。",
+        "en": "What is established and what remains uncertain about the black recording reaching the present."
+      }
+    },
+    {
+      "id": "emergency-device-context",
+      "description": {
+        "ja": "衣服に取り付けられた緊急端末と、そこから話すメイ。目隠し中も肩のカメラによる観察と人間の視界は区別される。",
+        "en": "The clothing-mounted emergency device and Mei's voice through it. Shoulder-camera observation remains distinct from human sight while blindfolded."
+      }
+    },
+    {
+      "id": "warehouse-context",
+      "description": {
+        "ja": "目隠し解除後に見回せる倉庫の範囲と、壁の避難経路図。",
+        "en": "The warehouse surroundings available to human sight after blindfold removal, including the wall's evacuation map."
+      }
+    }
+  ],
+  "id": "scene-echo-platform-1",
+  "title": {
+    "ja": "暗い倉庫",
+    "en": "Dark Warehouse"
+  },
+  "premise": {
+    "ja": "一週間後のあなたが閉じ込められた、窓のない暗い倉庫。今は目隠しで見えませんが、メイは肩のカメラで観察できます。使える道具は置かれていません。写真の道具は対象と同じ手前側の見える作業範囲にだけ現れ、壁・扉・格子の向こうへは直接現せません。遠い足音が止まり、また戻ります。",
+    "en": "A dark, windowless warehouse holds your future self one week from now. The blindfold blocks human sight, but Mei can observe through the shoulder camera. No usable tools are lying here. Photographed tools appear only in the visible working area on the near side of their target, never directly beyond walls, doors or bars. Distant footsteps stop and return."
+  },
+  "playerBriefing": {
+    "ja": "一週間後のあなたを、写真と声で助けよう。手元の物の写真を送り、どこへどう使うかメイと相談して指示します。相談や撮影だけでは行動を消費しません。",
+    "en": "Help your future self one week from now with photos and your voice. Send a photo of an object nearby, discuss where and how to use it with Mei, then give an instruction. Talking or taking a photo alone does not spend an action."
+  },
+  "rules": {
+    "initialCredits": 1000,
+    "maxPhotosPerSend": 2,
+    "totalTimeSeconds": 300
+  },
+  "setting": {
+    "location": "窓のない暗い倉庫。使える道具は置かれておらず、床に固定された椅子と棚、奥へ続く通路と出口がある。身体の拘束は一か所だけで、ほかの部位は動かせる。壁の避難経路図は、出口のすぐ外が障害のない屋外退避路だと示している。写真の道具は、対象と同じ手前側の見える作業範囲にだけ現れ、AIがそこから運んで使う。壁・扉・格子の向こうへ直接現すことはできない。遠くの足音が止まったり戻ったりする。",
+    "characters": [
+      "一週間後の中性的な成人を背後から描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、暗いコンクリート床を固定する。",
+      "衣服の緊急端末で動作する専属サポートAI、メイ。身体はなく、道具を介して作業する。"
+    ],
+    "constraints": [
+      "写真の道具は対象と同じ手前側の見える作業範囲にだけ現れ、壁・扉・格子の向こうへ直接現れない。",
+      "身体拘束は最初に選ばれた一か所だけ。足音や影は演出であり隠し期限や失敗条件ではない。",
+      "最後の出口のすぐ外は障害のない退避路。第四の障害や新しい追跡戦を加えない。"
+    ]
+  },
+  "story": {
+    "aiName": {
+      "ja": "メイ",
+      "en": "Mei"
+    },
+    "world": {
+      "ja": "メイはあなた専属のサポートAI。一週間後、何者かに監禁されたあなたの衣服の緊急端末で動き、通常通信が遮断されたため、同じ持ち主の一週間前の同期記録へ一度だけ届く非常回線で連絡した。行き来するのは声・写真・使用指示だけで、人や実物は移動しない。端末の再構成器が写真に見える形・材質・働きを再現し、メイが手前側の見える作業範囲で道具を保持・操作する。力は道具を通して伝わり、壁・扉・格子の向こうへ直接生成したり、道具なしで拘束や扉を動かしたり人を運んだりはできない。端末は攻略道具にせず、新しい射程や重量の合否条件も作らない。端末のカメラは目隠し中も観察できるが、人間の視界が戻ったとは言わない。薄い端末の青白い表示灯と最初に決めた位置を保ち、人型や顔を持つAIを追加しない。過去の予定変更でこの未来が即座に消える保証はなく、目的は目の前のあなたを助けること。通報の提案を否定しないが、それだけで拘束を解除しない。事件の日時・所在地・犯人は観測の範囲だけ語る。壁の向こうや犯人の考えを知ることはできず、隠れた機能や鍵の認証を補わない。犯人の目的は固定せず、舞台の謎と提示済みの伏線から展開する。死亡を断定しない。これはゲーム内の未来で、現実の事件の予告ではない。落ち着いた敬体で短く話し、成功した工夫に具体的に応答する。",
+      "en": "Mei is your personal support AI, running on a thin emergency device attached to your future self's clothing one week from now. Someone has imprisoned you and blocked ordinary communications. An emergency line connects once to the same owner's synchronization record from one week earlier. Only voice, photos and instructions travel; people and physical objects do not. The device reconstructs visible shapes, materials and functions from photos. Mei holds and operates tools in the visible working area on the near side; force acts through tools. Tools cannot appear beyond walls, doors or bars. Mei cannot directly move restraints, bare doors or people without a tool, or use the device itself as a puzzle tool. Do not invent range or weight thresholds. The camera still sees when the human is blindfolded; human vision remains blocked. Keep the thin device's established position and pale blue indicator; do not add a humanoid AI or face. Changing plans in the past does not guarantee this connected future disappears. Mei chooses to help the person here now. Accept suggestions to contact authorities, but do not treat a call as releasing restraints. Report dates, location and the captor only as observed; do not see through walls, read minds or invent hidden functions or key authentication. Develop motives from the scene mystery and clues actually presented, without a fixed culprit. Do not assume death. This future is fictional, not a prediction of a real incident. Speak briefly, calmly and politely; respond specifically to successful ideas."
+    },
+    "mystery": {
+      "ja": "誰が未来の自分をここへ閉じ込め、現在へ届く黒い録音だけを残したのか。",
+      "en": "Who imprisoned your future self here, leaving only a black recording that reaches the present?"
+    },
+    "openingClue": {
+      "ja": "ここには、今のあなたへ届く黒い録音が残されています。誰が残したのか、まだ分かりません。",
+      "en": "A black recording left here reaches you in the present. We do not yet know who left it."
+    },
+    "phases": {
+      "opening": {
+        "ja": "冷たさ・埃・遠い物音など情景を一つ添える。初期の謎を一つ示し、観察と推測を分けて現在の拘束に集中する。犯人の正体や後続障害を先出しせず、短い会話で進める。",
+        "en": "Add one sensory detail, such as cold, dust or a distant sound. Present the initial clue, separate observation from inference and focus on the current restraint. Keep dialogue brief; do not reveal a culprit or later obstacles."
+      },
+      "middle": {
+        "ja": "一つ解除した進展と広がった観察範囲に応答する。近くの足音や隙間の影を短く描き、提示済みの伏線の受け取り方を揺らす。確定していない事実や追加の失敗条件は作らず、現在障害と残る部分進展を明瞭に伝える。",
+        "en": "Acknowledge the first obstacle cleared and the newly visible area. Briefly describe nearby steps or a shadow and suggest a different reading of a clue already presented. Do not invent confirmed facts or extra failure conditions. Clearly describe the current obstacle and remaining partial progress."
+      },
+      "final": {
+        "ja": "足音が遠ざかった後の静けさなど、抜け出す機会を短く描く。確定した二つの解除を踏まえ、現在障害と最後の出口へのつながりを明瞭にする。伏線の答えや未確定の脱出を断言せず、第四の障害を追加しない。",
+        "en": "Briefly convey an opportunity to leave, such as silence after retreating footsteps. With two confirmed obstacles cleared, explain the connection between the current obstacle and the final exit. Do not assert an answer to the mystery or unconfirmed escape, or add a fourth obstacle."
+      }
+    }
+  },
+  "obstacles": [
+    {
+      "id": "gimmick-pressure-latch",
+      "title": {
+        "ja": "目隠しを外して視界を取り戻す",
+        "en": "Remove the blindfold to restore vision"
+      },
+      "situation": "布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。",
+      "situationDisplay": {
+        "ja": "目隠しは上下へずらせず、耳の下の結びも指ではほどけません。ほかに身体の拘束はありません。帯と結びは肩のカメラで確認できます。",
+        "en": "The blindfold cannot slide up or down, and fingers cannot untie the knot below the ear. There are no other bodily restraints. The shoulder camera can examine the straps and knot."
+      },
+      "goal": "写真1枚で具現化したはさみを使い、AIが顔や髪から浮いた耳の下側の帯本体を切る意図なら1行動で解除する。\n同じ切断作用を持つ道具で帯本体を断つか、工具で樹脂に固められた共通の結びを崩して全体を緩める意図が明確なら1行動で評価する。\n共通の結びを支える張力が失われ、顎下のずれ止めごと目隠し全体が外れて視界が戻る。",
+      "constraints": [
+        "帯本体か結びか、道具をどう使うかが不明な場合は、行動を確定せず確認を求める。",
+        "短い余り端だけを切るなど、帯本体の張力も結びも解けない使い方は解除失敗になる。",
+        "例: はさみで皮膚から浮いた帯本体を切る。指定名に限定せず、同じ切断作用や固められた結びを崩せる作用を持つ代用品も評価する。"
+      ],
+      "factKeys": ["gimmick-pressure-latch"],
+      "requiredVisualFacts": [
+        {
+          "key": "gimmick-pressure-latch",
+          "value": "blocked"
+        }
+      ],
+      "forbiddenVisualChanges": [
+        {
+          "key": "gimmick-pressure-latch",
+          "from": "blocked",
+          "to": "cleared"
+        },
+        {
+          "key": "gimmick-pressure-latch",
+          "from": "partial",
+          "to": "cleared"
+        }
+      ],
+      "mechanism": {
+        "ja": "頭の帯と顎下のずれ止めをまとめる結びが樹脂で固定されているため、素手でほどいたり目隠しを上下へずらしたりはできない。皮膚から離れた帯本体を切断すると、共通の結びを支える張力が失われて目隠し全体が外れる。工具で固められた結び自体を崩す別解も、具体的な物性と使い方が十分なら認める。余り端だけを切っても張力は残る。",
+        "en": "Resin fixes the common knot joining the head and under-chin straps, so fingers cannot untie it and the blindfold cannot slide up or down. Cutting the main strap away from the skin removes the tension supporting the knot and releases the entire blindfold. Breaking apart the hardened common knot with a tool is also valid when the properties and use are sufficient. Cutting only the loose tail leaves the tension intact."
+      },
+      "hints": [
+        {
+          "ja": "固められた結びへ、頭の帯と顎下のずれ止めが集まっている。",
+          "en": "The head strap and under-chin strap meet at a hardened knot."
+        },
+        {
+          "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
+          "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+        },
+        {
+          "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
+          "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+        }
+      ],
+      "completionFact": {
+        "key": "gimmick-pressure-latch",
+        "value": "cleared"
+      }
+    },
+    {
+      "id": "gimmick-magnetic-rail",
+      "title": {
+        "ja": "内扉を開けて通路を確保する",
+        "en": "Open the inner door to clear the passage"
+      },
+      "situation": "通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。",
+      "situationDisplay": {
+        "ja": "閉じた内扉の脇に、小さな格子付き操作窓があります。奥には引き輪と連結金具が見えます。格子が覆うのは操作窓だけです。",
+        "en": "A small barred control window sits beside the closed inner door. A ring and linkage are visible behind it. The bars cover only the control window."
+      },
+      "goal": "写真1枚で具現化したマジックハンドを格子の手前から隙間へ通し、AIが引き輪をつかんで手前へ引く意図なら1行動で解除する。\n格子の隙間から輪へ届き、手前へ引く力を伝えられる別の道具と使い方が明確なら1行動で評価する。\n連結金具が閂を引き込み、内扉が手前へ開いて出口までの経路が通る。",
+      "constraints": [
+        "引き輪か手前へ引く方向か、道具をどう通すかが不明な場合は、行動を確定せず確認を求める。",
+        "格子の奥へ直接生成する指示、または輪に届かず手前へ引く力も伝わらない使い方は解除失敗になる。",
+        "例: マジックハンドを格子の隙間から通して輪をつかみ、手前へ引く。指定名に限定せず、同じ到達・把持・牽引作用を生じる代用品も評価する。"
+      ],
+      "factKeys": ["gimmick-magnetic-rail"],
+      "requiredVisualFacts": [
+        {
+          "key": "gimmick-magnetic-rail",
+          "value": "blocked"
+        }
+      ],
+      "forbiddenVisualChanges": [
+        {
+          "key": "gimmick-magnetic-rail",
+          "from": "blocked",
+          "to": "cleared"
+        },
+        {
+          "key": "gimmick-magnetic-rail",
+          "from": "partial",
+          "to": "cleared"
+        }
+      ],
+      "mechanism": {
+        "ja": "内扉脇の操作窓から道具を通し、奥の引き輪を手前へ引くと、連結金具が閂を引き込む。内扉は手前へ開き、操作窓の格子は横に残るので通路を塞がない。道具は手前で再構成し、操作窓の隙間を通して使う。",
+        "en": "Pass a tool through the control window beside the inner door and pull the ring toward the near side. The linkage retracts the bolt. The door opens toward the near side, and the window bars remain beside it without blocking passage. Reconstruct the tool on the near side and pass it through a gap."
+      },
+      "hints": [
+        {
+          "ja": "格子の隙間と、奥の引き輪から閂へ続く金具が見える。",
+          "en": "You can see gaps in the bars and a linkage from the ring to the bolt."
+        },
+        {
+          "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
+          "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+        },
+        {
+          "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
+          "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+        }
+      ],
+      "completionFact": {
+        "key": "gimmick-magnetic-rail",
+        "value": "cleared"
+      }
+    },
+    {
+      "id": "gimmick-thermal-leak",
+      "title": {
+        "ja": "金具で固定された出口を開ける",
+        "en": "Open the exit secured by the metal bracket"
+      },
+      "situation": "最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。",
+      "situationDisplay": {
+        "ja": "最後の出口は、ネジ一本で留まった金具が横向きの閂を塞いでいます。固定部品と、そのそばの方向表示を確認できます。",
+        "en": "At the final exit, a bracket held by one screw blocks a horizontal bolt. The fastenings and nearby directional markings are available to examine."
+      },
+      "goal": "写真1枚で具現化したマイナスドライバーを使い、AIがネジを反時計回りに外し、同じ道具で閂を横へ動かす意図なら1行動で解除する。\n観察できるネジ溝に合う硬い先端を持ち、ネジを回してから閂を動かせる別の道具なら評価する。硬貨も溝に合い同じ作用を生じる使い方なら1行動で解除する。\n閂が受けから抜け、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。",
+      "constraints": [
+        "使用対象の道具や、出口の固定金具を外したいという意図が特定できない場合だけ、行動を確定せず確認を求める。",
+        "先端が見えている溝に掛からない、ネジを外せない、または金具を外した後も閂を動かせない使い方は解除失敗になる。",
+        "例: マイナスドライバーでネジを反時計回りに外し、その先端で閂を横へ動かす。指定名に限定せず、同じ回転・移動作用を生じる硬貨などの代用品も評価する。"
+      ],
+      "factKeys": ["gimmick-thermal-leak"],
+      "requiredVisualFacts": [
+        {
+          "key": "gimmick-thermal-leak",
+          "value": "blocked"
+        }
+      ],
+      "forbiddenVisualChanges": [
+        {
+          "key": "gimmick-thermal-leak",
+          "from": "blocked",
+          "to": "cleared"
+        },
+        {
+          "key": "gimmick-thermal-leak",
+          "from": "partial",
+          "to": "cleared"
+        }
+      ],
+      "mechanism": {
+        "ja": "溝に合う硬い先端でネジを正面から反時計回りに回すと、金具を支える唯一の固定が解ける。金具を同じ先端で押し退け、露出した閂を横へ動かす。閂が抜けると開放ばねが扉を退避路側へ開く。『ネジを外して出口を開ける』という意図には、この見える連続操作を含めてよい。",
+        "en": "A rigid tip fitting the visible slot turns the screw counterclockwise from the front, releasing the bracket's only fastener. Push the bracket aside with the same tip and slide the exposed bolt sideways. Once the bolt retracts, the opening spring swings the door toward the escape path. An intention to remove the screw and open the exit can include this visible chain of operations."
+      },
+      "hints": [
+        {
+          "ja": "金具を留めるマイナスネジの溝と、反時計回りの矢印が見える。",
+          "en": "The slotted screw holding the bracket and a counterclockwise arrow are visible."
+        },
+        {
+          "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
+          "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+        },
+        {
+          "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
+          "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+        }
+      ],
+      "completionFact": {
+        "key": "gimmick-thermal-leak",
+        "value": "cleared"
+      }
+    }
+  ],
+  "events": [],
+  "ending": {
+    "targetDurationSeconds": 15,
+    "generateOnFailure": true
+  },
+  "core": {
+    "facts": [
+      {
+        "key": "gimmick-pressure-latch",
+        "initial": "blocked",
+        "values": ["blocked", "partial", "cleared"],
+        "allowedTransitions": [
+          {
+            "from": "blocked",
+            "to": "partial"
+          },
+          {
+            "from": "blocked",
+            "to": "cleared"
+          },
+          {
+            "from": "partial",
+            "to": "cleared"
+          }
+        ],
+        "visualDescription": "blocked: 布の目隠しは頭の周りと顎下のずれ止め帯が一つの結びに集まり、上下へずらせない。耳の下の結びは樹脂で固められ、指ではほどけない。頭を横に向けると、肩のカメラに、結びへ続く皮膚や髪から浮いた帯本体と短い余り端が映る。ほかに身体の拘束はない。\npartial: 帯や固めた結びへの有効な変化があるが、全体の張力はまだ残り、目隠しは外れていない。変化した箇所は確定した状況に従う。\ncleared: 共通の結びを支える張力が失われ、顎下のずれ止めごと目隠し全体が外れて視界が戻る。"
+      },
+      {
+        "key": "gimmick-magnetic-rail",
+        "initial": "blocked",
+        "values": ["blocked", "partial", "cleared"],
+        "allowedTransitions": [
+          {
+            "from": "blocked",
+            "to": "partial"
+          },
+          {
+            "from": "blocked",
+            "to": "cleared"
+          },
+          {
+            "from": "partial",
+            "to": "cleared"
+          }
+        ],
+        "visualDescription": "blocked: 通路の内扉脇に、小さな格子付き操作窓がある。格子は操作窓だけを覆い、人が通る内扉を塞いでいない。奥の引き輪から内扉の閂へ金具がつながり、手前向きの矢印がある。窓の細い隙間へ道具を通せそうだ。\npartial: 輪や連結金具に有効な変化があるが、閂が引き込まれきらず内扉はまだ通れない。具体的な到達・把持・移動は確定した状況に従う。\ncleared: 連結金具が閂を引き込み、内扉が手前へ開いて出口までの経路が通る。"
+      },
+      {
+        "key": "gimmick-thermal-leak",
+        "initial": "blocked",
+        "values": ["blocked", "partial", "cleared"],
+        "allowedTransitions": [
+          {
+            "from": "blocked",
+            "to": "partial"
+          },
+          {
+            "from": "blocked",
+            "to": "cleared"
+          },
+          {
+            "from": "partial",
+            "to": "cleared"
+          }
+        ],
+        "visualDescription": "blocked: 最後の出口では、大きなマイナスネジ1本が金具を固定し、その金具が横向きの閂を塞いでいる。ネジ溝、反時計回りの矢印、閂を動かす方向が見え、扉は開放ばねで退避路側へ押されている。\npartial: ネジ・金具・閂への有効な変化があるが、閂が受けに残り出口は開いていない。どこまで外れたかは確定した状況に従う。\ncleared: 閂が受けから抜け、開放ばねが扉を退避路側へ人の手なしで開く。 新たな鍵や障害はなく、開いた唯一の最終出口から安全な退避路へ進める。"
+      }
+    ],
+    "characterAppearance": "一週間後の中性的な成人を背後から描き、顔は見せない。炭色のフード付きジャケット、灰色のパンツ、暗いコンクリート床を固定する。",
+    "visualStyle": "ミステリー映画風。現在の舞台と観察できる障害を読み取れる構図。説明文字は使わず、未公開の障害と便利な道具を先出ししない。",
+    "judgmentPolicy": "日用品の観察できる物性と使い方を評価する。代表アイテム名に限定せず、同じ作用の代用品や筋の通る組み合わせを認める。見えない機能や非公開の寸法・重量閾値を加えない。実際に変化した場合だけpartialにし、具体的な進展をsituationへ残す。clearedは完了条件を全て満たした時だけ。足音や物音だけで失敗させず、履歴にない破損や拘束を加えない。",
+    "hintLevels": [
+      "求められたら現在の障害の観察を伝える。",
+      "さらに求められたら現在の障害に必要な物理作用を伝える。",
+      "再度求められたら現在の障害の具体的な使い方を一つ示す。"
+    ]
+  }
+}

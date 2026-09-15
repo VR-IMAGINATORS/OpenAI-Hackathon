@@ -21,7 +21,8 @@
     "format:check": "prettier --check \"{apps,packages,tools,tests}/**/*.{ts,tsx,js,cjs,mjs,css}\" \"scenarios/**/*.json\" package.json .prettierrc.json",
     "probe:live": "node --import tsx tools/core-live-probe.ts --live",
     "probe:preview": "node --import tsx tools/core-live-probe.ts",
-    "mission": "node --import tsx tools/auto-mission.ts"
+    "mission": "node --import tsx tools/auto-mission.ts",
+    "play:expanded": "npm run build && node --import tsx tools/play-expanded.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
