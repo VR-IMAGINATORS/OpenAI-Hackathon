@@ -130,18 +130,22 @@ test('time notice policy is scoped to a deferred aside in each locale and omitte
     const localized = { ...structuredClone(snapshot), locale };
     const prompt = liveInstructions(state, localized);
     assert.match(prompt, /time_warning/);
-    assert.ok(prompt.includes(localized.coreConfig.timeWarning!.deliveryInstructions[locale]));
     assert.match(
       prompt,
       locale === 'ja' ? /自分の説明や回答も最後まで/ : /finish your own explanation or answer/,
     );
     assert.match(
       prompt,
-      locale === 'ja' ? /ゲーム終了の結果.*取り消す/ : /discard the pending notice.*game-ending/,
+      locale === 'ja' ? /ゲーム終了の結果.*取り消す/ : /Discard the pending notice.*game-ending/,
     );
-    localized.coreConfig.timeWarning!.enabled = false;
-    assert.equal(liveInstructions(state, localized).includes('time_warning'), false);
+    assert.match(
+      prompt,
+      locale === 'ja' ? /最終警告のcommentaryは優先/ : /Prioritize final-warning commentary/,
+    );
+    // New warnings policy is authoritative, independently of the retained legacy field.
     delete localized.coreConfig.timeWarning;
+    assert.equal(liveInstructions(state, localized).includes('time_warning'), true);
+    localized.coreConfig.warnings.enabled = false;
     assert.equal(liveInstructions(state, localized).includes('time_warning'), false);
   }
 });

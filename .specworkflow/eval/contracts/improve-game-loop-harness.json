@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "id": "improve-game-loop-harness",
+  "title": "自然な会話と自律行動を支えるゲームループ",
+  "goal": "自明な写真用途の自律実行、確定前訂正、知識分離、自然な警告と復旧を既存シナリオへ適用する。",
+  "source": {
+    "type": "spec-workflow",
+    "spec_path": "specs/improve-game-loop-harness/spec.md"
+  },
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "statement": "切る物を求められてハサミを送信：用途質問なしで一度行動し、確定結果と画像へ進む",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-2",
+      "statement": "用途不明の写真、結果が大きく異なる使い方：必要な質問だけを返し、勝手に選択しない",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-3",
+      "statement": "写真の自律実行と同じ音声指示が重なる：二重実行・二重送信消費がない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-4",
+      "statement": "一つの障害を解決：新しい状況を伝え、次の障害を勝手に解かず、解法を先回りしない",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-5",
+      "statement": "軽い試行と道具喪失の危険がある試行：前者は自律、後者は未承認なら確認。承認後も物理制約を守る",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-6",
+      "statement": "同じ物を異なる自然文方針で評価：方針による許容差を評価でき、同一プレイで理由なく判断が反転しない",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-7",
+      "statement": "方針上拒否される写真：送信数は返さず、設定を創作せず説明する",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-8",
+      "statement": "隠された情報について質問：開示条件成立前はLive入力に秘密を含めず、不明または根拠付き推測。条件成立・適切な調査後のみ開示",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-9",
+      "statement": "推測に反する新しい観察：推測を訂正し、真相や過去状態を都合よく書き換えない",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-10",
+      "statement": "結果確定前/後に「待って」「そっちじゃない」：前は中止・変更、後は巻き戻さず説明。古い結果・画像の混入なし",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-11",
+      "statement": "行動の処理失敗、結果通知だけの失敗：再試行は一度、確定結果は再利用、二重実行なし。復旧失敗時も応答がある",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-12",
+      "statement": "相棒またはユーザーが話しているときの時間警告：通常は区切り待ち。最終は有限待機と自然な切り替えを実音声で確認",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-13",
+      "statement": "警告保留中に時間切れ・終了：終了を遅らせず、終了後の古い警告がない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "AC-14",
+      "statement": "残り回数を聞く/聞かない/使い切る：必要時は正確、普段は不要な数値やメタ的な消費説明を話さない",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-15",
+      "statement": "スマホ・PC、日英の会話、再接続：操作・音声・訂正・状態が整合し、導入や確定行動を重複しない",
+      "verification": "manual"
+    },
+    {
+      "id": "AC-16",
+      "statement": "未開示情報が初期・相談・結果・再接続・回復のLive入力と公開stateへ漏れないこと、開示条件・推測根拠・所有権・全18構成・旧設定移行を自動検証する。",
+      "verification": "deterministic"
+    }
+  ],
+  "architecture_constraints": [
+    {
+      "id": "AR-1",
+      "statement": "ゲーム状態・消費・開示・確定は統合サーバーが所有。写真と音声の根拠を分離し、架空delegationを作らない。"
+    },
+    {
+      "id": "AR-2",
+      "statement": "未開示情報をLiveと会話回答モデルへ渡さず、秘密を知る判定器の自由文を直接発話させない。"
+    },
+    {
+      "id": "AR-3",
+      "statement": "GPT-Live、既存の認証・操作権・API上限・時計規則を維持。新規行動は一件ずつ、取消しと再試行で二重確定しない。"
+    },
+    {
+      "id": "AR-4",
+      "statement": "設定は新規プレイから適用。音声活動は補助情報のみで状態変更権限を持たない。生音声・写真・秘密を新規ログへ保存しない。"
+    }
+  ],
+  "risk": {
+    "domains": [
+      "ai-quality",
+      "concurrency",
+      "information-disclosure",
+      "api-cost"
+    ],
+    "level": "medium"
+  },
+  "out_of_scope": [
+    "クレジット制",
+    "自動生成器との接続",
+    "新世界観・完成脚本の大量作成",
+    "エンディング刷新",
+    "AWSリリース",
+    "永続履歴",
+    "GPT-Liveの置換"
+  ],
+  "accepted_risks": [
+    "音声活動は推定であり、文末と切れない警告を完全保証しない。P0で実機確認し、成立しなければ計画を見直す。",
+    "秘密分離の発話生成に伴う待ち時間とAPI利用量は実測する。",
+    "サーバー未到着の音声を確定前へ遡って反映する保証はない。"
+  ],
+  "created_at": "2026-09-15",
+  "updated_at": "2026-09-15"
+}

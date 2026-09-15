@@ -65,6 +65,22 @@
         ["gimmick-pressure-latch", "gimmick-magnetic-rail", "gimmick-thermal-leak"],
         ["gimmick-light-gate", "gimmick-moisture-sensor", "gimmick-cable-tension"],
         ["gimmick-balance-cradle", "gimmick-optical-alignment", "gimmick-inkless-codeplate"]
+      ],
+      "knowledge": [
+        {
+          "id": "opening-clue",
+          "localizedText": {
+            "ja": "ここには、今のあなたへ届く黒い録音が残されています。誰が残したのか、まだ分かりません。",
+            "en": "A black recording left here reaches you in the present. We do not yet know who left it."
+          },
+          "kind": "known",
+          "prerequisites": [],
+          "revealMode": "automatic",
+          "requestCue": {
+            "ja": "最初に気づいていること",
+            "en": "What I noticed at the start"
+          }
+        }
       ]
     },
     {
@@ -93,6 +109,22 @@
         ["gimmick-light-gate", "gimmick-resonance-lock", "gimmick-thermal-leak"],
         ["gimmick-balance-cradle", "gimmick-magnetic-rail", "gimmick-cable-tension"],
         ["gimmick-pressure-latch", "gimmick-moisture-sensor", "gimmick-inkless-codeplate"]
+      ],
+      "knowledge": [
+        {
+          "id": "opening-clue",
+          "localizedText": {
+            "ja": "壁の黒い手形が、こちらのあなたのものと一致しています。でも、付いた日時は今のあなたがいる日より前なんです。",
+            "en": "The black handprint on the wall matches your future self. But its recorded date is earlier than the day you are calling from."
+          },
+          "kind": "known",
+          "prerequisites": [],
+          "revealMode": "automatic",
+          "requestCue": {
+            "ja": "最初に気づいていること",
+            "en": "What I noticed at the start"
+          }
+        }
       ]
     },
     {
@@ -121,6 +153,22 @@
         ["gimmick-pressure-latch", "gimmick-resonance-lock", "gimmick-cable-tension"],
         ["gimmick-light-gate", "gimmick-optical-alignment", "gimmick-thermal-leak"],
         ["gimmick-balance-cradle", "gimmick-moisture-sensor", "gimmick-inkless-codeplate"]
+      ],
+      "knowledge": [
+        {
+          "id": "opening-clue",
+          "localizedText": {
+            "ja": "存在しない患者名の退院記録があります。帰る場所の記載は、こちらのあなたにだけつながっているようです。",
+            "en": "There is a discharge record under a nonexistent patient name. Its destination seems connected only to your future self."
+          },
+          "kind": "known",
+          "prerequisites": [],
+          "revealMode": "automatic",
+          "requestCue": {
+            "ja": "最初に気づいていること",
+            "en": "What I noticed at the start"
+          }
+        }
       ]
     },
     {
@@ -149,6 +197,22 @@
         ["gimmick-balance-cradle", "gimmick-moisture-sensor", "gimmick-thermal-leak"],
         ["gimmick-light-gate", "gimmick-magnetic-rail", "gimmick-inkless-codeplate"],
         ["gimmick-pressure-latch", "gimmick-optical-alignment", "gimmick-cable-tension"]
+      ],
+      "knowledge": [
+        {
+          "id": "opening-clue",
+          "localizedText": {
+            "ja": "ボイラーの黒い煤に「まだ戻るな」と書かれています。こちらのあなたの筆跡です。",
+            "en": "The words \"Do not return yet\" are written in black soot on the boiler, in your future self's handwriting."
+          },
+          "kind": "known",
+          "prerequisites": [],
+          "revealMode": "automatic",
+          "requestCue": {
+            "ja": "最初に気づいていること",
+            "en": "What I noticed at the start"
+          }
+        }
       ]
     },
     {
@@ -177,6 +241,22 @@
         ["gimmick-light-gate", "gimmick-resonance-lock", "gimmick-inkless-codeplate"],
         ["gimmick-pressure-latch", "gimmick-magnetic-rail", "gimmick-cable-tension"],
         ["gimmick-balance-cradle", "gimmick-optical-alignment", "gimmick-thermal-leak"]
+      ],
+      "knowledge": [
+        {
+          "id": "opening-clue",
+          "localizedText": {
+            "ja": "内壁に荷札が残っています。荷物として記されているのは、こちらのあなたです。送り主の記載もあります。",
+            "en": "A shipping label remains on the inner wall. The cargo listed is your future self, and a sender is recorded too."
+          },
+          "kind": "known",
+          "prerequisites": [],
+          "revealMode": "automatic",
+          "requestCue": {
+            "ja": "最初に気づいていること",
+            "en": "What I noticed at the start"
+          }
+        }
       ]
     },
     {
@@ -205,6 +285,22 @@
         ["gimmick-balance-cradle", "gimmick-resonance-lock", "gimmick-cable-tension"],
         ["gimmick-pressure-latch", "gimmick-moisture-sensor", "gimmick-thermal-leak"],
         ["gimmick-light-gate", "gimmick-optical-alignment", "gimmick-inkless-codeplate"]
+      ],
+      "knowledge": [
+        {
+          "id": "opening-clue",
+          "localizedText": {
+            "ja": "封印された記録に、こちらのあなたが消える時刻と、今のあなたの返答が並んでいます。なぜ記録されているのかは分かりません。",
+            "en": "A sealed record places the time of your future self's disappearance beside your present-day reply. We do not know why they are recorded."
+          },
+          "kind": "known",
+          "prerequisites": [],
+          "revealMode": "automatic",
+          "requestCue": {
+            "ja": "最初に気づいていること",
+            "en": "What I noticed at the start"
+          }
+        }
       ]
     }
   ],
@@ -1317,5 +1413,6 @@
         }
       ]
     }
-  ]
+  ],
+  "schemaVersion": 2
 }

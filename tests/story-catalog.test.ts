@@ -246,5 +246,9 @@ test('V2 completion facts must be owned, declared, reachable and terminal; old V
     assert.throws(() => parseScenarioV2(scenario));
   }
   const previous = JSON.parse(readFileSync('scenarios/mobile-playtest.json', 'utf8'));
-  assert.deepEqual(parseScenarioV2(previous), previous);
+  assert.deepEqual(parseScenarioV2(previous), {
+    ...previous,
+    knowledge: [],
+    observationTargets: [],
+  });
 });

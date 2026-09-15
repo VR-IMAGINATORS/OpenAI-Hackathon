@@ -142,6 +142,27 @@ export class ConversationLedger {
         .map((f) => f.serverSeq),
     };
   }
+  /** Only actual speech received during this game's pending action may be promoted. */
+  promoteControlEvidence(evidenceSeq: number[]): void {
+    if (this.stopped || this.state.judging || !evidenceSeq.length)
+      throw new Error('INVALID_CONTROL');
+    const selected = this.fragments.filter((f) => evidenceSeq.includes(f.serverSeq));
+    if (
+      selected.length !== evidenceSeq.length ||
+      selected.some(
+        (f) =>
+          f.speaker !== 'user' ||
+          f.generation !== this.state.generation ||
+          f.receivedGameVersion !== this.state.gameVersion ||
+          this.handled.has(f.serverSeq),
+      )
+    )
+      throw new Error('INVALID_CONTROL');
+    selected.forEach((f) => {
+      f.executionEligible = true;
+    });
+    this.version++;
+  }
   consume(evidenceSeq: number[]): void {
     const eligible = new Set(this.captureUnconsumedContext().eligibleEvidenceSeq);
     if (!evidenceSeq.length || !evidenceSeq.every((seq) => eligible.has(seq)))

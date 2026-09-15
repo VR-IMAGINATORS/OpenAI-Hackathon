@@ -3,6 +3,7 @@ import { liveOutboxEntrySchema, type CoreLiveCommand } from '../../packages/shar
 
 export interface CommandBatch {
   generation: number;
+  serverNow: number;
   controlEpoch: number;
   acknowledgedThrough: number;
   commands: CoreLiveCommand[];
@@ -29,7 +30,11 @@ export class LiveOutbox {
   private generation: number;
   private controllerEpoch: number;
 
-  constructor(generation = 1, controllerEpoch = 0) {
+  constructor(
+    generation = 1,
+    controllerEpoch = 0,
+    private wallNow: () => number = Date.now,
+  ) {
     this.validateConnection(generation, controllerEpoch);
     this.generation = generation;
     this.controllerEpoch = controllerEpoch;
@@ -39,7 +44,11 @@ export class LiveOutbox {
     return this.commands.length;
   }
 
-  append(command: LiveCommand, messageId: string | null = null): CoreLiveCommand {
+  append(
+    command: LiveCommand,
+    messageId: string | null = null,
+    warning?: { validUntil: number; noticeKind: 'time-warning' },
+  ): CoreLiveCommand {
     const parsed = liveOutboxEntrySchema.safeParse({
       seq: this.latestSeq + 1,
       eventId: command.event_id,
@@ -49,6 +58,7 @@ export class LiveOutbox {
       commandType: command.type,
       content: command.content,
       messageId,
+      ...warning,
     });
     if (!parsed.success || Buffer.byteLength(command.content, 'utf8') > MAX_CONTENT_BYTES) {
       // Reject rather than truncate a result: callers can use factCommand's safe limiter.
@@ -60,7 +70,9 @@ export class LiveOutbox {
         previous.type !== command.type ||
         previous.delegation_id !== command.delegation_id ||
         previous.content !== command.content ||
-        previous.messageId !== messageId
+        previous.messageId !== messageId ||
+        previous.validUntil !== warning?.validUntil ||
+        previous.noticeKind !== warning?.noticeKind
       ) {
         throw new LiveOutboxError(409, 'LIVE_COMMAND_CONFLICT');
       }
@@ -77,6 +89,9 @@ export class LiveOutbox {
       delegation_id: parsed.data.delegationId,
       content: parsed.data.content,
       messageId: parsed.data.messageId,
+      ...(warning
+        ? { validUntil: parsed.data.validUntil, noticeKind: parsed.data.noticeKind }
+        : {}),
     };
     this.commands.push(entry);
     this.bytes += size;
@@ -95,6 +110,7 @@ export class LiveOutbox {
     this.acknowledgedThrough = Math.max(this.acknowledgedThrough, ackThrough);
     return {
       generation: this.generation,
+      serverNow: this.wallNow(),
       controlEpoch: this.controllerEpoch,
       acknowledgedThrough: this.acknowledgedThrough,
       commands: this.commands

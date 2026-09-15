@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { storyContextSchema } from './story-schema.js';
+import { scenarioKnowledgeEntrySchema, observationTargetSchema } from './harness.js';
 
 const text = z.string().trim().min(1).max(2000);
 const id = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -107,6 +108,8 @@ const visualChangeSchema = z.object({ key: id, from: id, to: id }).strict();
 export const scenarioV2Schema = z
   .object({
     version: z.literal(2),
+    knowledge: z.array(scenarioKnowledgeEntrySchema).max(100).default([]),
+    observationTargets: z.array(observationTargetSchema).max(100).default([]),
     id,
     title: localizedText,
     premise: localizedText,
@@ -192,6 +195,23 @@ export const scenarioV2Schema = z
         if (!fact.values.includes(t.from) || !fact.values.includes(t.to) || t.from === t.to) {
           issue([...path, 'allowedTransitions', j], 'Invalid transition');
         }
+      });
+    });
+    unique(
+      scenario.knowledge.map((entry) => entry.id),
+      ['knowledge'],
+    );
+    unique(
+      scenario.observationTargets.map((entry) => entry.id),
+      ['observationTargets'],
+    );
+    const targets = new Set(scenario.observationTargets.map((entry) => entry.id));
+    scenario.knowledge.forEach((entry, i) => {
+      if (entry.observationTargetId && !targets.has(entry.observationTargetId))
+        issue(['knowledge', i, 'observationTargetId'], 'Unknown observation target');
+      entry.prerequisites.forEach((condition, j) => {
+        if (!facts.get(condition.factKey)?.values.includes(condition.value))
+          issue(['knowledge', i, 'prerequisites', j], 'Unknown knowledge fact condition');
       });
     });
     const completionOwners = new Set<string>();

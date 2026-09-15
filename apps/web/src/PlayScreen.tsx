@@ -8,6 +8,7 @@ import { LiveConnection, type VoiceState } from './live.js';
 import { preparePhoto, type PreparedPhoto } from './photo.js';
 import { PlayApiError, playRequest, clientId, controlHeaders, setApiLocale } from './play-api.js';
 import GameStatusSummary from './GameStatusSummary.js';
+import { discardWarning } from './live-command-delivery.js';
 
 const voiceLabels: Record<VoiceState, string> = {
   connecting: '回線を接続中',
@@ -127,6 +128,7 @@ export default function PlayScreen({
   const files = useRef<HTMLInputElement>(null);
   const eventQueue = useRef<Promise<unknown>>(Promise.resolve());
   const commandAck = useRef({ key: '', seq: 0 });
+  const activityRequest = useRef<AbortController | null>(null);
   useEffect(() => {
     if (!state.automaticActions || voice !== 'connected') return;
     let cancelled = false;
@@ -150,6 +152,7 @@ export default function PlayScreen({
           generation: number;
           controlEpoch: number;
           acknowledgedThrough: number;
+          serverNow: number;
           commands: CoreLiveCommand[];
         }>(
           '/api/play/commands/poll',
@@ -166,6 +169,7 @@ export default function PlayScreen({
         )
           return;
         if (cancelled || live.current !== connection || control.current !== owner) return;
+        const receivedAt = performance.now();
         for (const command of batch.commands) {
           if (command.seq <= commandAck.current.seq) continue;
           if (command.seq !== commandAck.current.seq + 1)
@@ -176,9 +180,17 @@ export default function PlayScreen({
               ),
             );
           const { type, event_id, delegation_id, content } = command;
-          if (!connection.send([{ type, event_id, delegation_id, content }])) break;
+          const discard = discardWarning(
+            command,
+            terminal(current.current),
+            batch.serverNow,
+            receivedAt,
+            performance.now(),
+          );
+          if (!discard && !connection.send([{ type, event_id, delegation_id, content }])) break;
           commandAck.current.seq = command.seq;
-          if (command.messageId) setSentMessageIds((ids) => new Set([...ids, command.messageId!]));
+          if (!discard && command.messageId)
+            setSentMessageIds((ids) => new Set([...ids, command.messageId!]));
           try {
             sessionStorage.setItem(key, String(command.seq));
           } catch {}
@@ -326,6 +338,7 @@ export default function PlayScreen({
       document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('pagehide', pagehide);
       live.current?.close();
+      activityRequest.current?.abort();
     };
   }, [apply]);
   useEffect(() => {
@@ -357,6 +370,31 @@ export default function PlayScreen({
         if (connection.generation > 0) void heartbeat(connection);
       },
       onPlaybackBlocked: () => setBlockedAudio(true),
+      onVoiceActivity: (snapshot) => {
+        const owner = control.current;
+        if (
+          !mounted.current ||
+          live.current !== connection ||
+          !owner ||
+          !current.current.automaticActions ||
+          terminal(current.current) ||
+          connection.generation !== snapshot.generation ||
+          activityRequest.current
+        )
+          return;
+        // Lossy advisory channel: never queue/retry telemetry behind game input.
+        const abort = new AbortController();
+        activityRequest.current = abort;
+        const timeout = window.setTimeout(() => abort.abort(), 2000);
+        void playRequest('/api/play/voice-activity', snapshot, 'POST', owner, abort.signal)
+          .catch(() => {
+            /* The server treats missing telemetry as unknown. */
+          })
+          .finally(() => {
+            window.clearTimeout(timeout);
+            if (activityRequest.current === abort) activityRequest.current = null;
+          });
+      },
       onEvent: (event, generation) => {
         if (
           event.type === 'session.input_transcript.delta' ||

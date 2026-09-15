@@ -295,3 +295,127 @@ test('retired response budget is discarded when its delayed transport settles', 
   await assert.rejects(response, code('PLAY_EXPIRED'));
   assert.equal(ai.playSnapshot('one'), undefined);
 });
+
+const controlBody = {
+  ...responseBody,
+  text: { format: { ...responseBody.text.format, name: 'harness_control' } },
+};
+
+test('internal control lane admits one beside judgment but preserves normal and global ceilings', async () => {
+  const pending = deferred<unknown>();
+  const ai = new AiService(
+    { ...config(), timeoutMs: 1000 },
+    fake({ createResponse: async () => pending.promise }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const normal = ai.respond('one', responseBody);
+  const control = ai.respondControl('one', controlBody);
+  await assert.rejects(ai.respond('one', responseBody), code('REQUEST_LIMIT'));
+  await assert.rejects(ai.respondControl('one', controlBody), code('REQUEST_LIMIT'));
+  assert.equal(ai.playSnapshot('one')!.responseBusy, 2);
+  assert.equal(ai.snapshot().responseAttempts, 2);
+  pending.resolve({ output: [] });
+  await Promise.all([normal, control]);
+  assert.equal(ai.snapshot().responseBusy, 0);
+
+  const gate = deferred<unknown>();
+  const limited = new AiService(
+    { ...config(), timeoutMs: 1000, responseConcurrentGlobal: 1 },
+    fake({ createResponse: async () => gate.promise }),
+    () => 0,
+  );
+  limited.register('one', 1000);
+  const running = limited.respond('one', responseBody);
+  await assert.rejects(limited.respondControl('one', controlBody), code('REQUEST_LIMIT'));
+  gate.resolve({ output: [] });
+  await running;
+});
+
+test('control and normal replies share play and global attempt budgets', async () => {
+  const ai = new AiService(
+    { ...config(), responsesPerPlay: 2, globalResponseAttempts: 2 },
+    fake(),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  ai.register('two', 1000);
+  await ai.respondControl('one', controlBody);
+  await ai.respond('one', responseBody);
+  await assert.rejects(ai.respondControl('one', controlBody), code('REQUEST_LIMIT'));
+  await assert.rejects(ai.respondControl('two', controlBody), code('REQUEST_LIMIT'));
+  assert.equal(ai.snapshot().responseAttempts, 2);
+});
+
+test('control lane cannot be selected by body fields or unrelated schemas', async () => {
+  const ai = new AiService(config(), fake(), () => 0);
+  ai.register('one', 1000);
+  await assert.rejects(
+    ai.respond('one', { ...responseBody, lane: 'control' }),
+    code('INVALID_REQUEST'),
+  );
+  await assert.rejects(ai.respondControl('one', responseBody), code('INVALID_REQUEST'));
+  assert.equal(ai.snapshot().responseAttempts, 0);
+});
+
+test('aborting control settles the caller but retains real busy until transport settles', async () => {
+  const gate = deferred<unknown>();
+  let receivedSignal: AbortSignal | undefined;
+  const ai = new AiService(
+    { ...config(), timeoutMs: 1000 },
+    fake({
+      createResponse: async (_body, signal) => {
+        receivedSignal = signal;
+        return gate.promise;
+      },
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const controller = new AbortController();
+  const running = ai.respondControl('one', controlBody, controller.signal);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const rejected = assert.rejects(running, code('CONTROL_CANCELLED'));
+  controller.abort();
+  await rejected;
+  assert.equal(receivedSignal, controller.signal);
+  assert.equal(ai.snapshot().responseBusy, 1);
+  await assert.rejects(ai.respondControl('one', controlBody), code('REQUEST_LIMIT'));
+  await ai.retire('one');
+  assert.equal(ai.forget('one'), false);
+  gate.resolve({ output: [] });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(ai.snapshot().responseBusy, 0);
+  assert.equal(ai.forget('one'), true);
+});
+
+test('cooperative control abort frees its lane and pre-aborted calls spend no attempt', async () => {
+  const ai = new AiService(
+    { ...config(), timeoutMs: 1000 },
+    fake({
+      createResponse: async (_body, signal) => {
+        if (!signal) return { output: [] };
+        return new Promise((_, reject) =>
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+        );
+      },
+    }),
+    () => 0,
+  );
+  ai.register('one', 1000);
+  const controller = new AbortController();
+  const running = ai.respondControl('one', controlBody, controller.signal);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const rejected = assert.rejects(running, code('CONTROL_CANCELLED'));
+  controller.abort();
+  await rejected;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(ai.snapshot().responseBusy, 0);
+  await ai.respondControl('one', controlBody);
+  const before = ai.snapshot().responseAttempts;
+  await assert.rejects(
+    ai.respondControl('one', controlBody, controller.signal),
+    code('CONTROL_CANCELLED'),
+  );
+  assert.equal(ai.snapshot().responseAttempts, before);
+});
