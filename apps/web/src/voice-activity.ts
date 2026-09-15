@@ -5,6 +5,7 @@ export interface VoiceActivitySnapshot {
   input: Activity;
   output: Activity;
   playbackReady: boolean;
+  inputStopped?: boolean;
 }
 
 /** Silence requires continuous samples; a suspended/background gap cannot prove silence. */

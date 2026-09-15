@@ -52,13 +52,13 @@ judgeActionはsnapshotとintentを受け、成功/部分変化/在庫変化/短�
 
 ### 3.4 Liveへの通知
 
-現行GameSession.end()のgeneration++を、行動失効用actionEpochと接続用liveGenerationへ分離する。勝敗でactionEpochを進め新規実行を拒否するが、接続用generationを即時変更しない。正常勝敗/ゲーム時間切れ後は最大12秒か絶対期限まで、現在controllerのcommands/pollとoutput transcript受付のみ許可する。input transcriptは表示だけに使い、新規分類/実行はしない。汎用GameRuntime.check()のterminal拒否をpollへ流用せず、finalVoiceUntilとowner/controller/liveGenerationを照合する読取専用経路を作る。手動終了/接続失効/運営drainではこの音声猶予を設けない。
+現行GameSession.end()のgeneration++を、行動失効用actionEpochと接続用liveGenerationへ分離する。勝敗でactionEpochを進め新規実行を拒否するが、接続用generationを即時変更しない。2026-09-15更新: 自動終了後はマイクを停止し、現在controllerのcommands/poll、output transcript、voice-activityとheartbeatを継続する。input transcript・delegationは受信済み要求も破棄し、表示・分類・実行に使わない。最後の通知の送信確認と音声開始後、連続quietと字幕停止を2秒確認して切断する。unknown・再生不可・古い通知は完了扱いにしない。音声・字幕の進展なし60秒と絶対期限で接続を回収する。汎用GameRuntime.check()のterminal拒否を音声後処理へ流用せず、owner/controller/liveGenerationを照合する。手動終了/接続失効/運営drainではこの音声猶予を設けない。
 
 結果MessageにrelatedCommandSeq/liveGenerationを、CommandにmessageIdを保存する。新規resultのテキストと画像枠は、対応commandを接続に送信できた時点で表示する。feed先着は最大2秒だけ表示待機し、command送信失敗/切断/履歴再読/最終音声猶予切れではテキストを表示して音声未送信を案内する。commandが先着した場合はmessageIdを保持し、feedが来たら表示する。音声再生との厳密同期は要求しない。
 
 新規 live-outbox.ts の LiveOutbox に serverCommandSeq/generation/controllerEpoch/event_id を固定して格納。POST /api/play/commands/pollで未ackを返し、ブラウザが接続へ送信できた連続seqを次回ackする。500ms周期、非重複。generation/操作権変更で旧outboxを無効化。再接続は現在状態をthinkingで復元し、旧actionを再実行しない。
 
-送信済みevent_idはブラウザsessionStorageにも保持して重複送信を抑える。音声のexactly-onceや再生完了は保証しない。上限128コマンド/64KiB、越える場合は接続エラーにして無限増殖させない。勝敗時は最大12秒か絶対期限までの発話猶予内で結果を届け、その後hangup。画像はこの猶予に含めない。
+送信済みevent_idはブラウザsessionStorageにも保持して重複送信を抑える。音声のexactly-onceや意味上の発話完了は保証しない。上限128コマンド/64KiB、越える場合は接続エラーにして無限増殖させない。勝敗時は固定12秒のhangupを廃止し、上記の再生監視で接続を閉じる。画像はこの音声待機に含めない。
 
 ## 4. 画像生成・検査
 

@@ -742,7 +742,8 @@ export function createHostedApp(
       })
       .strict()
       .parse(req.body);
-    res.json(runtime(play).pollCommands(body.generation, body.ackThrough));
+    const current = runtime(play);
+    res.json({ ...current.pollCommands(body.generation, body.ackThrough), state: current.state() });
   });
   app.post('/api/play/actions', async (req, res) => {
     const play = controlled(req);
@@ -762,7 +763,7 @@ export function createHostedApp(
     const play = controlled(req);
     const body = heartbeatSchema.parse(req.body);
     const r = runtime(play);
-    if (body.generation !== r.game.generation) throw new SessionError('STALE_GENERATION', 409);
+    if (body.generation !== r.voiceGeneration) throw new SessionError('STALE_GENERATION', 409);
     const auth = owner(req);
     const { clientId, epoch } = credentials(req);
     registry.heartbeat(auth, play.id, clientId, epoch, body.voiceState);

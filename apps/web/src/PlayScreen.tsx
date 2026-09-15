@@ -155,6 +155,7 @@ export default function PlayScreen({
           acknowledgedThrough: number;
           serverNow: number;
           commands: CoreLiveCommand[];
+          state: PublicGameState;
         }>(
           '/api/play/commands/poll',
           { generation: connection.generation, ackThrough: commandAck.current.seq },
@@ -170,6 +171,9 @@ export default function PlayScreen({
         )
           return;
         if (cancelled || live.current !== connection || control.current !== owner) return;
+        // Polling final commands also delivers the terminal state, so the mic
+        // stops before the final commentary is sent to Live.
+        if (batch.state) apply(batch.state);
         const receivedAt = performance.now();
         for (const command of batch.commands) {
           if (command.seq <= commandAck.current.seq) continue;
@@ -269,10 +273,16 @@ export default function PlayScreen({
         waitingRemainingMs: Math.min(previous.waitingRemainingMs, next.waitingRemainingMs),
       };
     current.current = next;
+    if (terminal(next)) live.current?.stopInput();
     setState(next);
   }, []);
   async function heartbeat(connection = live.current) {
-    if (!connection || !control.current || terminal(current.current)) return;
+    if (
+      !connection ||
+      !control.current ||
+      (connection.state !== 'connected' && terminal(current.current))
+    )
+      return;
     try {
       apply(
         (
@@ -339,17 +349,15 @@ export default function PlayScreen({
   }, [apply]);
   useEffect(() => {
     if (!terminal(state)) return;
+    live.current?.stopInput();
     setPhotos([]);
     setRetryPhotos(null);
-    const timer = window.setTimeout(
-      () => {
-        live.current?.close();
-        live.current = null;
-      },
-      state.status === 'expired' ? 0 : 12_000,
-    );
-    return () => window.clearTimeout(timer);
   }, [state.status]);
+  useEffect(() => {
+    if (!['closing', 'terminal', 'quarantined'].includes(lifecycle)) return;
+    live.current?.close();
+    live.current = null;
+  }, [lifecycle]);
   async function connect(prepared?: LiveConnection) {
     if (locked.current) return;
     locked.current = true;
@@ -372,8 +380,6 @@ export default function PlayScreen({
           !mounted.current ||
           live.current !== connection ||
           !owner ||
-          !current.current.automaticActions ||
-          terminal(current.current) ||
           connection.generation !== snapshot.generation ||
           activityRequest.current
         )
@@ -392,6 +398,7 @@ export default function PlayScreen({
           });
       },
       onEvent: (event, generation) => {
+        if (terminal(current.current) && event.type !== 'session.output_transcript.delta') return;
         if (
           event.type === 'session.input_transcript.delta' ||
           event.type === 'session.output_transcript.delta'
@@ -402,11 +409,7 @@ export default function PlayScreen({
         eventQueue.current = eventQueue.current
           .catch(() => {})
           .then(async () => {
-            if (
-              live.current !== connection ||
-              (terminal(current.current) && !current.current.automaticActions)
-            )
-              return;
+            if (live.current !== connection || (terminal(current.current) && changesInput)) return;
             try {
               const update = await request<PlayUpdate | { accepted: true }>('/api/play/events', {
                 generation,
@@ -427,7 +430,7 @@ export default function PlayScreen({
                       )
                     : message(error),
                 );
-                if (changesInput) {
+                if (changesInput && !terminal(current.current)) {
                   setLostInput(true);
                   if (current.current.automaticActions) {
                     connection.close();
@@ -616,6 +619,7 @@ export default function PlayScreen({
     }
   }
   const ended = terminal(state) || invalid;
+  const finishingVoice = ended && voice === 'connected' && !invalid;
   const nextPhotoCost = (photos.length + 1) * creditCosts.photo;
   const canAffordNextPhoto = state.creditsRemaining >= nextPhotoCost;
   const canExecute =
@@ -674,7 +678,9 @@ export default function PlayScreen({
           <span className="messenger-dot" aria-hidden="true" />
           <strong>
             {ended
-              ? t('通話終了', 'Call ended')
+              ? finishingVoice
+                ? t('最後の音声を再生中（マイク停止）', 'Playing the final message (mic off)')
+                : t('通話終了', 'Call ended')
               : locale === 'ja'
                 ? voiceLabels[voice]
                 : {
@@ -700,7 +706,7 @@ export default function PlayScreen({
               {busy ? t('接続準備中…', 'Connecting…') : t('再接続', 'Reconnect')}
             </button>
           )}
-          {blockedAudio && !ended && (
+          {blockedAudio && (!ended || finishingVoice) && (
             <button
               aria-label={t('タップして相手の音声を再生', 'Tap to play incoming audio')}
               onClick={() =>

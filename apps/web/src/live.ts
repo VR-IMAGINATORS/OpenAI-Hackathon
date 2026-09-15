@@ -18,6 +18,7 @@ export class LiveConnection {
   private channel: RTCDataChannel | null = null;
   private audio = new Audio();
   private cancelled = false;
+  private inputStopped = false;
   private activity: VoiceActivityMonitor | null = null;
   constructor(private options: LiveOptions) {
     this.audio.autoplay = true;
@@ -43,17 +44,18 @@ export class LiveConnection {
       );
     }
     this.cancelled = false;
+    this.inputStopped = false;
     this.update('connecting');
     this.activity?.close();
     const activity = (this.activity = new VoiceActivityMonitor((snapshot) =>
-      this.options.onVoiceActivity?.(snapshot),
+      this.options.onVoiceActivity?.({ ...snapshot, inputStopped: this.inputStopped }),
     ));
     void activity.resume();
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
       });
-      if (this.cancelled) {
+      if (this.cancelled || this.inputStopped) {
         this.stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -87,6 +89,13 @@ export class LiveConnection {
           return;
         }
         if (!value || typeof value !== 'object') return;
+        if (
+          this.inputStopped &&
+          ['session.input_transcript.delta', 'session.delegation.created'].includes(
+            String(value.type),
+          )
+        )
+          return;
         if (value.type === 'session.started') {
           this.started = true;
           this.update('connected');
@@ -196,6 +205,14 @@ export class LiveConnection {
       throw error;
     }
     await resume;
+  }
+  stopInput() {
+    if (this.inputStopped) return;
+    this.inputStopped = true;
+    this.stream?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+      track.stop();
+    });
   }
   close() {
     if (this.channel?.readyState === 'open')

@@ -44,6 +44,12 @@ export class LiveOutbox {
   get latestSeq() {
     return this.commands.length;
   }
+  get hasUnacknowledgedSpeech() {
+    return this.commands.some(
+      (command) =>
+        command.seq > this.acknowledgedThrough && command.type === 'session.commentary.append',
+    );
+  }
 
   append(
     command: LiveCommand,

@@ -35,11 +35,12 @@
           "sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
           "input": {"type": "string", "enum": ["active", "quiet", "unknown"]},
           "output": {"type": "string", "enum": ["active", "quiet", "unknown"]},
-          "playbackReady": {"type": "boolean"}
+          "playbackReady": {"type": "boolean"},
+          "inputStopped": {"type": "boolean", "description": "Microphone tracks have been stopped for final playback. Required to infer final silence; omitted by older clients."}
         }
       },
       "CommandBatchAdditions": {
-        "description": "Add serverNow to existing POST /api/play/commands/poll response. Existing command fields and sequence/ack semantics remain. Expired warnings are skipped but acknowledged by the browser.",
+        "description": "Add serverNow and the current PublicGameState as state to POST /api/play/commands/poll. Terminal state stops the microphone before final commentary is sent. Existing command fields and sequence/ack semantics remain. Expired warnings are skipped but acknowledged by the browser.",
         "type": "object", "required": ["serverNow"],
         "properties": {"serverNow": {"type": "integer", "minimum": 0}}
       },

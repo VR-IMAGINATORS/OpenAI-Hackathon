@@ -2,6 +2,7 @@ import { KnowledgeStore, buildCompanionContext } from './companion-knowledge.js'
 import { composeCompanionReply } from './companion-response.js';
 import { VoiceNotificationScheduler } from './voice-notifications.js';
 import { OpeningBriefingDelivery } from './opening-briefing.js';
+import { FinalVoicePlayback } from './final-voice-playback.js';
 import { voiceActivitySchema, type VoiceActivity } from '../../packages/shared/harness.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -138,7 +139,14 @@ export class GameRuntime {
   private photoRequests = new Map<string, Cached<void>>();
   private liveCreating = false;
   private disposed = false;
-  closingAt = Infinity;
+  private finalVoice: FinalVoicePlayback;
+  private immediateCloseAt = Infinity;
+  get closingAt() {
+    return Math.min(this.deadline, this.immediateCloseAt, this.finalVoice.closingAt);
+  }
+  get voiceGeneration() {
+    return this.game.generation - (this.game.terminal && !this.coreSnapshot ? 1 : 0);
+  }
 
   constructor(
     readonly id: string,
@@ -152,6 +160,7 @@ export class GameRuntime {
     private readonly presentation?: RuntimePresentation,
     private readonly traceEnabled = false,
   ) {
+    this.finalVoice = new FinalVoicePlayback(now);
     ai.register(id, deadline);
     this.game = new GameSession(
       scenario,
@@ -173,10 +182,13 @@ export class GameRuntime {
         this.notifications?.endWarnings();
         this.traceEntries = [];
         this.diagnostics = [];
-        this.closingAt = Math.min(
-          deadline,
-          now() + (['won', 'lost'].includes(this.game.status) ? 12_000 : 0),
-        );
+        if (this.game.voiceState === 'connected')
+          this.finalVoice.start(
+            this.voiceGeneration,
+            this.outbox?.latestSeq ?? 0,
+            this.outbox?.hasUnacknowledgedSpeech,
+          );
+        else this.immediateCloseAt = now();
         const finalActionCommitted =
           this.actionInFlight &&
           this.pendingScene &&
@@ -191,7 +203,7 @@ export class GameRuntime {
             );
           } else this.presentScene(this.game.situation);
         }
-        this.story.end(now(), this.closingAt);
+        this.story.end(now(), Math.min(deadline, now() + 12_000));
         this.terminalPacket = this.captureEnding(now());
         // The owner reserves ending AI authority synchronously, before Live retirement.
         this.presentation?.ending?.(this.terminalPacket, () => this.sealEnding());
@@ -841,11 +853,12 @@ export class GameRuntime {
     this.drainNotifications();
   }
   reportVoiceActivity(raw: VoiceActivity): void {
-    this.check();
+    this.checkVoice();
     const activity = voiceActivitySchema.parse(raw);
-    if (activity.generation !== this.game.generation)
+    if (activity.generation !== this.voiceGeneration)
       throw new GameError(409, 'LIVE_CONNECTION_STALE');
     this.notifications?.report(activity);
+    this.finalVoice.report(activity);
     this.openingBriefing?.report(activity);
     this.deliverOpeningBriefing();
   }
@@ -911,6 +924,8 @@ export class GameRuntime {
   ) {
     try {
       const queued = this.outbox?.append(command, messageId, warning);
+      if (queued && command.type === 'session.commentary.append')
+        this.finalVoice.expectSpeech(queued.seq);
       if (queued) this.recordDiagnostic('live_command_queued', command.type);
       return queued;
     } catch {
@@ -1044,15 +1059,16 @@ export class GameRuntime {
     return { ...state, stateVersion: this.stateVersion };
   }
   pollCommands(generation: number, ackThrough: number) {
+    this.checkVoice();
+    if (!this.outbox) throw new GameError(410, '音声通知は終了しました。');
+    const batch = this.outbox.poll(generation, this.epoch, ackThrough);
+    this.finalVoice.acknowledge(batch.acknowledgedThrough);
+    return batch;
+  }
+  private checkVoice() {
     this.game.check();
-    if (
-      !this.outbox ||
-      this.disposed ||
-      this.now() >= this.deadline ||
-      (this.game.terminal && this.now() >= this.closingAt)
-    )
-      throw new GameError(410, '音声通知は終了しました。');
-    return this.outbox.poll(generation, this.epoch, ackThrough);
+    if (this.disposed || this.now() >= this.deadline || this.now() >= this.closingAt)
+      throw new GameError(410, '音声受付は終了しました。');
   }
   private valid(epoch = this.epoch) {
     return (
@@ -1210,16 +1226,13 @@ export class GameRuntime {
     return promise;
   }
   async event(generation: number, raw: unknown): Promise<LiveCommand[]> {
+    this.checkVoice();
+    if (generation !== this.voiceGeneration) throw new GameError(409, '古い音声接続です。');
+    const event = liveEventSchema.parse(raw);
+    // Late input/delegation can already be in flight when the browser stops its
+    // microphone. Acknowledge and discard it; only the AI's final text survives.
+    if (this.game.terminal && event.type !== 'session.output_transcript.delta') return [];
     if (this.coreSnapshot) {
-      this.game.check();
-      if (
-        this.disposed ||
-        this.now() >= this.deadline ||
-        (this.game.terminal && this.now() >= this.closingAt)
-      )
-        throw new GameError(410, '音声受付は終了しました。');
-      if (generation !== this.game.generation) throw new GameError(409, '古い音声接続です。');
-      const event = liveEventSchema.parse(raw);
       this.syncCore();
       if (event.type === 'session.delegation.created') {
         this.openingMessageId = undefined;
@@ -1259,6 +1272,8 @@ export class GameRuntime {
             fragment.executionEligible ? 'eligible' : 'ineligible',
           );
         if (fragment) {
+          if (fragment.speaker === 'assistant' && fragment.delta.trim())
+            this.finalVoice.transcript();
           this.story.transcript(fragment, this.now());
           if (fragment.speaker === 'user' && fragment.delta.trim())
             this.openingMessageId = undefined;
@@ -1275,14 +1290,12 @@ export class GameRuntime {
       }
       return [];
     }
-    this.check();
-    if (generation !== this.game.generation) throw new GameError(409, '古い音声接続です。');
-    const event = liveEventSchema.parse(raw);
     if (this.seen.has(event.event_id)) return [];
     if (this.seen.size >= 10000) throw new GameError(429, '音声イベント上限です。');
     this.seen.add(event.event_id);
     const epoch = this.epoch;
     if (event.type === 'session.output_transcript.delta') {
+      if (event.delta.trim()) this.finalVoice.transcript();
       this.story.transcript(
         {
           eventId: event.event_id,
@@ -1398,6 +1411,7 @@ export class GameRuntime {
     if (this.disposed || epoch !== this.epoch) throw new GameError(410, '操作権が失効しました。');
     if (this.game.gameVersion > scene.beforeVersion)
       this.presentScene(result.narrative + '\n' + this.currentSituation(), scene.messageId);
+    if (this.game.terminal) this.finalVoice.expectSpeech(0);
     return [
       factCommand(
         '確定した行動結果: ' + result.narrative + ' 現在の状況: ' + this.game.state().situation,

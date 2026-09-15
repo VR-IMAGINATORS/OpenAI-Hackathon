@@ -613,22 +613,47 @@ test('ambiguous photo use question arrives only after recognition and an upload 
   assert.equal(h.calls.recognize, 1);
 });
 
-test('terminal voice grace retains generation, rejects stale polls and closes at the deadline', async (t) => {
+test('terminal voice retains generation and waits beyond 12 seconds for the final playback', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: '未完了' }));
   await h.runtime.photos(randomUUID(), [h.photo]);
   await until(() => h.calls.photo === 1);
   await tick();
   h.runtime.game.end('won');
   assert.equal(h.runtime.state().generation, h.generation);
-  assert.ok(h.runtime.pollCommands(h.generation, 0).commands.length);
+  const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.ok(commands.length);
+  const ack = commands.at(-1)!.seq;
+  h.runtime.pollCommands(h.generation, ack);
   assert.throws(() => h.runtime.pollCommands(h.generation - 1, 0));
   await assert.rejects(
     () => h.runtime.event(h.generation - 1, {}),
     (e: any) => e.status === 409,
   );
-  h.setNow(12999);
-  assert.doesNotThrow(() => h.runtime.pollCommands(h.generation, 0));
-  h.setNow(13000);
+  const before = h.calls.classify;
+  await h.say('終了後の指示');
+  await h.delegate();
+  assert.equal(h.calls.classify, before);
+  assert.doesNotMatch(JSON.stringify(h.feed()), /終了後の指示/);
+  let sequence = 0;
+  const report = (output: 'active' | 'quiet') =>
+    h.runtime.reportVoiceActivity({
+      generation: h.generation,
+      sequence: ++sequence,
+      input: 'unknown',
+      output,
+      playbackReady: true,
+      inputStopped: true,
+    });
+  for (let now = 1000; now <= 21000; now += 1000) {
+    h.setNow(now);
+    report('active');
+    assert.doesNotThrow(() => h.runtime.pollCommands(h.generation, ack));
+  }
+  h.setNow(22000);
+  report('quiet');
+  h.setNow(23000);
+  report('quiet');
+  h.setNow(24000);
   assert.throws(
     () => h.runtime.pollCommands(h.generation, 0),
     (e: any) => e.status === 410,
@@ -637,6 +662,21 @@ test('terminal voice grace retains generation, rejects stale polls and closes at
     () => h.say('終了後の指示'),
     (e: any) => e.status === 410,
   );
+});
+
+test('terminal playback cannot extend the absolute play deadline or wait forever without telemetry', async (t) => {
+  const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
+  h.runtime.game.end('won');
+  assert.equal(h.runtime.closingAt, 61000);
+  h.setNow(61000);
+  assert.throws(
+    () => h.runtime.pollCommands(h.generation, 0),
+    (e: any) => e.status === 410,
+  );
+  const nearDeadline = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
+  nearDeadline.setNow(599000);
+  nearDeadline.runtime.game.end('won');
+  assert.equal(nearDeadline.runtime.closingAt, 600000);
 });
 
 test('diagnostics distinguish missing delegation, wait and expiration without raw speech or photos', async (t) => {

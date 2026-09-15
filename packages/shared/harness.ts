@@ -92,6 +92,7 @@ export const voiceActivitySchema = z
     input: z.enum(['active', 'quiet', 'unknown']),
     output: z.enum(['active', 'quiet', 'unknown']),
     playbackReady: z.boolean(),
+    inputStopped: z.boolean().optional(),
   })
   .strict();
 export type VoiceActivity = z.infer<typeof voiceActivitySchema>;

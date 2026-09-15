@@ -260,7 +260,8 @@ test('game timeout queues one ending, keeps factual results visible, then comple
   const state = await f.request('/api/play/state', { cookie, headers: { 'X-Play-Id': playId } });
   assert.equal(state.status, 200);
   assert.equal((await state.json()).state.status, 'lost');
-  f.setNow(12_001);
+  // This fixture has no playback telemetry: use the abandoned-call timeout.
+  f.setNow(60_001);
   await f.hosted.tick();
   assert.equal(f.hosted.registry.plays.get(playId)!.runtime, null);
   assert.equal(f.hosted.registry.plays.get(playId)!.lifecycle, 'terminal');
@@ -433,7 +434,7 @@ test('retained video reads survive expired login, never extend retention, and re
   f.hosted.sessions.authorize(cookie.slice('play_session='.length)).expiresAt = 100;
   f.endByGameTime(playId);
   const initial = await f.ready(cookie, playId);
-  f.setNow(12_001);
+  f.setNow(60_001);
   await f.hosted.tick();
   for (const at of [12_001, 599_999]) {
     f.setNow(at);
@@ -463,7 +464,7 @@ test('repeated GETs never submit again and replay keeps the previous video out o
     previous = await f.create(cookie);
   f.endByGameTime(previous);
   await f.ready(cookie, previous);
-  f.setNow(12_001);
+  f.setNow(60_001);
   await f.hosted.tick();
   const next = await f.create(cookie);
   assert.notEqual(next, previous);
