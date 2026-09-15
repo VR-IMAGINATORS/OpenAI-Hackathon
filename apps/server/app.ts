@@ -253,6 +253,7 @@ export function createHostedApp(
                       snapshot,
                       facts: input.facts,
                       situation: input.situation,
+                      action: input.action,
                     },
                     {
                       ready: async (bytes) => {

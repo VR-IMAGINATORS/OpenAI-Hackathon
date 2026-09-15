@@ -56,6 +56,7 @@ export interface RuntimePresentation {
     gameVersion: number;
     facts: import('../../packages/shared/conversation.js').GameFacts;
     situation: string;
+    action: import('./ending.js').CommittedEndingAction | null;
   }): void;
   notice?(text: string, kind?: 'opening-briefing'): void;
   ending?(packet: EndingPacket, seal: () => EndingPacket): void;
@@ -966,6 +967,7 @@ export class GameRuntime {
     this.openingMessageId = undefined;
     this.sceneMessages.set(this.game.gameVersion, messageId);
     this.recordSceneEvidence(text, messageId);
+    const action = this.game.committedActions.at(-1);
     this.presentation?.scene({
       messageId,
       text,
@@ -975,6 +977,7 @@ export class GameRuntime {
       gameVersion: this.game.gameVersion,
       facts: structuredClone(this.game.facts),
       situation: this.game.situation,
+      action: action?.afterVersion === this.game.gameVersion ? structuredClone(action) : null,
     });
   }
   private captureEnding(endedAt: number): EndingPacket {

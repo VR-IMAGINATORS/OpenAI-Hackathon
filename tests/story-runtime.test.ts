@@ -13,7 +13,7 @@ import { parseCoreConfig } from '../packages/shared/core-config.js';
 import type { ScenarioSnapshot } from '../apps/server/scenario-catalog.js';
 import { GameSession } from '../apps/local-server/game.js';
 import { createGameAI, type CoreJudgment } from '../apps/local-server/game-ai.js';
-import { GameRuntime } from '../apps/local-server/hosted-runtime.js';
+import { GameRuntime, type RuntimePresentation } from '../apps/local-server/hosted-runtime.js';
 import { KnowledgeStore, buildCompanionContext } from '../apps/local-server/companion-knowledge.js';
 import { classifyCoreIntent } from '../apps/local-server/core-intent-ai.js';
 import { ConversationLedger } from '../apps/local-server/conversation.js';
@@ -239,8 +239,9 @@ test('all 18 story routes expose player objectives in both languages through eac
   for (let index = 0; index < storyCandidateCount(catalog); index++) {
     const scenario = compileStoryScenario(catalog, index);
     for (const locale of ['ja', 'en'] as const) {
+      const snap = snapshot(locale, scenario);
       const { game, act } = fixture(
-        snapshot(locale, scenario),
+        snap,
         scenario.obstacles.map((obstacle) => ({
           success: true,
           factChanges: [{ key: obstacle.id, from: 'blocked', to: 'cleared' }],
@@ -262,6 +263,18 @@ test('all 18 story routes expose player objectives in both languages through eac
           'internal solutions are not a public objective',
         );
         await act();
+        const prompt = scenePrompt(
+          {
+            playId: 'catalog-test',
+            messageId: `stage-${stage}`,
+            snapshot: snap,
+            facts: game.facts,
+            situation: game.situation,
+            action: game.committedActions.at(-1),
+          },
+          '',
+        );
+        assert.ok(prompt.length <= 16000, `${index}/${locale}/${stage}: scene request limit`);
       }
       assert.equal(game.status, 'won');
     }
@@ -591,6 +604,80 @@ test('legacy V2 preserves its opening and Live instructions without story metada
   );
 });
 
+test('scene generation and inspection retain the committed tool, method and result across obstacle advancement', async () => {
+  for (const locale of ['ja', 'en'] as const) {
+    const snap = snapshot(locale);
+    const { game, act } = fixture(snap, [
+      { success: false, factChanges: [{ key: 'puzzle-0', from: 'blocked', to: 'partial' }] },
+      { success: true, factChanges: [{ key: 'puzzle-0', from: 'partial', to: 'cleared' }] },
+    ]);
+    game.inventory[0].name = 'scissors';
+    for (const success of [false, true]) {
+      await act();
+      const action = structuredClone(game.committedActions.at(-1)!);
+      action.usage = 'Cut the binding with the scissors';
+      action.items[0].afterStatus = success ? 'consumed' : 'damaged';
+      const input: SceneInput = {
+        playId: 'test',
+        messageId: 'result',
+        snapshot: snap,
+        facts: game.facts,
+        situation: game.situation,
+        action,
+      };
+      const prompt = scenePrompt(input, '');
+      const generated = JSON.parse(prompt.split('\n')[1]);
+      assert.equal(generated.committedAction.obstacleId, snap.scenarioV2.obstacles[0].id);
+      assert.equal(generated.committedAction.usage, action.usage);
+      assert.deepEqual(generated.committedAction.tools, [
+        {
+          name: 'scissors',
+          beforeStatus: 'available',
+          afterStatus: success ? 'consumed' : 'damaged',
+        },
+      ]);
+      assert.equal(generated.committedAction.success, success);
+      assert.deepEqual(generated.committedAction.afterValues, {
+        'puzzle-0': success ? 'cleared' : 'partial',
+      });
+      assert.deepEqual(generated.committedAction.beforeValues, {
+        'puzzle-0': success ? 'partial' : 'blocked',
+      });
+      if (success) {
+        assert.equal(generated.facts.obstacleId, snap.scenarioV2.obstacles[1].id);
+        assert.ok(
+          generated.rules.some(
+            (rule: any) => rule.ruleId === 'action:required:0' && rule.value === 'cleared',
+          ),
+        );
+      }
+      assert.doesNotMatch(prompt, /PRIVATE_|puzzle-2|VISIBLE_PUZZLE_2/);
+      const fakeAi = {
+        config: { inspectionModel: 'fake' },
+        mediaCall: async (_job: string, _epoch: number, _kind: string, body: any) => {
+          const inspected = JSON.parse(body.input[0].content[0].text);
+          assert.deepEqual(inspected.committedAction, generated.committedAction);
+          assert.deepEqual(inspected.rules, generated.rules);
+          assert.match(
+            body.instructions,
+            /do not reject merely because a tool or past action is off-screen/,
+          );
+          return response({ verdict: 'pass', contradictions: [] });
+        },
+      } as unknown as AiService;
+      assert.equal(
+        (await inspectScene(fakeAi, 'test', 0, input, Buffer.from('fake'))).verdict,
+        'pass',
+      );
+      input.action = { ...action, items: [] };
+      assert.deepEqual(JSON.parse(scenePrompt(input, '').split('\n')[1]).committedAction.tools, []);
+      input.action = null;
+      assert.equal(JSON.parse(scenePrompt(input, '').split('\n')[1]).committedAction, null);
+      assert.ok(!sceneRules(input).some((rule) => rule.ruleId.startsWith('action:')));
+    }
+  }
+});
+
 test('expanding world lore does not lengthen the spoken opening, while Live retains it for consultation', () => {
   const snap = snapshot();
   const before = storyOpening(snap);
@@ -660,7 +747,7 @@ test('runtime advances requested hint levels across partial progress and resets 
     },
     () => 0,
   );
-  const scenes: Array<{ text: string }> = [];
+  const scenes: Array<Parameters<RuntimePresentation['scene']>[0]> = [];
   const runtime = new GameRuntime(
     randomUUID(),
     600000,
@@ -742,6 +829,16 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.equal(hints[3].obstacleId, snap.scenarioV2.obstacles[1].id);
   assert.equal(runtime.game.actionsUsed, 2);
   assert.ok(scenes[2].text.includes(snap.scenarioV2.obstacles[1].situationDisplay.ja));
+  assert.equal(scenes[0].action, null);
+  assert.equal(scenes[1].action?.success, false);
+  assert.equal(scenes[1].action?.afterFacts.values['puzzle-0'], 'partial');
+  assert.equal(scenes[2].action?.success, true);
+  assert.equal(scenes[2].action?.obstacleId, snap.scenarioV2.obstacles[0].id);
+  assert.equal(scenes[2].facts.obstacleId, snap.scenarioV2.obstacles[1].id);
+  assert.equal(scenes[2].action?.usage, '道具を使って');
+  assert.equal(scenes[2].action?.items[0].name, '道具');
+  runtime.game.committedActions[1].usage = 'later mutation';
+  assert.equal(scenes[2].action?.usage, '道具を使って', 'scene owns a frozen copy of the method');
   const commands = runtime.pollCommands(live.generation, 0).commands;
   assert.ok(commands.every((queued) => Buffer.byteLength(queued.content) <= 480));
   const spoken = commands

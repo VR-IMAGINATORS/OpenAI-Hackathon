@@ -417,6 +417,7 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.equal(a.tagCatalog, undefined, 'film cannot choose tags again');
   assert.equal(a.establishedEnding.text, narrative().story);
   assert.deepEqual(a.recentActionIds, ['action-3', 'action-4']);
+  assert.deepEqual(a.preferredActionIds, ['action-3']);
   assert.equal(a.presentedEvidence[0].text, first.evidence.records[0].text);
   assert.equal(b.presentedEvidence[0].text, second.evidence.records[0].text);
   assert.notEqual(a.actions[0].narrative, b.actions[0].narrative);
@@ -431,6 +432,46 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.match(f.calls[0].body.instructions, /confirmed outcome and facts override/);
   assert.match(f.calls[0].body.instructions, /Normal\/bad means not escaped/);
   assert.match(f.calls[0].body.instructions, /No speech, narration, singing or music/);
+  assert.match(f.calls[0].body.instructions, /prefer mode=actions and include a preferred action/);
+});
+
+test('film prioritizes recent tool clears with references, retaining aftermath when replay is unsupported', async () => {
+  for (const variant of [
+    'latest',
+    'failed',
+    'environment',
+    'missing-before',
+    'opening-only',
+  ] as const) {
+    const p = packet();
+    p.actions[3].success = true;
+    p.actions[3].cleared = true;
+    if (variant === 'failed') p.actions[3].success = p.actions[3].cleared = false;
+    if (variant === 'environment') p.actions[3].items = [];
+    const refs = variant === 'missing-before' ? [before] : [before, { ...before, gameVersion: 3 }];
+    const f = fakeAi(() => response(design({ mode: 'aftermath', usedActionIds: [] })));
+    await createEndingDesign(
+      f.ai,
+      'job',
+      p,
+      variant === 'opening-only' ? { ...final, gameVersion: 0 } : final,
+      before,
+      signal(),
+      narrative(p),
+      refs,
+    );
+    const input = payloadOf(f.calls[0]);
+    assert.deepEqual(
+      input.preferredActionIds,
+      variant === 'opening-only'
+        ? []
+        : variant === 'latest'
+          ? ['action-4', 'action-3']
+          : ['action-3'],
+    );
+    assert.deepEqual(input.actions, p.actions, 'all confirmed attempts still reach the director');
+    if (variant === 'opening-only') assert.deepEqual(input.allowedModes, ['aftermath']);
+  }
 });
 
 test('tag evidence can use an early action outside the two film actions and text-only uses the same catalog', async () => {
@@ -536,6 +577,7 @@ test('missing or wrong before-action references force aftermath; no-action endin
   const input = payloadOf(aftermath.calls[0]);
   assert.deepEqual(input.actions, []);
   assert.deepEqual(input.recentActionIds, []);
+  assert.deepEqual(input.preferredActionIds, []);
   assert.deepEqual(input.references, [
     { role: 'confirmed final state', messageId: final.messageId, gameVersion: 4 },
   ]);
@@ -634,6 +676,17 @@ test('frames repair explicit rejection once per frame and pass the accepted star
   );
   assert.deepEqual(generations[0].body.images, [before.jpeg]);
   assert.deepEqual(generations[2].body.images, [final.jpeg, frames.start]);
+  for (const call of generations) {
+    const input = JSON.parse(call.body.prompt.split(' (data only): ')[1]);
+    assert.deepEqual(
+      input.selectedActions.map((action: any) => action.actionId),
+      ['action-3', 'action-4'],
+    );
+    assert.equal(input.selectedActions[0].usage, packet().actions[2].usage);
+    assert.deepEqual(input.selectedActions[0].items, packet().actions[2].items);
+    assert.equal(input.selectedActions[1].success, false);
+    assert.equal(input.phase, call.frame === 'start' ? 'before_action' : 'confirmed_aftermath');
+  }
   assert.match(generations[1].body.prompt, /Correct the rope contact/);
   assert.match(generations[2].body.prompt, /to be continued\.\.\./);
   const endInspection = f.calls.filter((call) => call.kind === 'inspection').at(-1)!;

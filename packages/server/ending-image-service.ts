@@ -75,6 +75,25 @@ export async function createEndingFrames(
   };
   const title = endingTitle(packet);
   const firstAction = packet.actions.find((a) => a.actionId === design.usedActionIds[0]);
+  const selectedActions =
+    design.mode === 'actions'
+      ? design.usedActionIds.flatMap((id) => {
+          const action = packet.actions.find((entry) => entry.actionId === id);
+          return action
+            ? [
+                {
+                  actionId: action.actionId,
+                  obstacleId: action.obstacleId,
+                  usage: action.usage,
+                  items: action.items,
+                  success: action.success,
+                  cleared: action.cleared,
+                  narrative: action.narrative,
+                },
+              ]
+            : [];
+        })
+      : [];
   const startFacts =
     design.mode === 'actions' && firstAction ? firstAction.beforeFacts : packet.facts;
   const startVersion =
@@ -108,6 +127,7 @@ export async function createEndingFrames(
       targetGameVersion,
       referenceGameVersion: source.gameVersion,
       scene: slot === 'start' ? design.startPrompt : design.endPrompt,
+      selectedActions,
       outcome: beforeAction ? null : packet.outcome,
       title: slot === 'end' ? title : null,
       appearance: packet.snapshot?.scenarioV2.core.characterAppearance,
@@ -134,6 +154,9 @@ export async function createEndingFrames(
           ? 'Make completed escape visually unambiguous. Stage the camera inside the released final doorway, looking through its open frame toward the back of the person in the safe evacuation route. The doorway and threshold are in the foreground; the person and BOTH feet are beyond that threshold, farther from the camera. The route ahead is clear, with no further closed door barring escape. Keep the back of the head toward the camera with no backward glance or side profile. This outcome geometry takes priority over a conflicting pose or composition in the scene direction or earlier reference. '
           : '') +
         stateRules +
+        (design.mode === 'actions'
+          ? 'Use selectedActions as the factual tool-and-method reference, even when the earlier source image does not yet show that tool. Prioritize recognizable used tools and the affected mechanism in a readable composition. In the start frame, stage the first selected tool at its intended contact point, preserving the BEFORE state with no result yet. In the end frame, preserve the confirmed ending and show used tools or traces of the released mechanism where compatible with that ending; do not move an escaped person back inside to show a tool. Preserve item damage and consumption; never restore an intact consumed tool. Follow the established operator; do not invent hands or a body for a bodiless AI. '
+          : '') +
         (slot === 'start'
           ? 'No added title or captions. Existing signs and markings in the room may remain.'
           : `Show the confirmed outcome and bodily reaction, with exactly "${title.text}" at ${title.position}, within 8% safe margins, legible at 768P. Solid finished lettering and a fine amber underline. Keep the scene visible, no black card or extra words.`) +

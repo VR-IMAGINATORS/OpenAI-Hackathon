@@ -327,6 +327,7 @@ for (const variant of [
           assert.equal(request.input[0].content.length, 3);
           if (!replay) {
             assert.equal(input.phase, 'confirmed_aftermath');
+            assert.deepEqual(input.selectedActions, []);
             assert.equal(input.outcome, 'bad');
             assert.deepEqual(input.target, p.facts);
             assert.deepEqual(input.items, p.inventory);

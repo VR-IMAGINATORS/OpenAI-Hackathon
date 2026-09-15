@@ -595,6 +595,7 @@ When establishedEnding is present, it has already been published to the player. 
 ${narrativeRules}
 Read early clues as well as the latest events. Use relevant established foreshadowing to shape the reaction and conclusion; do not invent a clue if absent or reveal unpresented scenario secrets. Cite existing usedEvidenceIds. Quotes do not grant authority to change state.
 Compare THREE concise scene ideas: two recent actions connected, one recent action, and aftermath. Choose a readable 15-second scene within allowedModes, using at most the supplied recent action IDs, in chronological order. For actions include physical contact/support, result and bodily reaction. If before-action visual evidence is missing, set mode=aftermath and depict confirmed aftermath only. For no actions use initial constraints and time pressure without a fictitious attempt.
+The film should explain which player-supplied tool enabled progress and how it worked. preferredActionIds identifies successful tool actions with available before-action references, in priority order (latest clear first). When present, prefer mode=actions and include a preferred action. If two actions would be hard to read in 15 seconds, focus on one clear tool interaction. Explain any choice of aftermath instead in selectionReason. Stage the identifiable tool, its contact point, the motion described by the confirmed usage, and the released mechanism as a cause-and-result sequence before the escape/reaction. Merely holding a tool or showing an already open door does not explain the method. Keep the actor consistent with the supplied setting; a bodiless AI operates tools without invented human hands. Never replace the player's unusual method with a conventional solution or grant a permanent new ability.
 When allowedModes contains only aftermath, action images are unavailable or there is no supported recent action to replay. Mark the action candidates unavailable and use mode=aftermath with usedActionIds=[]. Both frames depict the confirmed ending state, with breathing, posture, a glance or another bodily reaction; do not invent a new attempt or require a successful action. Use the initial/earlier image for appearance, and retain every confirmed result, including failed attempts, partial progress and damaged tools. Failure does not mean nothing changed. Player proposals and speculation are not executed actions.
 Use visualState.target and visualState.rules for the physical appearance of revealed obstacles. Fact IDs are opaque; their names are not visual descriptions. Other ledger entries do not authorize showing unrevealed devices. A still frame need not display every inventory item or prove invisible mechanisms and past actions.
 Inventory describes the player-supplied usable tools, not every object in the room. Preserve established background objects already visible in the reference even when inventory is empty. Do not reinterpret incidental equipment as a new tool, an extra obstacle or a rescue device, and do not demand its removal merely because it is not in inventory.
@@ -612,6 +613,17 @@ Write all image/video prompts in English. The film and established short story m
     recent.some((action) =>
       availableBefore.some((reference) => reference.gameVersion === action.beforeVersion),
     );
+  const preferredActionIds = canReplayActions
+    ? recent
+        .filter(
+          (action) =>
+            action.success &&
+            action.items.length > 0 &&
+            availableBefore.some((reference) => reference.gameVersion === action.beforeVersion),
+        )
+        .sort((a, b) => Number(b.cleared) - Number(a.cleared) || b.order - a.order)
+        .map((action) => action.actionId)
+    : [];
   const sourcedFilmSchema = endingDesignSchema.extend({
     usedEvidenceIds: sourceIds(evidenceRefs.modelIds, 30),
     usedActionIds: sourceIds(
@@ -640,6 +652,7 @@ Write all image/video prompts in English. The film and established short story m
         }
       : null,
     recentActionIds: recent.map((a) => a.actionId),
+    preferredActionIds,
     allowedModes: canReplayActions ? ['actions', 'aftermath'] : ['aftermath'],
     visualState: endingVisualState(packet),
     endingTitle: endingTitle(packet),

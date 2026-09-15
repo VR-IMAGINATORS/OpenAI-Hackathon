@@ -875,6 +875,10 @@ test('consult speaks answer rather than classification reason and action speaks 
   );
   assert.equal(h.scenes.length, 2);
   assert.equal(h.scenes[1].situation, h.runtime.game.situation);
+  assert.equal(h.scenes[0].action, null);
+  assert.equal(h.scenes[1].action.success, false);
+  assert.equal(h.scenes[1].action.usage, 'ハサミでロープを切って');
+  assert.equal(h.scenes[1].action.items[0].name, 'ハサミ');
 });
 
 test('runtime missing delegation requests recovery but never judges, then announces timeout', async (t) => {
