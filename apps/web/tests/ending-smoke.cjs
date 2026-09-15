@@ -215,16 +215,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         last: ending.querySelector('.ending-body').lastElementChild === arrow,
         top: arrow.getBoundingClientRect().top,
         width: arrow.getBoundingClientRect().width,
-        right: arrow.getBoundingClientRect().right,
-        contentRight: ending.querySelector('.ending-details').getBoundingClientRect().right,
+        left: arrow.getBoundingClientRect().left,
+        contentLeft: ending.querySelector('.ending-details').getBoundingClientRect().left,
         detailsBottom: ending.querySelector('.ending-details').getBoundingClientRect().bottom,
       };
     });
     assert(footer.last && footer.top >= footer.detailsBottom, 'arrow follows all result content');
     assert(Math.abs(footer.width - 390 * 0.4) < 1, 'arrow is two fifths of the mobile viewport');
     assert(
-      Math.abs(footer.right - footer.contentRight) < 1,
-      'arrow aligns with the result right edge',
+      Math.abs(footer.left - footer.contentLeft) < 1,
+      'arrow aligns with the result left edge',
     );
     await video.evaluate((element) => {
       window.__videoPauses = 0;

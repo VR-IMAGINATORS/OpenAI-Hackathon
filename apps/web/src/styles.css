@@ -2261,7 +2261,7 @@ h1 span {
 }
 .ending-continued {
   width: min(40vw, 240px, 100%);
-  margin: 20px 0 4px auto;
+  margin: 20px auto 4px 0;
 }
 .ending-continued img {
   display: block;
