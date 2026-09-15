@@ -39,3 +39,17 @@
 旧プロセスのメモリにすでに残った隔離状態は、新しいコードを書いただけでは変わらない。通常のmainマージだけでは旧版の残数1を待って再び止まる可能性がある。新しいコードの配信成功・実GPT-Liveの終了は未検証である。
 
 一度限りの復旧案は、対象サービスの現在のimageと設定を照合して同じ構成のコンテナを作り直し、残数0と新bootを確認してから通常の修正版配信へ進むこと。これはプレイ状態・Cookie・プロセス単位の利用回数をリセットし、上流の終了確認を証明する操作ではない。実行前にユーザーの判断が必要。コンテナ再作成・強制解放・mainへのpush/merge・Actions再実行は行っていない。
+
+## 承認後のコンテナ復旧（2026-09-16）
+
+上記は復旧実行前の記録。ユーザーから「配信URLが変更にならないなら、コンテナ作り直しでOK」と承認を受け、同じサービス内で一度だけ再作成を実行した。
+
+- 対象: AWS account `346275327441`、Tokyo `ap-northeast-1`、`call-to-the-past-dev`。サービス自体の削除・作成はしていない。
+- URL: `https://call-to-the-past-dev.5p6py1m4f6mr2.ap-northeast-1.cs.amazonlightsail.com/`。再作成の前後で一致。
+- deployment 13から14へ変更し、14が `ACTIVE`、サービスが `RUNNING` になった。イメージ・環境変数を含むcontainers・publicEndpointは旧deploymentと一致した。
+- 公開 `/healthz` は同じアプリversion `d3c9d9dd783c31a25a28160f01c8d702f4c988bb` と新boot `b8432455-deb2-44a8-bbde-e634c98267c5` を返した。
+- 運用APIの `remaining` は1から0へ変わり、公開 `/` はHTTP 200。`readyToDeploy=false` は通常受付中の状態を表し、今回drainを再開始していない。
+- AWS呼び出しは自動再試行を無効にして1回だけ送信し、その後は既存deploymentを読み取って確認した。秘密はメモリ内で扱い、設定値の全文は保存・表示していない。
+- 修正コミット `47d2566` は未push・未配信。今回の再作成は旧コードの残留状態を解消したものであり、上流AIの終了や実音声の正常動作を検証したものではない。
+
+URLがサービスに紐づくことと同じサービス内のdeployment更新手順は [AWS公式手順](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-container-services-deployments.html) を参照。次の修正版公開は、ユーザーが作業ブランチをmainへ反映する通常の配信手順で行う。
