@@ -309,6 +309,23 @@ test('ambiguous ending response failure consumes its attempt and is not automati
   assert.equal(calls, 2);
 });
 
+test('a single call timeout leaves the ending permit usable while whole-job cancellation does not', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const f = fixture({}, {
+    createResponse: async (_body, signal) => new Promise((_resolve, reject) => {
+      signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }),
+  });
+  const timedOut = assert.rejects(f.call('direction', responseBody()), { code: 'ENDING_CALL_TIMEOUT' });
+  t.mock.timers.tick(30_000);
+  await timedOut;
+  assert.equal(f.permit.cancelled, false);
+  assert.equal(f.permit.busy, 0);
+  await f.call('frame', frameBody);
+  f.ai.cancelMedia('ending');
+  await assert.rejects(f.call('frame', frameBody, 'end'), { code: 'ENDING_EXPIRED' });
+});
+
 test('injected image-edit transport receives a fixed authenticated multipart request with both JPEG references', async () => {
   let calls = 0;
   const transport = createOpenAITransport('test-only-key', async (url, init) => {

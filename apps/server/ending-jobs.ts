@@ -8,7 +8,7 @@ import {
   type FalRequestHandle,
   type FalTransport,
 } from '../../packages/server/fal.js';
-import { validateEndingMp4 } from '../../packages/server/ending-video-media.js';
+import { EndingVideoMediaError, validateEndingMp4 } from '../../packages/server/ending-video-media.js';
 import { createEndingFrames } from '../../packages/server/ending-image-service.js';
 import {
   abortableDelay,
@@ -68,6 +68,8 @@ export interface EndingJobsOptions {
   pollMs?: number;
   storyTimeoutMs?: number;
   evidenceTimeoutMs?: number;
+  retryDelayMs?: number;
+  onRecovery?: (playId: string, stage: EndingStage, errorCode: string) => void;
   prepare?: (
     jobId: string,
     packet: EndingPacket,
@@ -138,6 +140,31 @@ export class EndingJobs {
       );
     } catch {
       /* Diagnostics cannot interrupt cleanup. */
+    }
+  }
+  private reportRecovery(job: Job, error: unknown): void {
+    try {
+      this.options.onRecovery?.(job.playId, job.stage, endingFailureCode(error, job.stage));
+    } catch {
+      /* Diagnostics cannot interrupt recovery. */
+    }
+  }
+  private async readVideo<T>(job: Job, read: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      this.assertCurrent(job);
+      try {
+        return await read();
+      } catch (error) {
+        this.assertCurrent(job);
+        const retryable =
+          error instanceof EndingVideoMediaError ||
+          (error instanceof FalTransportError &&
+            !error.terminal &&
+            !['FAL_INVALID_URL', 'FAL_REDIRECT_REJECTED', 'FAL_RESPONSE_TOO_LARGE', 'FAL_CONFIG_INVALID'].includes(error.code));
+        if (!retryable || attempt >= 2) throw error;
+        this.reportRecovery(job, error);
+        await abortableDelay((this.options.retryDelayMs ?? 1000) * 2 ** attempt, job.controller.signal);
+      }
     }
   }
   enqueue(packet: EndingPacket, seal: () => EndingPacket): void {
@@ -392,7 +419,11 @@ export class EndingJobs {
           job.handle = error.requestHandle;
           if (error.acceptance === 'rejected') job.upstreamPending = false;
         }
-        throw error;
+        if (!(error instanceof FalSubmitError) || error.acceptance !== 'unknown' || !job.handle)
+          throw error;
+        // The paid request already has an ID. Recover that exact request without resubmitting.
+        this.assertCurrent(job);
+        this.reportRecovery(job, error);
       }
       let polls = 0,
         pollDelay = this.options.pollMs ?? 2000;
@@ -419,11 +450,14 @@ export class EndingJobs {
       }
       this.assertCurrent(job);
       job.stage = 'video_result';
-      const result = await this.fal!.result(job.handle, signal);
-      job.stage = 'video_download';
-      const bytes = await this.fal!.downloadVideo(result.videoUrl, signal);
-      job.stage = 'video_validation';
-      validateEndingMp4(bytes);
+      const result = await this.readVideo(job, () => this.fal!.result(job.handle!, signal));
+      const bytes = await this.readVideo(job, async () => {
+        job.stage = 'video_download';
+        const downloaded = await this.fal!.downloadVideo(result.videoUrl, signal);
+        job.stage = 'video_validation';
+        validateEndingMp4(downloaded);
+        return downloaded;
+      });
       this.assertCurrent(job);
       job.stage = 'storage';
       this.results.putVideo(job.playId, bytes);

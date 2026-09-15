@@ -120,6 +120,10 @@ export function createHostedApp(
     {
       ...options.ending,
       now,
+      onRecovery: (playId, stage, errorCode) => {
+        log({ event: 'ending_recovery', correlationId: playId, stage, errorCode });
+        options.ending?.onRecovery?.(playId, stage, errorCode);
+      },
       onFailure: (playId, stage, errorCode, context) => {
         log({ event: 'ending_failed_' + stage, correlationId: playId, errorCode, ...context });
         options.ending?.onFailure?.(playId, stage, errorCode, context);
@@ -390,10 +394,13 @@ export function createHostedApp(
       epoch: z.coerce.number().int().positive().parse(req.get('X-Control-Epoch')),
     };
   }
+  const requestPlays = new WeakMap<Request, string>();
   function controlled(req: Request) {
     const auth = owner(req);
     const id = playId(req);
     const { clientId, epoch } = credentials(req);
+    // Only record a server-owned ID after its owner has been authenticated.
+    requestPlays.set(req, registry.get(auth, id).id);
     return registry.assertControl(auth, id, clientId, epoch);
   }
   function update(play: PlayRuntime<GameRuntime, PublicGameState>) {
@@ -785,7 +792,7 @@ export function createHostedApp(
   app.use(express.static(config.webRoot));
   app.get('/', (_req, res) => res.sendFile(join(config.webRoot, 'index.html')));
   app.use((_req, res) => errorResponse(res, 404, 'NOT_FOUND', '指定されたページはありません。'));
-  const errors: ErrorRequestHandler = (error, _req, res, _next) => {
+  const errors: ErrorRequestHandler = (error, req, res, _next) => {
     let status = 500,
       code = 'INTERNAL_ERROR';
     if (
@@ -827,7 +834,12 @@ export function createHostedApp(
       code = 'INVALID_REQUEST';
     }
     if (code === 'PLAY_CAPACITY') res.setHeader('Retry-After', '5');
-    log({ event: 'request_failed', errorCode: code });
+    log({
+      event: 'request_failed', errorCode: code,
+      correlationId: requestPlays.get(req),
+      route: typeof req.route?.path === 'string' ? req.route.path : undefined,
+      method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'].includes(req.method) ? req.method : undefined,
+    });
     const message =
       code === 'PLAY_CAPACITY'
         ? 'ただいま満員です。少し待って再試行してください。'

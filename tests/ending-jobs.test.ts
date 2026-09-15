@@ -12,7 +12,7 @@ import type { EndingPacket } from '../apps/local-server/ending.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import { AiService } from '../packages/server/ai-service.js';
-import { FalSubmitError, type FalTransport } from '../packages/server/fal.js';
+import { FalSubmitError, FalTransportError, type FalTransport } from '../packages/server/fal.js';
 import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
 import type { EndingStory } from '../packages/shared/ending.js';
 
@@ -154,6 +154,7 @@ function setup(
       graceMs: options.graceMs ?? 0,
       storyTimeoutMs: options.storyTimeoutMs,
       pollMs: 1,
+      retryDelayMs: 1,
       onFailure: (_id, stage, code) => failures.push({ stage, code }),
       prepare: async (...args) => {
         prepares++;
@@ -438,6 +439,47 @@ test('ambiguous submission is never resent and retains capacity after result evi
   assert.equal(submits, 1);
   assert.equal(f.jobs.snapshot().remaining, 1);
 });
+test('a recovered submission ID, transient result/download failures and truncated MP4 still deliver one video', async (t) => {
+  let submits = 0, reads = 0, downloads = 0, cancels = 0;
+  const f = setup(t, {
+    fal: {
+      async submit() {
+        submits++;
+        throw new FalSubmitError('unknown', handle);
+      },
+      async result(received) {
+        assert.deepEqual(received, handle);
+        if (++reads === 1) throw new FalTransportError();
+        return { videoUrl: 'https://fal.media/test.mp4' };
+      },
+      async downloadVideo() {
+        if (++downloads === 1) throw new FalTransportError('FAL_DOWNLOAD_FAILED');
+        return downloads === 2 ? Buffer.from('truncated') : syntheticEndingMp4();
+      },
+      async cancel() { cancels++; return { stopConfirmed: true }; },
+    },
+  });
+  const p = f.add();
+  await until(() => p.view().status === 'ready');
+  assert.deepEqual({ submits, reads, downloads, cancels }, { submits: 1, reads: 2, downloads: 3, cancels: 0 });
+  assert.deepEqual(f.results.endingVideo('owner', p.id), syntheticEndingMp4());
+  assert.equal(f.jobs.snapshot().remaining, 0);
+});
+
+test('unsafe video URLs and response sizes stop without download retries', async (t) => {
+  for (const code of ['FAL_INVALID_URL', 'FAL_REDIRECT_REJECTED', 'FAL_RESPONSE_TOO_LARGE']) {
+    let downloads = 0;
+    const f = setup(t, { fal: { async downloadVideo() {
+      downloads++;
+      throw new FalTransportError(code);
+    } } });
+    const p = f.add();
+    await until(() => p.view().status === 'failed');
+    assert.equal(downloads, 1);
+    assert.equal(p.view().storyStatus, 'ready');
+  }
+});
+
 test('cancellation 202 retains upstream work until status confirms completion', async (t) => {
   let cancels = 0;
   const f = setup(t, {

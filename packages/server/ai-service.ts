@@ -262,8 +262,11 @@ export class AiService {
       return value;
     } catch (error) {
       // Aborted fetches reject before returning a value, so the check above cannot classify them.
-      if (combined.aborted)
+      if (combined.aborted) {
+        if (!signal.aborted && !permit.cancelled && this.now() < permit.expiresAt)
+          throw new AiServiceError(504, 'ENDING_CALL_TIMEOUT', 'Ending call timed out');
         throw new AiServiceError(410, 'ENDING_EXPIRED', 'Ending request expired');
+      }
       throw error;
     } finally {
       clearTimeout(timer);
