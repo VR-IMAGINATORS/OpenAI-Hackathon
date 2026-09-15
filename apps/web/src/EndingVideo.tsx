@@ -314,6 +314,18 @@ export default function EndingVideo({
               </button>
             </div>
           )}
+          {ready && (
+            <a
+              className="ending-download"
+              href={endingVideoPath(playId) + '&download=1'}
+              download={`call-to-the-past-${playId}.mp4`}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" />
+              </svg>
+              {t('動画をダウンロード', 'Download video')}
+            </a>
+          )}
         </div>
         <div className="ending-continued">
           <img src="/images/to-be-continued.png" alt="to be continued" width={1504} height={352} />

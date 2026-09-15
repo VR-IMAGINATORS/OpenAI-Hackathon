@@ -2172,6 +2172,38 @@ h1 span {
   border-radius: 10px;
   box-shadow: 0 0 16px #9eead624;
 }
+.ending-download {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-block: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--ending-border);
+  border-radius: 10px;
+  background: var(--ending-band);
+  color: var(--ending-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.ending-download svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ending-download:hover {
+  border-color: var(--ending-accent);
+}
+.ending-download:focus-visible {
+  outline: 2px solid var(--ending-accent);
+  outline-offset: 3px;
+}
 .ending-ready-notice {
   position: fixed;
   z-index: 100;

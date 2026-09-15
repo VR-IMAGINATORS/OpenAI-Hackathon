@@ -203,6 +203,7 @@ async function setup(t: TestContext, holdPreparation = false) {
   }
   const statusPath = (playId: string) => '/api/play/ending?playId=' + playId;
   const videoPath = (playId: string) => '/api/play/ending/video?playId=' + playId;
+  const downloadPath = (playId: string) => videoPath(playId) + '&download=1';
   async function ready(cookie: string, playId: string): Promise<EndingView> {
     for (let i = 0; i < 200; i++) {
       const response = await request(statusPath(playId), { cookie });
@@ -225,6 +226,7 @@ async function setup(t: TestContext, holdPreparation = false) {
     ready,
     statusPath,
     videoPath,
+    downloadPath,
     releasePreparation,
     wrongHostRequest,
     setNow(value: number) {
@@ -271,6 +273,7 @@ test('game timeout queues one ending, keeps factual results visible, then comple
   assert.equal(response.status, 200);
   privateResponse(response);
   assert.equal(response.headers.get('content-type'), 'video/mp4');
+  assert.equal(response.headers.get('content-disposition'), null, 'playback remains inline');
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), video);
   assert.deepEqual(f.counts, { prepare: 1, submit: 1, download: 1 });
   assert.equal(f.packets[0].endReason, 'time_limit');
@@ -287,7 +290,7 @@ test('ending status and video authenticate cookies and return 404 to another own
   assert.equal(f.counts.submit, 0);
   f.endByGameTime(playId);
   await f.ready(alice, playId);
-  for (const path of [f.statusPath(playId), f.videoPath(playId)]) {
+  for (const path of [f.statusPath(playId), f.videoPath(playId), f.downloadPath(playId)]) {
     for (const cookie of [undefined, 'play_session=unknown-token']) {
       const response = await f.request(path, { cookie });
       assert.equal(response.status, cookie === undefined ? 401 : 410);
@@ -309,6 +312,45 @@ test('ending status and video authenticate cookies and return 404 to another own
     ).status,
     400,
   );
+});
+
+test('video download returns the retained MP4 as an attachment without generating again', async (t) => {
+  const f = await setup(t, true),
+    cookie = await f.login(),
+    playId = await f.create(cookie);
+  f.endByGameTime(playId);
+  const pending = await f.request(f.downloadPath(playId), { cookie });
+  assert.equal(pending.status, 409);
+  assert.equal(pending.headers.get('content-disposition'), null);
+  f.releasePreparation();
+  await f.ready(cookie, playId);
+  for (const method of ['GET', 'HEAD']) {
+    const response = await f.request(f.downloadPath(playId), { cookie, method, origin: false });
+    assert.equal(response.status, 200);
+    privateResponse(response);
+    assert.equal(response.headers.get('content-type'), 'video/mp4');
+    assert.equal(response.headers.get('content-length'), String(video.length));
+    assert.equal(
+      response.headers.get('content-disposition'),
+      `attachment; filename="call-to-the-past-${playId}.mp4"`,
+    );
+    assert.deepEqual(
+      Buffer.from(await response.arrayBuffer()),
+      method === 'HEAD' ? Buffer.alloc(0) : video,
+    );
+  }
+  const resumed = await f.request(f.downloadPath(playId), {
+    cookie,
+    origin: false,
+    headers: { Range: 'bytes=16-' },
+  });
+  assert.equal(resumed.status, 206);
+  assert.match(resumed.headers.get('content-disposition') ?? '', /^attachment;/);
+  assert.deepEqual(Buffer.from(await resumed.arrayBuffer()), video.subarray(16));
+  const invalid = await f.request(f.videoPath(playId) + '&download=invalid', { cookie });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.headers.get('content-disposition'), null);
+  assert.deepEqual(f.counts, { prepare: 1, submit: 1, download: 1 });
 });
 
 test('MP4 supports no-Origin GET, HEAD and exact single byte ranges without a controller lease', async (t) => {
@@ -399,6 +441,7 @@ test('retained video reads survive expired login, never extend retention, and re
     assert.equal(status.status, 200);
     assert.equal((await status.json()).retainUntil, initial.retainUntil);
     assert.equal((await f.request(f.videoPath(playId), { cookie })).status, 200);
+    assert.equal((await f.request(f.downloadPath(playId), { cookie })).status, 200);
   }
   f.setNow(600_000);
   await f.hosted.tick();
@@ -408,6 +451,9 @@ test('retained video reads survive expired login, never extend retention, and re
   const renewedCookie = renewed.headers.get('set-cookie')!.split(';')[0]!;
   assert.equal((await f.request(f.statusPath(playId), { cookie: renewedCookie })).status, 410);
   assert.equal((await f.request(f.videoPath(playId), { cookie: renewedCookie })).status, 410);
+  const expired = await f.request(f.downloadPath(playId), { cookie: renewedCookie });
+  assert.equal(expired.status, 410);
+  assert.equal(expired.headers.get('content-disposition'), null);
   assert.deepEqual(f.counts, { prepare: 1, submit: 1, download: 1 });
 });
 

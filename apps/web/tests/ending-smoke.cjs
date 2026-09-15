@@ -1,13 +1,47 @@
 /* Optional browser smoke: all ending API/media responses are fake; no paid calls or real video decoding. */
 const assert = require('node:assert/strict');
+const http = require('node:http');
+const https = require('node:https');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  // Native anchor downloads bypass Playwright request routing. Serve fixture bytes over HTTP.
+  const downloadBytes = Buffer.from('fake-ending-video-download');
+  const target = new URL(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
+  const fixtureServer = http.createServer((req, res) => {
+    const url = new URL(req.url, target);
+    if (url.pathname === '/api/play/ending/video' && url.searchParams.get('download') === '1') {
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': `attachment; filename="call-to-the-past-${url.searchParams.get('playId')}.mp4"`,
+      });
+      return res.end(downloadBytes);
+    }
+    const proxy = (url.protocol === 'https:' ? https : http).request(
+      url,
+      {
+        method: req.method,
+        headers: { ...req.headers, host: target.host },
+      },
+      (upstream) => {
+        res.writeHead(upstream.statusCode, upstream.headers);
+        upstream.pipe(res);
+      },
+    );
+    proxy.on('error', () => {
+      res.writeHead(502);
+      res.end();
+    });
+    req.pipe(proxy);
+  });
+  await new Promise((resolve) => fixtureServer.listen(0, '127.0.0.1', resolve));
+  let browser;
   try {
+    browser = await chromium.launch({ channel: 'chrome', headless: true });
     const page = await browser.newPage({
       viewport: { width: 390, height: 844 },
       isMobile: true,
       hasTouch: true,
+      acceptDownloads: true,
     });
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
@@ -48,11 +82,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         }),
       });
     });
-    // Hold metadata loading so the HTML video can be inspected without fabricating playable content.
+    // Hold metadata loading so the video element can be inspected without real decoding.
     await page.route('**/api/play/ending/video?*', () => {});
-    await page.goto(
-      (process.env.PLAYTEST_URL || 'http://127.0.0.1:5178') + '/tests/ending-harness.html',
-    );
+    await page.goto(`http://127.0.0.1:${fixtureServer.address().port}/tests/ending-harness.html`);
     await page.getByRole('heading', { name: 'ノーマルエンド', exact: true }).waitFor();
     await page.getByText('エンディング動画を生成しています。', { exact: true }).waitFor();
     assert.equal(await page.locator('.ending-ready-notice').count(), 0);
@@ -65,6 +97,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       }),
     );
     assert.equal(await page.locator('video').count(), 0);
+    assert.equal(await page.locator('.ending-download').count(), 0);
     await page.getByText('あなたらしい結末を振り返っています…', { exact: true }).waitFor();
     storyReady = true;
     await page.getByText('食器縛り', { exact: true }).waitFor();
@@ -77,6 +110,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     status = 'failed';
     errorCode = 'ENDING_DIRECTION_INVALID_RESPONSE';
     await page.getByText('動画の演出を作る段階で失敗しました。', { exact: true }).waitFor();
+    assert.equal(await page.locator('.ending-download').count(), 0);
     assert(
       await arrow.isVisible(),
       'the result footer remains visible when video generation fails',
@@ -97,6 +131,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await video.getAttribute('controls'), '');
     assert.equal(await video.getAttribute('playsinline'), '');
     assert.equal(await video.getAttribute('autoplay'), null);
+    const downloadLink = page.getByRole('link', { name: '動画をダウンロード', exact: true });
+    await downloadLink.waitFor();
+    const downloadBounds = await downloadLink.boundingBox();
+    assert(
+      downloadBounds.height >= 44 && downloadBounds.width <= 390,
+      'download fits a touch screen',
+    );
+    const previousUrl = page.url();
+    const [download] = await Promise.all([page.waitForEvent('download'), downloadLink.click()]);
+    assert.equal(download.suggestedFilename(), `call-to-the-past-${first}.mp4`);
+    assert.equal(await download.failure(), null);
+    const chunks = [];
+    for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+    assert.deepEqual(Buffer.concat(chunks), downloadBytes);
+    assert.equal(page.url(), previousUrl, 'saving keeps the result on screen');
     assert.equal(await page.getByRole('heading', { name: '赤い印の約束' }).count(), 0);
     await page.getByText('食器縛り', { exact: true }).waitFor();
     const readyGets = gets;
@@ -125,6 +174,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       exact: true,
     });
     await englishDismiss.waitFor();
+    await page.getByRole('link', { name: 'Download video', exact: true }).waitFor();
     const noticeBounds = await readyNotice.boundingBox();
     assert(
       noticeBounds.x >= 0 && noticeBounds.x + noticeBounds.width <= 320,
@@ -180,6 +230,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       '.ending-story',
       '.ending-status',
       'video',
+      '.ending-download',
       '.ending-continued',
     ]) {
       assert.equal(await page.locator(selector).isVisible(), false, `${selector} folds away`);
@@ -198,6 +249,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(await video.isVisible(), 'expanding restores the video');
     assert(await page.locator('.ending-tag').isVisible(), 'expanding restores the tag');
     await page.setViewportSize({ width: 390, height: 844 });
+    await video.evaluate((element) => element.dispatchEvent(new Event('error')));
+    await page.getByRole('button', { name: '動画を読み直す', exact: true }).waitFor();
+    assert(await downloadLink.isVisible(), 'a playback error does not prevent downloading');
+    await page.getByRole('button', { name: '動画を読み直す', exact: true }).click();
+    await video.waitFor();
     status = 'failed';
     errorCode = 'ENDING_START_FRAME_HTTP_401';
     await page.evaluate((id) => window.renderEnding(id, 'en'), second);
@@ -267,6 +323,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.reload();
     await page.getByText('動画を閲覧する認証が失効しました。', { exact: true }).waitFor();
     assert.equal(await page.locator('.ending-tag').count(), 0);
+    assert.equal(await page.locator('.ending-download').count(), 0);
     responseCode = 200;
     status = 'ready';
     retainUntil = new Date(Date.now() + 1300).toISOString();
@@ -274,13 +331,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.locator('video').waitFor();
     await page.getByText('エンディング動画の閲覧期限が切れました。', { exact: true }).waitFor();
     assert.equal(await page.locator('video').count(), 0);
+    assert.equal(await page.locator('.ending-download').count(), 0);
     assert.equal(await page.locator('.ending-tag').count(), 0);
     assert.deepEqual(errors, []);
     console.log(
-      'Ending browser smoke passed: text before video, 40-tag labels, mobile layout, disabled-video polling, manual video, reload, replay, auth, expiry. Media/API are fake.',
+      'Ending browser smoke passed: text before video, 40-tag labels, mobile layout, disabled-video polling, manual video, MP4 download, reload, replay, auth, expiry. Media/API are fake.',
     );
   } finally {
-    await browser.close();
+    await browser?.close();
+    fixtureServer.closeAllConnections();
+    await new Promise((resolve) => fixtureServer.close(resolve));
   }
 })().catch((error) => {
   console.error(error);

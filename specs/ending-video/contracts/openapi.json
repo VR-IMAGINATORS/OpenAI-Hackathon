@@ -49,10 +49,13 @@
     "/api/play/ending/video": {
       "get": {
         "operationId": "getEndingVideo",
-        "summary": "Read the owner’s retained MP4, including a single byte range.",
+        "summary": "Read or download the owner’s retained MP4, including a single byte range.",
         "parameters": [
           {
             "$ref": "#/components/parameters/playId"
+          },
+          {
+            "$ref": "#/components/parameters/download"
           },
           {
             "name": "Range",
@@ -67,6 +70,10 @@
           "200": {
             "description": "Complete retained MP4.",
             "headers": {
+              "Content-Disposition": {
+                "description": "When download=1, attachment with filename call-to-the-past-{playId}.mp4. Omitted for playback.",
+                "schema": { "type": "string" }
+              },
               "Cache-Control": {
                 "schema": {
                   "type": "string",
@@ -92,6 +99,10 @@
           "206": {
             "description": "Requested byte range.",
             "headers": {
+              "Content-Disposition": {
+                "description": "When download=1, the same attachment filename as the complete MP4.",
+                "schema": { "type": "string" }
+              },
               "Content-Range": {
                 "schema": {
                   "type": "string"
@@ -136,6 +147,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/playId"
+          },
+          {
+            "$ref": "#/components/parameters/download"
           }
         ],
         "responses": {
@@ -167,6 +181,13 @@
       }
     },
     "parameters": {
+      "download": {
+        "name": "download",
+        "in": "query",
+        "required": false,
+        "description": "Set to 1 to download the retained MP4 as an attachment. Uses the same owner authentication and expiry as playback; never generates again.",
+        "schema": { "type": "string", "enum": ["1"] }
+      },
       "playId": {
         "name": "playId",
         "in": "query",

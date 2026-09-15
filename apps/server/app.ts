@@ -585,7 +585,10 @@ export function createHostedApp(
   });
   app.get('/api/play/ending/video', (req, res) => {
     const auth = sessions.authorizeResult(cookieToken(req));
-    const bytes = results.endingVideo(auth.digest, endingPlayId(req));
+    const id = endingPlayId(req);
+    const download = z.literal('1').optional().parse(req.query.download);
+    const bytes = results.endingVideo(auth.digest, id);
+    if (download) res.attachment(`call-to-the-past-${id}.mp4`);
     res.set({ 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes' });
     const range = req.get('Range');
     if (!range) {
