@@ -1,4 +1,5 @@
 import { config as loadEnv } from 'dotenv';
+import { defaultExpansionMain } from './expansion/orchestration.js';
 import { resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { writeFile } from 'node:fs/promises';
@@ -11,13 +12,14 @@ import { RunStore, readRun } from './store.js';
 import { renderReport } from './report.js';
 import type { MissionConfig, RunRecord } from './schemas.js';
 
-const help = `自動ミッション生成プロトタイプ\n\n  npm.cmd run mission -- generate --config config/auto-mission/default.json --mock|--live\n  npm.cmd run mission -- evaluate --input runs/auto-mission/<run>/run.json --mock|--live\n  npm.cmd run mission -- benchmark --config config/auto-mission/default.json --mock|--live\n  npm.cmd run mission -- render --input runs/auto-mission/<run>/run.json\n\n実API: OPENAI_API_KEYを現在の環境または.env.localから読みます。\n--liveは課金通信を実行します。既定の全体上限600秒、最大17 calls。\n出力: runs/auto-mission/ にJSONとダークHTML。renderはオフラインです。`;
+const help = `自動ミッション生成プロトタイプ\n\n  npm.cmd run mission -- generate --config config/auto-mission/default.json --mock|--live\n  npm.cmd run mission -- evaluate --input runs/auto-mission/<run>/run.json --mock|--live\n  npm.cmd run mission -- benchmark --config config/auto-mission/default.json --mock|--live\n  npm.cmd run mission -- render --input runs/auto-mission/<run>/run.json\n\n実API: OPENAI_API_KEYを現在の環境または.env.localから読みます。\n--liveは課金通信を実行します。既定の全体上限600秒、最大17 calls。\n出力: runs/auto-mission/ にJSONとダークHTML。renderはオフラインです。\n\nミッション拡充:\n  npm.cmd run mission -- expand --config config/auto-mission/expand-default.json --mock\n  npm.cmd run mission -- expand-continue --input <manifest.json> --mock\n  npm.cmd run mission -- expand-retry --input <manifest.json> --play <playId> --mock\n  npm.cmd run mission -- expand-pilot --input <manifest.json> --mock\n  npm.cmd run mission -- expand-render --input <manifest.json|draft.json>\n  npm.cmd run mission -- expand-adopt --input <manifest.json> --revision <number>\n拡充liveは --mock を --live --max-cost-usd <USD> に置換。続行時は追加実行分の上限です。\n初回3プレイで停止し、残り6プレイはexpand-continueで明示実行します。`;
 export async function main(args = process.argv.slice(2)): Promise<number> {
   if (!args.length || args.includes('--help')) {
     console.log(help);
     return 0;
   }
   const [command, ...rest] = args;
+  if (command.startsWith('expand')) return defaultExpansionMain(args);
   if (!['generate', 'evaluate', 'benchmark', 'render'].includes(command)) {
     console.error(help);
     return 2;
