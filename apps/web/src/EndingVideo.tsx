@@ -26,6 +26,8 @@ export default function EndingVideo({
   const [unavailable, setUnavailable] = useState<Unavailable>(null);
   const [mediaFailed, setMediaFailed] = useState(false);
   const [expanded, setExpanded] = useState(true);
+  const [showReadyNotice, setShowReadyNotice] = useState(false);
+  const readyNotified = useRef(false);
   const detailsId = useId();
   const videoRef = useRef<HTMLVideoElement>(null);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
@@ -94,6 +96,17 @@ export default function EndingVideo({
   const finalOutcome = view?.outcome ?? outcome;
   const count = view?.clearedCount ?? clearedCount;
   const ready = view?.status === 'ready' && !unavailable;
+  useEffect(() => {
+    if (!ready || mediaFailed) {
+      setShowReadyNotice(false);
+      return;
+    }
+    if (readyNotified.current) return;
+    readyNotified.current = true;
+    setShowReadyNotice(true);
+    const timer = window.setTimeout(() => setShowReadyNotice(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [ready, mediaFailed]);
   const story = !unavailable || unavailable === 'network' ? view?.story : null;
   const tagLabel = endingTagLabel(story?.tagId, locale);
   const storyPending = view?.storyStatus === 'queued' || view?.storyStatus === 'generating';
@@ -129,8 +142,8 @@ export default function EndingVideo({
       ),
       generating: t('エンディング動画を生成しています。', 'Generating your ending video.'),
       ready: t(
-        '再生ボタンを押して、あなたが変えた未来を見届けましょう。',
-        'Press play to see the future you changed.',
+        'リザルト動画ができました。再生ボタンを押して、あなたが変えた未来を見届けましょう。',
+        'Your ending video is ready. Press play to see the future you changed.',
       ),
       failed: t(
         '動画を生成できませんでした。プレイの結果は確定しています。',
@@ -144,8 +157,15 @@ export default function EndingVideo({
   }
   return (
     <section className="ending-video" aria-label={t('このプレイの結末', 'Your ending')}>
+      {showReadyNotice && (
+        <div className="ending-ready-notice" role="status" aria-atomic="true">
+          <span aria-hidden="true">✓</span>
+          {t('リザルト動画ができました', 'Your ending video is ready')}
+        </div>
+      )}
       <div className="ending-heading">
         <h2>
+          {finalOutcome && <EndingOutcomeIcon outcome={finalOutcome} />}
           {finalOutcome
             ? {
                 happy: t('ハッピーエンド', 'Happy ending'),
@@ -258,5 +278,34 @@ export default function EndingVideo({
         <img src="/images/to-be-continued.png" alt="to be continued" width={1504} height={352} />
       </div>
     </section>
+  );
+}
+
+function EndingOutcomeIcon({ outcome }: { outcome: EndingOutcome }) {
+  return (
+    <svg
+      className="ending-outcome-icon"
+      data-outcome={outcome}
+      viewBox="0 0 32 32"
+      aria-hidden="true"
+    >
+      <path d="M8 28V4h18v24M5 28h24" />
+      {outcome === 'happy' ? (
+        <>
+          <path className="ending-door-panel" d="m8 4-6 4v20h6Z" />
+          <path d="M13 16h9m-4-4 4 4-4 4" />
+        </>
+      ) : outcome === 'normal' ? (
+        <>
+          <path className="ending-door-panel" d="m8 4 10 4v18l-10 2Z" />
+          <path d="M15 16v2" />
+        </>
+      ) : (
+        <>
+          <path className="ending-door-panel" d="M8 4h18v24H8Z" />
+          <path d="M21 16v2" />
+        </>
+      )}
+    </svg>
   );
 }

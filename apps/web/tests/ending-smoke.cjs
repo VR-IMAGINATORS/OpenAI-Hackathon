@@ -55,6 +55,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     );
     await page.getByRole('heading', { name: 'ノーマルエンド', exact: true }).waitFor();
     await page.getByText('エンディング動画を生成しています。', { exact: true }).waitFor();
+    assert.equal(await page.locator('.ending-ready-notice').count(), 0);
     const arrow = page.getByRole('img', { name: 'to be continued', exact: true });
     await arrow.waitFor();
     assert(
@@ -90,6 +91,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.reload();
     await page.locator('video').waitFor();
     const video = page.locator('video');
+    const readyNotice = page.locator('.ending-ready-notice');
+    await readyNotice.waitFor();
+    assert.match(await readyNotice.innerText(), /リザルト動画ができました/);
     assert.equal(await video.getAttribute('controls'), '');
     assert.equal(await video.getAttribute('playsinline'), '');
     assert.equal(await video.getAttribute('autoplay'), null);
@@ -97,6 +101,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('食器縛り', { exact: true }).waitFor();
     const readyGets = gets;
     await page.waitForTimeout(2300);
+    assert.equal(await readyNotice.count(), 0, 'completion notice dismisses automatically');
     assert.equal(gets, readyGets, 'ready should stop polling');
     await page.reload();
     await page.locator('video').waitFor();
@@ -171,7 +176,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('不具合報告用の情報', { exact: true }).click();
     await page.getByText(storyErrorCode, { exact: true }).waitFor();
     await page.getByText(first, { exact: true }).waitFor();
+    await page.getByRole('button', { name: /閉じて会話を見返す/ }).click();
     status = 'ready';
+    await readyNotice.waitFor();
+    assert.equal(
+      await page.locator('video').isVisible(),
+      false,
+      'notice preserves collapsed details',
+    );
+    await page.getByRole('button', { name: /動画を見る/ }).click();
     await page.locator('video').waitFor();
     assert(gets > textFailedGets, 'text failure must not stop video polling');
     await page.getByText(storyErrorCode, { exact: true }).waitFor();
