@@ -13,6 +13,7 @@ export interface DelegationInput {
 }
 export interface CoordinatorOptions {
   ledger: ConversationLedger;
+  consumeOnReservation?: boolean;
   classify: (
     context: IntentContext,
     delegation: DelegationRequest | null,
@@ -318,14 +319,15 @@ export class IntentCoordinator {
         this.options.onDecision?.(decision, structuredClone(d));
         continue;
       }
-      ledger.consume(decision.evidenceSeq);
+      if (decision.kind === 'consult' || !this.options.consumeOnReservation)
+        ledger.consume(decision.evidenceSeq);
       if (decision.kind === 'consult') {
         d.status = 'consulted';
         this.options.onDecision?.(decision, structuredClone(d));
         continue;
       }
       d.status = 'reserved';
-      ledger.updateState({ judging: true });
+      if (!this.options.consumeOnReservation) ledger.updateState({ judging: true });
       try {
         this.options.onDecision?.(decision, structuredClone(d));
         await this.options.execute(decision, context, structuredClone(d));
@@ -338,9 +340,19 @@ export class IntentCoordinator {
         )
           this.report(error);
       } finally {
-        // Failure still consumes evidence. No old-state speech or delegation is queued.
-        this.expireAll();
-        if (ledger.active && ledger.captureUnconsumedContext().generation === context.generation)
+        // Keep later correction delegations; they may target a replacement action.
+        for (const pending of this.requests.values()) {
+          if (
+            (pending.status === 'pending' || pending.status === 'evaluating') &&
+            pending.receivedAt <= d.receivedAt
+          )
+            pending.status = 'expired';
+        }
+        if (
+          !this.options.consumeOnReservation &&
+          ledger.active &&
+          ledger.captureUnconsumedContext().generation === context.generation
+        )
           ledger.updateState({ judging: false });
       }
     }

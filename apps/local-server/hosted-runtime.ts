@@ -1,8 +1,16 @@
+import { KnowledgeStore, buildCompanionContext } from './companion-knowledge.js';
+import { composeCompanionReply } from './companion-response.js';
+import { VoiceNotificationScheduler } from './voice-notifications.js';
+import { voiceActivitySchema, type VoiceActivity } from '../../packages/shared/harness.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { ConversationLedger } from './conversation.js';
 import { IntentCoordinator } from './intent-coordinator.js';
 import { LiveOutbox } from './live-outbox.js';
+
+import { classifyPhoto, classifyActionControl, type PhotoDecision } from './harness-decisions.js';
+import type { ExecuteIntent, TranscriptFragment } from '../../packages/shared/conversation.js';
+import type { IntentContext } from './conversation.js';
 import { classifyCoreIntent } from './core-intent-ai.js';
 import { GameSession, GameError } from './game.js';
 import { createGameAI } from './game-ai.js';
@@ -70,6 +78,28 @@ export class GameRuntime {
     this.diagnostics.push({ at: this.now(), stage, ...(code ? { code } : {}) });
     if (this.diagnostics.length > 128) this.diagnostics.shift();
   }
+  private readonly processedPhotos = new Set<string>();
+  private photoWorker?: Promise<void>;
+  private photoDeciding = false;
+  private activeUsage = '';
+  private runtimeActionId: string | null = null;
+  private photoAcceptance?: { revision: number; decision: PhotoDecision };
+  private control?: {
+    actionId: string;
+    usage: string;
+    epoch: number;
+    fragments: TranscriptFragment[];
+    controller: AbortController;
+    delegation?: { id: string; generation: number; offsetMs: number };
+  };
+  private pendingRisk?: {
+    usage: string;
+    itemRefs: ExecuteIntent['itemRefs'];
+    mode?: ExecuteIntent['mode'];
+    environmentTargetIds?: ExecuteIntent['environmentTargetIds'];
+    message: string;
+    gameVersion: number;
+  };
   private actionInFlight = false;
   private pendingScene: { messageId: string; beforeVersion: number } | null = null;
   private readonly sceneMessages = new Map<number, string>();
@@ -83,7 +113,12 @@ export class GameRuntime {
   private openingMessageId?: string;
   private seen = new Set<string>();
   private maintenanceTimer?: ReturnType<typeof setInterval>;
-  private timeWarningSent = false;
+  private knowledge?: KnowledgeStore;
+  private notifications?: VoiceNotificationScheduler<{
+    text: string;
+    delegationId: string | null;
+    messageId: string | null;
+  }>;
   private hintEvidence = new Map<string, Set<string>>();
   private transcriptTimer?: ReturnType<typeof setTimeout>;
   private liveRequests = new Map<
@@ -111,7 +146,7 @@ export class GameRuntime {
     this.game = new GameSession(
       scenario,
       createGameAI(
-        { respond: (body) => ai.respond(id, body) },
+        { respond: (body, signal) => ai.respond(id, body, signal) },
         () => models.gameModel,
         coreSnapshot,
       ),
@@ -121,6 +156,7 @@ export class GameRuntime {
         clearInterval(this.maintenanceTimer);
         this.seen.clear();
         this.intents?.stop();
+        this.notifications?.endWarnings();
         this.traceEntries = [];
         this.diagnostics = [];
         this.closingAt = Math.min(
@@ -158,15 +194,25 @@ export class GameRuntime {
       text: scenario.playerBriefing,
     });
     if (coreSnapshot) {
+      this.knowledge = new KnowledgeStore(coreSnapshot);
+      this.knowledge.advance(this.game.facts);
+      this.notifications = new VoiceNotificationScheduler(
+        coreSnapshot.coreConfig.warnings,
+        now,
+        Date.now,
+        (warning, result) => ({ ...result, text: warning.text + '\n' + result.text }),
+      );
+      this.notifications.reset(this.game.generation);
       this.game.controllerEpoch = this.epoch;
       this.ledger = new ConversationLedger({ generation: this.game.generation, now });
       this.outbox = new LiveOutbox(this.game.generation, this.epoch);
       this.syncCore();
       this.intents = new IntentCoordinator({
         ledger: this.ledger,
+        consumeOnReservation: true,
         now,
         classify: async (context) => {
-          if (this.game.state().busy || this.notificationFailed) {
+          if (this.game.state().busy || this.notificationFailed || this.photoDeciding) {
             this.recordDiagnostic(
               'classification_skipped',
               this.notificationFailed ? 'notification_failed' : 'busy',
@@ -181,6 +227,12 @@ export class GameRuntime {
             conversation: context,
             game: {
               publicState: this.publicContext(),
+              photoAcceptance:
+                this.photoAcceptance?.revision === this.game.inputRevision
+                  ? this.photoAcceptance.decision
+                  : null,
+              pendingRisk:
+                this.pendingRisk?.gameVersion === this.game.gameVersion ? this.pendingRisk : null,
               status: this.game.status,
               situation: this.game.situation,
               obstacle: coreSnapshot.scenarioV2.obstacles[this.game.obstacleIndex],
@@ -192,70 +244,35 @@ export class GameRuntime {
             photos: this.game.photos,
             obstacleIndex: this.game.obstacleIndex,
             hintsAlreadyGiven: this.hintsAlreadyGiven(context),
+            knowledge: this.knowledge,
+            gameState: this.game.state(),
+            onRiskProposal: (proposal) => {
+              if (this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion)
+                return;
+              this.pendingRisk = { ...proposal, gameVersion: this.game.gameVersion };
+            },
+            onRecognitionCorrection: (correction) => {
+              if (
+                this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion ||
+                this.game.state().busy
+              )
+                return;
+              const item = this.game.proposal?.items.find(
+                (item) => item.photoId === correction.photoId,
+              );
+              if (!item || item.name === correction.name) return;
+              item.name = correction.name;
+              this.game.inputRevision++;
+              this.game.proposal!.inputRevision = this.game.inputRevision;
+              this.pendingRisk = undefined;
+              this.photoAcceptance = undefined;
+              this.syncCore(true);
+            },
           });
           this.recordDiagnostic('classification_returned', decision.kind);
           return decision;
         },
-        execute: async (intent, context, delegation) => {
-          this.check();
-          this.game.currentContextVersion = this.ledger!.captureUnconsumedContext().contextVersion;
-          this.recordDiagnostic('action_reserving');
-          const ticket = this.game.reserveAction(
-            intent,
-            context.contextVersion,
-            context.gameVersion,
-            context.actionEpoch,
-            context.controllerEpoch,
-          );
-          this.recordDiagnostic('judgment_started');
-          const judgmentStarted = now();
-          const messageId = randomUUID();
-          this.pendingScene = { messageId, beforeVersion: this.game.gameVersion };
-          this.actionInFlight = true;
-          let result;
-          try {
-            result = await this.game.judgeAction(ticket);
-            this.recordDiagnostic('judgment_committed');
-          } finally {
-            this.actionInFlight = false;
-            this.pendingScene = null;
-          }
-          if (this.disposed || context.controllerEpoch !== this.epoch) return;
-          this.syncCore();
-          if (this.traceEnabled && !this.game.terminal) {
-            this.traceEntries.push({
-              actionId: ticket.id,
-              configDigest: coreSnapshot.digest,
-              interpretation: intent.usage.slice(0, 1000),
-              shortReason: result.shortReason.slice(0, 1000),
-              durationMs: Math.max(0, Math.round(now() - judgmentStarted)),
-            });
-            while (
-              this.traceEntries.length > 128 ||
-              Buffer.byteLength(JSON.stringify(this.traceEntries)) > 64 * 1024
-            )
-              this.traceEntries.shift();
-          }
-          if (result.success && !this.game.terminal && coreSnapshot.scenarioV2.story) {
-            this.sendFacts(
-              'Updated story stage (direction, not newly established facts): ' +
-                JSON.stringify(
-                  storyNarration(coreSnapshot, storyClearCount(coreSnapshot, this.game.facts)),
-                ),
-              delegation.id,
-            );
-          }
-          // Keep private narration direction out of the speakable payload.
-          const spokenResult = this.game.terminal
-            ? result.narrative
-            : result.narrative + '\n' + this.currentSituation();
-          const command = this.speak(spokenResult, delegation.id, messageId);
-          this.presentScene(
-            result.narrative + '\n' + this.currentSituation(),
-            messageId,
-            command?.seq ?? null,
-          );
-        },
+        execute: (intent, context, delegation) => this.executeCore(intent, context, delegation.id),
         onDecision: (decision, delegation) => {
           this.recordDiagnostic('decision_accepted', decision.kind);
           if (decision.kind === 'consult') {
@@ -299,9 +316,11 @@ export class GameRuntime {
               ? error.message
               : 'PROCESSING_ERROR';
           this.recordDiagnostic('error', code);
-          if (this.valid()) {
-            this.game.error =
-              '処理できませんでした。行動は消費していません。指示をもう一度話してください。';
+          if (this.valid() && code !== 'ACTION_INVALID') {
+            this.game.error = this.words(
+              'ごめん、うまく確認できなかった。もう一度教えて。',
+              'Sorry, I could not confirm that. Please tell me again.',
+            );
             this.speak(this.game.error);
           }
           this.syncCore();
@@ -311,26 +330,319 @@ export class GameRuntime {
       this.maintenanceTimer.unref();
     }
   }
+  private async executeCore(
+    intent: ExecuteIntent,
+    context: IntentContext,
+    delegationId: string | null,
+  ): Promise<void> {
+    const coreSnapshot = this.coreSnapshot!;
+
+    this.check();
+    if (
+      this.photoAcceptance?.revision === this.game.inputRevision &&
+      this.photoAcceptance.decision.decision === 'reject' &&
+      intent.itemRefs.some((ref) => 'photoId' in ref)
+    ) {
+      const revision = this.game.inputRevision;
+      const decision = await classifyPhoto(this.modelClient(), {
+        acceptancePolicy: coreSnapshot.coreConfig.acceptancePolicy[coreSnapshot.locale],
+        priorDecision: this.photoAcceptance.decision,
+        publicState: this.publicContext(),
+        inventory: this.game.inventory,
+        recognizedItems: this.game.proposal?.items,
+        photos: this.game.photos.map((photo) => photo.id),
+        requestedUsage: intent.usage,
+        userSpeech: context.fragments
+          .filter(
+            (fragment) =>
+              fragment.speaker === 'user' && intent.evidenceSeq.includes(fragment.serverSeq),
+          )
+          .map((fragment) => fragment.delta)
+          .join(''),
+      });
+      this.check(context.controllerEpoch);
+      if (
+        this.game.inputRevision !== revision ||
+        this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion
+      )
+        throw new GameError(409, 'ACTION_INVALID');
+      this.photoAcceptance = { revision, decision };
+      if (decision.decision !== 'execute') {
+        if (intent.evidenceSeq.length) this.ledger!.consume(intent.evidenceSeq);
+        if (decision.decision === 'confirm_risk')
+          this.pendingRisk = {
+            usage: decision.usage,
+            itemRefs: decision.itemRefs,
+            message: decision.message,
+            gameVersion: this.game.gameVersion,
+          };
+        this.speak(decision.message, delegationId);
+        return;
+      }
+    }
+    this.game.currentContextVersion = this.ledger!.captureUnconsumedContext().contextVersion;
+    if (
+      this.pendingRisk?.gameVersion === this.game.gameVersion &&
+      (intent.usage !== this.pendingRisk.usage ||
+        JSON.stringify(intent.itemRefs) !== JSON.stringify(this.pendingRisk.itemRefs) ||
+        (intent.mode ?? 'tool') !== (this.pendingRisk.mode ?? 'tool') ||
+        JSON.stringify(intent.environmentTargetIds ?? []) !==
+          JSON.stringify(this.pendingRisk.environmentTargetIds ?? []))
+    ) {
+      // A changed proposal never inherits permission given for a previous risk.
+      this.pendingRisk = undefined;
+    }
+    this.recordDiagnostic('action_reserving');
+    const ticket = this.game.reserveAction(
+      intent,
+      context.contextVersion,
+      context.gameVersion,
+      context.actionEpoch,
+      context.controllerEpoch,
+    );
+    if (intent.evidenceSeq.length) this.ledger!.consume(intent.evidenceSeq);
+    this.ledger!.updateState({ judging: true });
+    this.activeUsage = intent.usage;
+    this.runtimeActionId = ticket.id;
+    if (intent.origin?.kind === 'photo')
+      this.speak(this.words('これなら使えそう。やってみる。', 'I can use this. Let me try.'));
+    this.pendingRisk = undefined;
+    this.recordDiagnostic('judgment_started');
+    const judgmentStarted = this.now();
+    const messageId = randomUUID();
+    this.pendingScene = { messageId, beforeVersion: this.game.gameVersion };
+    this.actionInFlight = true;
+    let result;
+    try {
+      result = await this.game.judgeAction(ticket);
+      this.recordDiagnostic('judgment_committed');
+    } finally {
+      if (this.runtimeActionId === ticket.id) {
+        this.runtimeActionId = null;
+        this.actionInFlight = false;
+        this.pendingScene = null;
+      }
+      this.syncCore();
+    }
+    if (this.disposed || context.controllerEpoch !== this.epoch) return;
+    this.syncCore();
+    if (this.traceEnabled && !this.game.terminal) {
+      this.traceEntries.push({
+        actionId: ticket.id,
+        configDigest: coreSnapshot.digest,
+        interpretation: intent.usage.slice(0, 1000),
+        shortReason: result.shortReason.slice(0, 1000),
+        durationMs: Math.max(0, Math.round(this.now() - judgmentStarted)),
+      });
+      while (
+        this.traceEntries.length > 128 ||
+        Buffer.byteLength(JSON.stringify(this.traceEntries)) > 64 * 1024
+      )
+        this.traceEntries.shift();
+    }
+    // Keep private narration direction out of the speakable payload.
+    const committedVersion = this.game.gameVersion;
+    // Freeze the scene now; a later photo or action must not change this result's picture.
+    this.presentScene(result.narrative + '\n' + this.currentSituation(), messageId);
+    const spokenResult = this.game.terminal
+      ? result.narrative
+      : await composeCompanionReply(this.modelClient(), this.companionContext(), result);
+    if (
+      this.disposed ||
+      context.controllerEpoch !== this.epoch ||
+      this.game.gameVersion !== committedVersion
+    )
+      return;
+    this.speak(spokenResult, delegationId, messageId);
+  }
+  private modelClient() {
+    return {
+      respond: (body: unknown) => this.ai.respond(this.id, body),
+      model: this.models.gameModel,
+      locale: this.coreSnapshot!.locale,
+    };
+  }
+
+  private async processPhoto(requestId: string): Promise<void> {
+    if (!this.coreSnapshot || !this.ledger || this.processedPhotos.has(requestId)) return;
+    // The receipt cache already bounds this set to 100 entries per play.
+    this.processedPhotos.add(requestId);
+    const epoch = this.epoch;
+    const photoVersion = this.game.inputRevision;
+    const photoIds = this.game.photos.map((photo) => photo.id);
+    const version = this.game.gameVersion;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const context = this.ledger.captureUnconsumedContext();
+      const decision = await classifyPhoto(this.modelClient(), {
+        acceptancePolicy: this.coreSnapshot.coreConfig.acceptancePolicy[this.coreSnapshot.locale],
+        publicState: this.publicContext(),
+        inventory: this.game.inventory,
+        recognizedItems: this.game.proposal?.items,
+        photos: photoIds,
+        conversation: context.fragments
+          .slice(-24)
+          .map(({ speaker, delta }) => ({ speaker, text: delta })),
+      });
+      if (
+        !this.valid(epoch) ||
+        this.game.gameVersion !== version ||
+        this.game.inputRevision !== photoVersion ||
+        this.game.status !== 'playing'
+      )
+        return;
+      if (context.contextVersion !== this.ledger.captureUnconsumedContext().contextVersion)
+        continue;
+      this.photoAcceptance = { revision: photoVersion, decision };
+      if (decision.decision === 'execute') {
+        await this.executeCore(
+          {
+            kind: 'execute',
+            evidenceSeq: [],
+            origin: { kind: 'photo', requestId, photoIds, photoVersion },
+            itemRefs: decision.itemRefs,
+            usage: decision.usage,
+            reason: decision.reason,
+          },
+          context,
+          null,
+        );
+      } else if (decision.decision !== 'wait') {
+        if (decision.decision === 'confirm_risk')
+          this.pendingRisk = {
+            usage: decision.usage,
+            itemRefs: decision.itemRefs,
+            message: decision.message,
+            gameVersion: version,
+          };
+        this.speak(decision.message);
+      }
+      return;
+    }
+    this.speak(this.words('届いたよ。どう使おうか？', 'I got it. How should I use it?'));
+  }
+
+  private receiveControl(fragment: TranscriptFragment): void {
+    const actionId = this.game.pendingActionId;
+    if (!actionId || !this.game.holdPendingAction(actionId, fragment.eventId)) return;
+    if (this.control?.actionId === actionId) {
+      this.control.fragments.push(fragment);
+      return;
+    }
+    this.control?.controller.abort();
+    const control = {
+      actionId,
+      usage: this.activeUsage,
+      epoch: this.epoch,
+      fragments: [fragment],
+      controller: new AbortController(),
+    };
+    this.control = control;
+    const deadline = setTimeout(() => {
+      control.controller.abort();
+      this.game.cancelPendingAction(actionId);
+      this.syncCore();
+    }, 5_000);
+    deadline.unref();
+    void this.processControls(control)
+      .catch(() => {
+        const cancelled = this.game.cancelPendingAction(actionId);
+        this.syncCore();
+        if (
+          this.valid(control.epoch) &&
+          this.control === control &&
+          (cancelled || this.game.gameVersion === fragment.receivedGameVersion)
+        ) {
+          this.speak(
+            this.words(
+              'いったん止めたよ。どうしたらいい？',
+              'I stopped for now. What should I do?',
+            ),
+            null,
+            null,
+            'correction',
+          );
+        }
+      })
+      .finally(() => {
+        clearTimeout(deadline);
+        if (this.control === control) this.control = undefined;
+      });
+  }
+
+  private async processControls(control: NonNullable<GameRuntime['control']>): Promise<void> {
+    let handled = 0;
+    const { actionId } = control;
+    while (this.game.pendingActionId === actionId && handled < control.fragments.length) {
+      const batch = control.fragments.slice();
+      const decision = await classifyActionControl(
+        {
+          ...this.modelClient(),
+          respond: (body) => this.ai.respondControl(this.id, body, control.controller.signal),
+        },
+        { pendingUsage: control.usage, userSpeech: batch.map((f) => f.delta).join('') },
+      );
+      if (!this.valid(control.epoch) || this.control !== control) return;
+      if (this.game.pendingActionId !== actionId) {
+        if (this.game.gameVersion === batch[0]?.receivedGameVersion)
+          this.speak(
+            this.words(
+              'いったん止めたよ。どうしたらいい？',
+              'I stopped for now. What should I do?',
+            ),
+            null,
+            null,
+            'correction',
+          );
+        return;
+      }
+      if (decision.decision === 'keep') {
+        for (const fragment of batch.slice(handled))
+          this.game.resolvePendingActionControl(actionId, fragment.eventId, 'keep');
+        handled = batch.length;
+        continue;
+      }
+      this.game.cancelPendingAction(actionId);
+      this.syncCore();
+      this.pendingRisk = undefined;
+      if (decision.decision === 'replace') {
+        this.ledger!.promoteControlEvidence(batch.map((f) => f.serverSeq));
+        if (control.delegation) this.intents!.acceptDelegation(control.delegation);
+        else
+          this.enqueue({
+            ...factCommand(
+              this.words(
+                '訂正を受け付け、前の行動を止めました。最新のユーザーの訂正をclientへ委譲してください。成功したとは言わないでください。',
+                'The previous action is stopped. Delegate the latest user correction to the client. Do not claim success.',
+              ),
+            ),
+            type: 'session.instructions.append',
+          });
+      } else
+        this.speak(
+          decision.decision === 'unknown'
+            ? this.words(
+                'いったん止めたよ。どう変えたい？',
+                'I stopped for now. What would you like to change?',
+              )
+            : this.coreSnapshot!.coreConfig.recovery.cancelled[this.coreSnapshot!.locale],
+          null,
+          null,
+          'correction',
+        );
+      return;
+    }
+  }
+  private companionContext() {
+    this.knowledge!.advance(this.game.facts);
+    return buildCompanionContext(this.coreSnapshot!, this.knowledge!, this.game.state());
+  }
   private publicContext() {
     return {
+      ...this.companionContext(),
       status: this.game.status,
-      ...(this.coreSnapshot?.scenarioV2.story
-        ? {
-            story: storyContext(
-              this.coreSnapshot,
-              storyClearCount(this.coreSnapshot, this.game.facts),
-            ),
-            obstacle: {
-              id: this.game.facts.obstacleId,
-              title: this.game.scenario.obstacles[this.game.obstacleIndex].title,
-            },
-          }
-        : {}),
-      situation: this.game.situation,
       photoSendsRemaining: this.game.scenario.rules.maxPhotoSends - this.game.photoSendsUsed,
-      lastResult: this.game.lastResult,
       recognizedItems: this.game.proposal?.items.map(({ name }) => name) ?? [],
-      inventory: this.game.inventory.map(({ name, status }) => ({ name, status })),
+      lastResult: this.game.lastResult,
     };
   }
   private currentSituation() {
@@ -354,7 +666,21 @@ export class GameRuntime {
   private sendFacts(text: string, delegationId: string | null = null) {
     for (const command of factCommands(text, delegationId)) this.enqueue(command);
   }
-  private speak(text: string, delegationId: string | null = null, messageId: string | null = null) {
+  private speak(
+    text: string,
+    delegationId: string | null = null,
+    messageId: string | null = null,
+    kind: 'result' | 'correction' = 'result',
+  ) {
+    if (this.notifications) {
+      this.notifications.enqueue({
+        id: randomUUID(),
+        kind: this.game.terminal ? 'ending' : kind,
+        generation: this.game.generation,
+        payload: { text, delegationId, messageId },
+      });
+      return this.drainNotifications();
+    }
     let first: ReturnType<GameRuntime['enqueue']>;
     for (const command of speechCommands(text, delegationId)) {
       const queued = this.enqueue(command, messageId);
@@ -365,10 +691,9 @@ export class GameRuntime {
   private recoveryNotice(stage: string) {
     if (!this.valid() || this.game.status !== 'playing' || this.game.state().busy) return;
     this.recordDiagnostic(stage);
-    const text = this.words(
-      '指示の処理を完了できませんでした。もう一度、どう使うか教えてください。',
-      'I could not finish processing that request. Please tell me how to use it again.',
-    );
+    const text =
+      this.coreSnapshot?.coreConfig.recovery.failed[this.coreSnapshot.locale] ??
+      'ごめん、もう一度教えて。';
     this.game.error = text;
     this.speak(text);
     this.presentNotice(text);
@@ -387,24 +712,38 @@ export class GameRuntime {
     )
       return;
     this.intents?.tick();
-    const warning = this.coreSnapshot.coreConfig.timeWarning;
-    if (
-      !warning?.enabled ||
-      this.timeWarningSent ||
-      state.remainingMs >= warning.thresholdSeconds * 1000
-    )
-      return;
-    this.timeWarningSent = true;
-    const locale = this.coreSnapshot.locale;
-    const text = warning.message[locale].replaceAll(
-      '{thresholdSeconds}',
-      String(warning.thresholdSeconds),
-    );
-    for (const command of factCommands(warning.deliveryInstructions[locale]))
-      this.enqueue({ ...command, type: 'session.instructions.append' });
-    this.speak(text);
-    this.presentNotice(text);
-    this.recordDiagnostic('time_warning');
+    this.notifications?.updateWarnings(state.remainingMs, this.coreSnapshot.locale, (text) => ({
+      text,
+      delegationId: null,
+      messageId: null,
+    }));
+    this.drainNotifications();
+  }
+  reportVoiceActivity(raw: VoiceActivity): void {
+    this.check();
+    const activity = voiceActivitySchema.parse(raw);
+    if (activity.generation !== this.game.generation)
+      throw new GameError(409, 'LIVE_CONNECTION_STALE');
+    this.notifications?.report(activity);
+  }
+  private drainNotifications() {
+    let first: ReturnType<GameRuntime['enqueue']>;
+    let notice;
+    while ((notice = this.notifications?.takeNext())) {
+      const warning =
+        notice.validUntil === undefined
+          ? undefined
+          : { validUntil: notice.validUntil, noticeKind: 'time-warning' as const };
+      for (const command of speechCommands(notice.payload.text, notice.payload.delegationId)) {
+        const queued = this.enqueue(command, notice.payload.messageId, warning);
+        first ??= queued;
+      }
+      if (warning || notice.includesTimeWarning) {
+        this.presentNotice(notice.payload.text);
+        this.recordDiagnostic('time_warning');
+      }
+    }
+    return first;
   }
   private syncCore(changed = false) {
     if (!this.ledger) return;
@@ -419,9 +758,13 @@ export class GameRuntime {
     if (changed) this.ledger.contextChanged();
     this.game.currentContextVersion = this.ledger.captureUnconsumedContext().contextVersion;
   }
-  private enqueue(command: LiveCommand, messageId: string | null = null) {
+  private enqueue(
+    command: LiveCommand,
+    messageId: string | null = null,
+    warning?: { validUntil: number; noticeKind: 'time-warning' },
+  ) {
     try {
-      const queued = this.outbox?.append(command, messageId);
+      const queued = this.outbox?.append(command, messageId, warning);
       if (queued) this.recordDiagnostic('live_command_queued', command.type);
       return queued;
     } catch {
@@ -606,7 +949,12 @@ export class GameRuntime {
         const answer = await this.ai.createLive(this.id, {
           session: {
             model: this.models.liveModel,
-            instructions: liveInstructions(this.game.state(), this.coreSnapshot, this.game.facts),
+            instructions: liveInstructions(
+              this.game.state(),
+              this.coreSnapshot,
+              this.game.facts,
+              this.coreSnapshot ? this.companionContext() : undefined,
+            ),
             delegation: { type: 'client' },
             store: false,
           },
@@ -622,6 +970,7 @@ export class GameRuntime {
         this.syncCore();
         this.intents?.reset();
         this.outbox?.reset(this.game.generation, this.epoch);
+        this.notifications?.reset(this.game.generation);
         this.notificationFailed = false;
         this.seen.clear();
         this.game.heartbeat('connecting');
@@ -648,6 +997,8 @@ export class GameRuntime {
     }
     if (this.photoRequests.size >= 100) throw new GameError(429, '写真送信の試行上限です。');
     const ticket = this.game.beginPhotos(images.length > 0);
+    this.pendingRisk = undefined;
+    this.photoAcceptance = undefined;
     this.openingMessageId = undefined;
     this.syncCore(true);
     const epoch = this.epoch;
@@ -666,18 +1017,19 @@ export class GameRuntime {
         this.recordDiagnostic('photo_recognized');
         this.intents?.onContextChanged();
         if (this.coreSnapshot && this.game.proposal && photos.length) {
-          this.enqueue(
-            factCommand('写真の認識: ' + this.game.proposal.items.map((i) => i.name).join('、')),
-          );
-          this.enqueue({
-            ...factCommand(
-              this.words(
-                '写真が届いたよ。これをどう使う？',
-                'I got the photo. How should I use this?',
-              ),
-            ),
-            type: 'session.commentary.append',
-          });
+          this.photoDeciding = true;
+          const photoWorker = this.processPhoto(requestId)
+            .catch((error) => {
+              if (!(error instanceof GameError && error.message === 'ACTION_INVALID'))
+                this.recoveryNotice('photo_decision_failed');
+            })
+            .finally(() => {
+              if (this.photoWorker !== photoWorker) return;
+              this.photoDeciding = false;
+              this.ledger?.contextChanged();
+              this.intents?.onContextChanged();
+            });
+          this.photoWorker = photoWorker;
         }
       } catch (error) {
         if (epoch === this.epoch) this.game.cancelPhotos();
@@ -706,7 +1058,14 @@ export class GameRuntime {
       if (event.type === 'session.delegation.created') {
         this.openingMessageId = undefined;
         this.recordDiagnostic('delegation_received');
-        if (!this.game.terminal)
+        if (this.game.pendingActionId) {
+          if (this.control)
+            this.control.delegation = {
+              id: event.delegation.id,
+              generation,
+              offsetMs: event.offset_ms,
+            };
+        } else if (!this.game.terminal)
           this.intents!.acceptDelegation({
             id: event.delegation.id,
             generation,
@@ -737,6 +1096,7 @@ export class GameRuntime {
           this.story.transcript(fragment, this.now());
           if (fragment.speaker === 'user' && fragment.delta.trim())
             this.openingMessageId = undefined;
+          if (fragment.speaker === 'user' && fragment.delta.trim()) this.receiveControl(fragment);
           this.presentation?.transcript(
             fragment,
             fragment.speaker === 'assistant' ? this.openingMessageId : undefined,
@@ -878,6 +1238,9 @@ export class GameRuntime {
   }
   dispose() {
     this.disposed = true;
+    this.processedPhotos.clear();
+    this.control?.controller.abort();
+    this.notifications?.clear();
     clearInterval(this.maintenanceTimer);
     this.traceEntries = [];
     this.intents?.stop();

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { scenarioKnowledgeEntrySchema } from './harness.js';
 import { parseScenarioV2, scenarioSchema, type ScenarioV2 } from './scenario.js';
 import { localizedStoryTextSchema as localized, storyPhasesSchema } from './story-schema.js';
 
@@ -21,6 +22,7 @@ const stages = ['restraint', 'route', 'exit'] as const;
 export const storyCatalogSchema = z
   .object({
     version: z.literal(3),
+    schemaVersion: z.literal(2).default(2),
     id,
     title: localized,
     playerBriefing: localized,
@@ -36,6 +38,7 @@ export const storyCatalogSchema = z
             anchor: localized,
             mystery: localized,
             openingClue: localized,
+            knowledge: z.array(scenarioKnowledgeEntrySchema).max(20).default([]),
             sequences: z.array(z.array(id).length(3)).min(1).max(20),
           })
           .strict(),
@@ -195,6 +198,43 @@ export function compileStoryScenario(catalog: StoryCatalog, candidateIndex: numb
       ],
     },
     story: { ...catalog.story, mystery: scene.mystery, openingClue: scene.openingClue },
+    observationTargets: selected.map((gimmick) => ({
+      id: gimmick.id,
+      description: gimmick.observation,
+    })),
+    knowledge: [
+      ...scene.knowledge,
+      ...selected.flatMap((gimmick, index) => {
+        const prior = selected
+          .slice(0, index)
+          .map((entry) => ({ factKey: entry.id, value: 'cleared' }));
+        return [
+          ...(['blocked', 'partial', 'cleared'] as const).map((state) => ({
+            id: `${gimmick.id}-${state}`,
+            localizedText: state === 'blocked' ? gimmick.observation : gimmick.states[state],
+            kind: 'observable' as const,
+            prerequisites: [...prior, { factKey: gimmick.id, value: state }],
+            revealMode: 'automatic' as const,
+            requestCue: gimmick.objective,
+            observationTargetId: gimmick.id,
+          })),
+          ...gimmick.hints.flatMap((hint, level) =>
+            (['blocked', 'partial'] as const).map((state) => ({
+              id: `${gimmick.id}-hint-${level + 1}${state === 'partial' ? '-partial' : ''}`,
+              localizedText: hint,
+              kind: 'hidden' as const,
+              prerequisites: [...prior, { factKey: gimmick.id, value: state }],
+              revealMode: 'on_request' as const,
+              requestCue: {
+                ja: `${gimmick.objective.ja}のヒント段階${level + 1}`,
+                en: `${gimmick.objective.en}: hint level ${level + 1}`,
+              },
+              observationTargetId: gimmick.id,
+            })),
+          ),
+        ];
+      }),
+    ],
     obstacles: selected.map((gimmick) => ({
       id: gimmick.id,
       title: gimmick.objective,
@@ -236,8 +276,33 @@ export function compileStoryScenario(catalog: StoryCatalog, candidateIndex: numb
   });
 }
 
+export function normalizeStoryCatalog(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const source = value as Record<string, any>;
+  if (source.version !== 3 || source.schemaVersion !== undefined) return value;
+  return {
+    ...source,
+    schemaVersion: 2,
+    scenes: Array.isArray(source.scenes)
+      ? source.scenes.map((scene: any) => ({
+          ...scene,
+          knowledge: scene.knowledge ?? [
+            {
+              id: 'opening-clue',
+              localizedText: scene.openingClue,
+              kind: 'known',
+              prerequisites: [],
+              revealMode: 'automatic',
+              requestCue: { ja: '最初に気づいていること', en: 'What I noticed at the start' },
+            },
+          ],
+        }))
+      : source.scenes,
+  };
+}
+
 export function parseStoryCatalog(value: unknown): StoryCatalog {
-  const catalog = storyCatalogSchema.parse(value);
+  const catalog = storyCatalogSchema.parse(normalizeStoryCatalog(value));
   // Validate every candidate before selection, including composed V2 text limits.
   for (let index = 0; index < storyCandidateCount(catalog); index++)
     compileStoryScenario(catalog, index);

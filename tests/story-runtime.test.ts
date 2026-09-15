@@ -13,6 +13,7 @@ import type { ScenarioSnapshot } from '../apps/server/scenario-catalog.js';
 import { GameSession } from '../apps/local-server/game.js';
 import { createGameAI, type CoreJudgment } from '../apps/local-server/game-ai.js';
 import { GameRuntime } from '../apps/local-server/hosted-runtime.js';
+import { KnowledgeStore, buildCompanionContext } from '../apps/local-server/companion-knowledge.js';
 import { classifyCoreIntent } from '../apps/local-server/core-intent-ai.js';
 import { ConversationLedger } from '../apps/local-server/conversation.js';
 import { liveInstructions, factCommands } from '../apps/local-server/live.js';
@@ -75,6 +76,45 @@ function snapshot(locale: 'ja' | 'en' = 'ja', scenario?: ScenarioV2): ScenarioSn
       ],
       visualDescription: `VISIBLE_PUZZLE_${index}`,
     }));
+  }
+  if (!scenario) {
+    value.knowledge = [
+      {
+        id: 'opening-clue',
+        kind: 'known',
+        revealMode: 'automatic',
+        prerequisites: [],
+        localizedText: value.story!.openingClue,
+        requestCue: localized('導入'),
+      },
+    ];
+    value.obstacles.forEach((obstacle, index) => {
+      const previous = value.obstacles
+        .slice(0, index)
+        .map((entry) => ({ factKey: entry.completionFact!.key, value: 'cleared' }));
+      for (const state of ['blocked', 'partial', 'cleared']) {
+        value.knowledge.push({
+          id: `${obstacle.id}-visible-${state}`,
+          kind: 'observable',
+          revealMode: 'automatic',
+          prerequisites: [...previous, { factKey: obstacle.factKeys[0]!, value: state }],
+          localizedText:
+            state === 'blocked' ? obstacle.situationDisplay : localized(`確定した${state}状態。`),
+          requestCue: localized('現在状況'),
+        });
+      }
+      obstacle.hints!.forEach((hint, hintIndex) => {
+        for (const state of ['blocked', 'partial'])
+          value.knowledge.push({
+            id: `${obstacle.id}-hint-${hintIndex + 1}${state === 'partial' ? '-partial' : ''}`,
+            kind: 'hidden',
+            revealMode: 'on_request',
+            prerequisites: [...previous, { factKey: obstacle.factKeys[0]!, value: state }],
+            localizedText: hint,
+            requestCue: localized('求められたヒント'),
+          });
+      });
+    });
   }
   return { digest: 'runtime-test', createdAt: 0, locale, scenarioV2: value, coreConfig };
 }
@@ -304,7 +344,14 @@ for (const locale of ['ja', 'en'] as const)
     assert.equal(scenes[0].text, expected);
     assert.ok(expected.includes(snap.scenarioV2.story!.aiName[locale]));
     assert.ok(expected.includes(snap.scenarioV2.story!.openingClue[locale]));
-    assert.ok(livePrompt.includes(expected));
+    const liveContext = JSON.parse(livePrompt.split('\n').at(-1)!);
+    const publicContext = buildCompanionContext(
+      snap,
+      new KnowledgeStore(snap),
+      runtime.game.state(),
+    );
+    assert.equal(liveContext.openingMessage, storyOpening(snap, publicContext.situation));
+    assert.equal(liveContext.situation, publicContext.situation);
     assert.ok(!expected.includes('PRIVATE_MYSTERY_DIRECTION'));
     assert.ok(!expected.includes('PRIVATE_MECHANISM'));
     assert.ok(!livePrompt.includes('HINT_'));
@@ -478,7 +525,10 @@ test('runtime advances requested hint levels across partial progress and resets 
       async hangup() {},
       async createResponse(body: any) {
         const data = JSON.parse(body.input[0].content[0].text);
-        if (data.conversation) {
+        if (body.text.format.name === 'companion_reply')
+          return response({ reply: data.result.narrative + '\n' + data.context.situation });
+        if (body.text.format.name === 'knowledge_selection') return response({ ids: [] });
+        if (body.text.format.name === 'core_intent') {
           if (data.game.requestedHint) {
             hints.push(data.game.requestedHint);
             return response({

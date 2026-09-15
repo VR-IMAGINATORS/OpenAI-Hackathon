@@ -203,7 +203,10 @@ test('HTTP messages and commands retain their exact required field sets', () => 
   ] as const) {
     assert.equal(schema.safeParse(value).success, true);
     assert.deepEqual(
-      Object.keys(schema.shape).sort(),
+      Object.entries(schema.shape)
+        .filter(([, field]) => !field.isOptional())
+        .map(([key]) => key)
+        .sort(),
       [...openapi.components.schemas[name].required].sort(),
     );
     assert.equal(schema.safeParse({ ...value, unexpected: true }).success, false);

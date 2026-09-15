@@ -16,6 +16,7 @@ import { GameRuntime } from '../local-server/hosted-runtime.js';
 import { GameError } from '../local-server/game.js';
 import { LiveOutboxError } from '../local-server/live-outbox.js';
 import { liveEventSchema } from '../local-server/live.js';
+import { voiceActivitySchema } from '../../packages/shared/harness.js';
 import type { HostedConfig } from './config.js';
 import { SessionStore } from './session-store.js';
 import { PlayRegistry, type PlayRuntime } from './play-registry.js';
@@ -673,6 +674,24 @@ export function createHostedApp(
     validAfter(req, play);
     if (current.coreSnapshot) res.status(202).json({ accepted: true });
     else res.json({ ...update(play), commands });
+  });
+  const voiceActivityRates = new WeakMap<
+    import('./session-store.js').AuthSession,
+    { tokens: number; at: number }
+  >();
+  app.post('/api/play/voice-activity', (req, res) => {
+    const play = controlled(req);
+    const auth = owner(req);
+    const at = now();
+    const rate = voiceActivityRates.get(auth) ?? { tokens: 8, at };
+    rate.tokens = Math.min(8, rate.tokens + Math.max(0, at - rate.at) * 0.004);
+    rate.at = at;
+    voiceActivityRates.set(auth, rate);
+    if (rate.tokens < 1) throw new SessionError('VOICE_ACTIVITY_RATE_LIMIT', 429);
+    rate.tokens--;
+    const body = voiceActivitySchema.parse(req.body);
+    runtime(play).reportVoiceActivity(body);
+    res.status(202).json({ accepted: true });
   });
   app.post('/api/play/commands/poll', (req, res) => {
     const play = controlled(req);

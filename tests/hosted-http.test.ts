@@ -17,7 +17,7 @@ interface Client {
   epoch: number;
   generation?: number;
 }
-async function fixture(t: TestContext, failClose = false) {
+async function fixture(t: TestContext, failClose = false, core = false) {
   let now = 0,
     liveCreates = 0,
     responses = 0,
@@ -32,7 +32,7 @@ async function fixture(t: TestContext, failClose = false) {
     APP_VERSION: version,
   });
   // Keep the legacy endpoint regression suite explicit during the core migration.
-  config.scenarioCatalog = undefined;
+  if (!core) config.scenarioCatalog = undefined;
   const hosted = createHostedApp(config, {
     now: () => now,
     wallNow: () => 1_000_000 + now,
@@ -126,7 +126,11 @@ async function fixture(t: TestContext, failClose = false) {
     return { cookie: cookie.split(';')[0], clientId: randomUUID(), epoch: 1 };
   }
   async function create(c: Client, requestId = randomUUID()) {
-    const r = await request('/api/plays', { requestId, clientId: c.clientId }, c);
+    const r = await request(
+      '/api/plays',
+      { requestId, clientId: c.clientId, ...(core ? { locale: 'ja' } : {}) },
+      c,
+    );
     if (r.response.ok) {
       c.playId = r.data.playId;
       c.epoch = r.data.controlEpoch;
@@ -404,4 +408,56 @@ test('HTTP disconnected peer closes voice but permits same-play reconnect within
   assert.equal(state.data.playId, initial.data.playId);
   assert.equal(state.data.expiresAt, initial.data.expiresAt);
   assert.equal(state.data.lifecycle, 'active');
+});
+
+test('voice activity is advisory, owner-bound, strict and separately limited to four per second', async (t) => {
+  const f = await fixture(t, false, true);
+  const c = await f.auth();
+  await f.create(c);
+  await f.live(c);
+  const path = '/api/play/voice-activity';
+  const activity = {
+    generation: c.generation,
+    sequence: 1,
+    input: 'quiet',
+    output: 'quiet',
+    playbackReady: true,
+  };
+  const before = (await f.request('/api/play/state', undefined, c, 'GET')).data.state;
+  assert.equal((await f.request(path, activity, c)).response.status, 202);
+  assert.equal((await f.request(path, activity, c)).response.status, 202); // old sequence ignored
+  assert.equal(
+    (await f.request(path, { ...activity, generation: c.generation! + 1 }, c)).response.status,
+    409,
+  );
+  assert.equal(
+    (await f.request(path, { ...activity, remainingMs: 999999 }, c)).response.status,
+    400,
+  );
+  assert.equal(
+    (await f.request(path, activity, c, 'POST', { Origin: 'https://other.invalid' })).response
+      .status,
+    403,
+  );
+  const other = await f.auth();
+  assert.equal(
+    (await f.request(path, activity, { ...c, cookie: other.cookie })).response.status,
+    403,
+  );
+  assert.equal(
+    (await f.request(path, activity, { ...c, epoch: c.epoch + 1 })).response.status,
+    409,
+  );
+  const after = (await f.request('/api/play/state', undefined, c, 'GET')).data.state;
+  assert.equal(after.remainingMs, before.remainingMs);
+  assert.equal(after.photoSendsRemaining, before.photoSendsRemaining);
+  assert.equal(after.actionsUsed, before.actionsUsed);
+  f.time(2000);
+  for (let sequence = 2; sequence <= 9; sequence++)
+    assert.equal((await f.request(path, { ...activity, sequence }, c)).response.status, 202);
+  assert.equal((await f.request(path, { ...activity, sequence: 10 }, c)).response.status, 429);
+  f.time(2250);
+  assert.equal((await f.request(path, { ...activity, sequence: 10 }, c)).response.status, 202);
+  await f.request('/api/play/end', {}, c);
+  assert.equal((await f.request(path, { ...activity, sequence: 11 }, c)).response.status, 410);
 });

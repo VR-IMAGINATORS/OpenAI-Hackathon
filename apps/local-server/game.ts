@@ -8,7 +8,7 @@ import {
   type GameFacts,
 } from '../../packages/shared/conversation.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
-import { coreJudgmentSchema } from './game-ai.js';
+import { coreJudgmentSchema, type CoreJudgment } from './game-ai.js';
 import type { Scenario } from '../../packages/shared/scenario.js';
 import {
   proposalSchema,
@@ -49,6 +49,10 @@ export class GameSession {
       context: AIContext;
       proposal: Proposal;
       running: boolean;
+      attempts: number;
+      controller: AbortController;
+      controls: Map<string, ReturnType<typeof setTimeout>>;
+      controlWaiters: Set<() => void>;
       result?: ActionResult;
     }
   >();
@@ -296,10 +300,73 @@ export class GameSession {
   }
   private invalidateCoreActions() {
     this.actionEpoch++;
-    for (const { ticket, context } of this.coreActions.values()) {
-      if (ticket.status === 'pending') ticket.status = 'invalid';
+    for (const { ticket, context, controller } of this.coreActions.values()) {
+      if (ticket.status === 'pending') {
+        ticket.status = 'invalid';
+        controller.abort();
+      }
       context.photos = [];
     }
+    for (const record of this.coreActions.values()) this.releaseActionControls(record);
+  }
+
+  get pendingActionId(): string | null {
+    return this.pending;
+  }
+
+  /** Register received speech before asynchronous classification can race the commit. */
+  holdPendingAction(actionId: string, controlId: string): boolean {
+    const record = this.coreActions.get(actionId);
+    if (!record || record.ticket.status !== 'pending' || this.pending !== actionId) return false;
+    if (record.controls.has(controlId)) return true;
+    if (!controlId || controlId.length > 200 || record.controls.size >= 100) {
+      this.cancelPendingAction(actionId);
+      return false;
+    }
+    const timeout = setTimeout(() => this.cancelPendingAction(actionId), 5_000);
+    timeout.unref();
+    record.controls.set(controlId, timeout);
+    return true;
+  }
+
+  resolvePendingActionControl(
+    actionId: string,
+    controlId: string,
+    decision: 'keep' | 'cancel',
+  ): boolean {
+    const record = this.coreActions.get(actionId);
+    if (!record || record.ticket.status !== 'pending' || !record.controls.has(controlId))
+      return false;
+    if (decision === 'cancel') return this.cancelPendingAction(actionId);
+    clearTimeout(record.controls.get(controlId)!);
+    record.controls.delete(controlId);
+    if (!record.controls.size) this.releaseActionControls(record);
+    return true;
+  }
+
+  /** Cancellation is final for this ticket; a replacement must reserve a new one. */
+  cancelPendingAction(actionId: string): boolean {
+    const record = this.coreActions.get(actionId);
+    if (!record || record.ticket.status !== 'pending' || this.pending !== actionId) return false;
+    record.ticket.status = 'invalid';
+    record.controller.abort();
+    this.actionEpoch++;
+    record.context.photos = [];
+    this.releaseActionControls(record);
+    this.pending = null;
+    if (!this.terminal) this.status = 'playing';
+    this.clock.resume('judgment');
+    return true;
+  }
+
+  private releaseActionControls(record: {
+    controls: Map<string, ReturnType<typeof setTimeout>>;
+    controlWaiters: Set<() => void>;
+  }) {
+    for (const timer of record.controls.values()) clearTimeout(timer);
+    record.controls.clear();
+    for (const resolve of record.controlWaiters) resolve();
+    record.controlWaiters.clear();
   }
 
   private recordCommittedAction(
@@ -360,6 +427,28 @@ export class GameSession {
     ) {
       throw new GameError(409, 'ACTION_CONTEXT_STALE');
     }
+    if (intent.mode === 'environment') {
+      const currentId = this.coreSnapshot.scenarioV2.obstacles[this.obstacleIndex]!.id;
+      const available = new Set(
+        this.coreSnapshot.scenarioV2.observationTargets
+          .filter((target) => target.id === currentId)
+          .map((target) => target.id),
+      );
+      if (intent.environmentTargetIds!.some((id) => !available.has(id)))
+        throw new GameError(409, 'ENVIRONMENT_TARGET_UNAVAILABLE');
+    }
+    if (intent.origin?.kind === 'photo') {
+      const origin = intent.origin;
+      const receivedIds = new Set(this.photos.map((photo) => photo.id));
+      if (
+        origin.photoVersion !== this.inputRevision ||
+        origin.photoIds.length !== receivedIds.size ||
+        new Set(origin.photoIds).size !== origin.photoIds.length ||
+        !origin.photoIds.every((id) => receivedIds.has(id)) ||
+        !origin.photoIds.every((id) => this.proposal?.items.some((item) => item.photoId === id))
+      )
+        throw new GameError(409, 'PHOTO_ORIGIN_STALE');
+    }
     if (intent.evidenceSeq.some((seq) => this.reservedEvidence.has(seq)))
       throw new GameError(409, 'EVIDENCE_ALREADY_RESERVED');
     if (this.coreActions.size >= 100) throw new GameError(429, 'ACTION_LIMIT');
@@ -378,6 +467,10 @@ export class GameSession {
     });
     const context = this.context();
     const proposal: Proposal = {
+      ...(intent.mode ? { mode: intent.mode } : {}),
+      ...(intent.environmentTargetIds
+        ? { environmentTargetIds: [...intent.environmentTargetIds] }
+        : {}),
       items,
       usage: intent.usage,
       summary: intent.reason,
@@ -411,7 +504,16 @@ export class GameSession {
       intent,
       status: 'pending',
     };
-    this.coreActions.set(ticket.id, { ticket, context, proposal, running: false });
+    this.coreActions.set(ticket.id, {
+      ticket,
+      context,
+      proposal,
+      running: false,
+      attempts: 0,
+      controller: new AbortController(),
+      controls: new Map(),
+      controlWaiters: new Set(),
+    });
     intent.evidenceSeq.forEach((seq) => this.reservedEvidence.add(seq));
     this.pending = ticket.id;
     this.status = 'judging';
@@ -445,118 +547,157 @@ export class GameSession {
     if (record.running) throw new GameError(409, 'ACTION_PENDING');
     record.running = true;
     try {
-      const judgment = coreJudgmentSchema.parse(
-        await this.ai.judge(
-          {
-            ...structuredClone(context),
-            photos: context.photos.map((photo) => ({
-              id: photo.id,
-              jpeg: Buffer.from(photo.jpeg),
-            })),
-          },
-          structuredClone(proposal),
-        ),
-      );
-      this.check();
-      if (
-        ticket.status !== 'pending' ||
-        this.terminal ||
-        ticket.generation !== this.generation ||
-        ticket.actionEpoch !== this.actionEpoch ||
-        ticket.controllerEpoch !== this.controllerEpoch ||
-        ticket.gameVersion !== this.gameVersion ||
-        this.pending !== ticket.id
-      )
-        throw new GameError(410, 'ACTION_INVALID');
-      const facts = structuredClone(this.facts);
-      const obstacle = this.coreSnapshot!.scenarioV2.obstacles[this.obstacleIndex];
-      const allowedKeys = obstacle.factKeys;
-      const keys = new Set<string>();
-      for (const change of judgment.factChanges) {
-        const declaration = this.coreSnapshot!.scenarioV2.core.facts.find(
-          (f) => f.key === change.key,
-        );
-        if (
-          keys.has(change.key) ||
-          !allowedKeys.includes(change.key) ||
-          !declaration ||
-          facts.values[change.key] !== change.from ||
-          !declaration.values.includes(change.to) ||
-          !declaration.allowedTransitions.some((t) => t.from === change.from && t.to === change.to)
-        )
-          throw new Error('INVALID_FACT_CHANGE');
-        keys.add(change.key);
-        facts.values[change.key] = change.to;
+      let judgment: CoreJudgment;
+      for (;;) {
+        this.assertPendingAction(ticket);
+        record.attempts++;
+        try {
+          judgment = coreJudgmentSchema.parse(
+            await this.ai.judge(
+              {
+                ...structuredClone(context),
+                photos: context.photos.map((photo) => ({
+                  id: photo.id,
+                  jpeg: Buffer.from(photo.jpeg),
+                })),
+              },
+              structuredClone(proposal),
+              record.controller.signal,
+            ),
+          );
+          break;
+        } catch (error) {
+          // Retry only a known upstream transport failure. Model/schema errors,
+          // admission limits and game failures are not transient transport failures.
+          const upstream = error as { code?: string; status?: number } | null;
+          if (
+            record.attempts >= 2 ||
+            upstream?.code !== 'UPSTREAM_FAILED' ||
+            !(upstream.status! >= 500)
+          )
+            throw error;
+          this.assertPendingAction(ticket);
+        }
       }
-      // A model cannot clear an obstacle by prose alone or silently clear it on a failure.
-      // Validate before committing inventory, facts, time or the action counter.
-      if (
-        obstacle.completionFact &&
-        judgment.success !==
-          (facts.values[obstacle.completionFact.key] === obstacle.completionFact.value)
-      )
-        throw new Error('INVALID_COMPLETION_FACT');
-      const inventory = structuredClone(context.inventory);
-      const ids = new Set<string>();
-      for (const change of judgment.inventoryChanges) {
-        const item = inventory.find((item) => item.id === change.id);
-        if (
-          ids.has(change.id) ||
-          !item ||
-          (item.status === 'consumed' && change.status !== 'consumed')
-        )
-          throw new Error('INVALID_INVENTORY_CHANGE');
-        ids.add(change.id);
-        Object.assign(item, change);
+      while (record.controls.size && ticket.status === 'pending') {
+        await new Promise<void>((resolve) => record.controlWaiters.add(resolve));
       }
-      const result = actionResultSchema.parse({
-        actionId: ticket.id,
-        beforeVersion: this.gameVersion,
-        afterVersion: this.gameVersion + 1,
-        success: judgment.success,
-        factChanges: judgment.factChanges,
-        inventoryChanges: judgment.inventoryChanges,
-        narrative: judgment.narrative,
-        shortReason: judgment.shortReason,
-      });
-      this.facts = facts;
-      this.inventory = inventory;
-      this.gameVersion++;
-      this.actionsUsed++;
-      this.situation = judgment.situation;
-      this.lastResult = { success: judgment.success, narrative: judgment.narrative };
-      this.photos = [];
-      this.transcript = '';
-      this.invalidate();
-      ticket.status = 'committed';
-      record.result = result;
-      this.recordCommittedAction(ticket.id, context, proposal, result);
-      this.pending = null;
-      this.status = 'playing';
-      if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
-        this.end('won');
-      else if (judgment.success) {
-        this.obstacleIndex++;
-        this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
-        this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
-      }
-      return structuredClone(result);
+      return this.commitActionResult(ticket, judgment);
     } catch (error) {
+      if (record.ticket.status === 'invalid') throw new GameError(410, 'ACTION_INVALID');
       if (ticket.status === 'pending') {
         ticket.status = 'failed';
-        this.error = '判定に失敗しました。行動は消費していません。';
+        this.error =
+          this.coreSnapshot?.locale === 'en'
+            ? 'I could not confirm that. Please try asking again.'
+            : 'うまく確認できなかった。もう一度お願いできる？';
       }
       if (error instanceof GameError) throw error;
       throw new GameError(502, 'ACTION_FAILED');
     } finally {
       context.photos = [];
+      this.releaseActionControls(record);
       if (this.pending === ticket.id) {
         this.pending = null;
         if (!this.terminal) this.status = 'playing';
-      }
-      if (ticket.generation === this.generation && ticket.controllerEpoch === this.controllerEpoch)
         this.clock.resume('judgment');
+      }
     }
+  }
+
+  private assertPendingAction(ticket: ActionTicket): void {
+    this.check();
+    if (
+      ticket.status !== 'pending' ||
+      this.terminal ||
+      ticket.generation !== this.generation ||
+      ticket.actionEpoch !== this.actionEpoch ||
+      ticket.controllerEpoch !== this.controllerEpoch ||
+      ticket.gameVersion !== this.gameVersion ||
+      this.pending !== ticket.id
+    )
+      throw new GameError(410, 'ACTION_INVALID');
+  }
+
+  private commitActionResult(ticket: ActionTicket, judgment: CoreJudgment): ActionResult {
+    this.assertPendingAction(ticket);
+    const record = this.coreActions.get(ticket.id)!;
+    if (record.controls.size) throw new GameError(409, 'ACTION_CONTROL_PENDING');
+    const { context, proposal } = record;
+    const facts = structuredClone(this.facts);
+    const obstacle = this.coreSnapshot!.scenarioV2.obstacles[this.obstacleIndex];
+    const allowedKeys = obstacle.factKeys;
+    const keys = new Set<string>();
+    for (const change of judgment.factChanges) {
+      const declaration = this.coreSnapshot!.scenarioV2.core.facts.find(
+        (f) => f.key === change.key,
+      );
+      if (
+        keys.has(change.key) ||
+        !allowedKeys.includes(change.key) ||
+        !declaration ||
+        facts.values[change.key] !== change.from ||
+        !declaration.values.includes(change.to) ||
+        !declaration.allowedTransitions.some((t) => t.from === change.from && t.to === change.to)
+      )
+        throw new Error('INVALID_FACT_CHANGE');
+      keys.add(change.key);
+      facts.values[change.key] = change.to;
+    }
+    // A model cannot clear an obstacle by prose alone or silently clear it on a failure.
+    // Validate before committing inventory, facts, time or the action counter.
+    if (
+      obstacle.completionFact &&
+      judgment.success !==
+        (facts.values[obstacle.completionFact.key] === obstacle.completionFact.value)
+    )
+      throw new Error('INVALID_COMPLETION_FACT');
+    const inventory = structuredClone(context.inventory);
+    const ids = new Set<string>();
+    for (const change of judgment.inventoryChanges) {
+      const item = inventory.find((item) => item.id === change.id);
+      if (
+        ids.has(change.id) ||
+        !item ||
+        (item.status === 'consumed' && change.status !== 'consumed')
+      )
+        throw new Error('INVALID_INVENTORY_CHANGE');
+      ids.add(change.id);
+      Object.assign(item, change);
+    }
+    const result = actionResultSchema.parse({
+      actionId: ticket.id,
+      beforeVersion: this.gameVersion,
+      afterVersion: this.gameVersion + 1,
+      success: judgment.success,
+      factChanges: judgment.factChanges,
+      inventoryChanges: judgment.inventoryChanges,
+      narrative: judgment.narrative,
+      shortReason: judgment.shortReason,
+    });
+    this.facts = facts;
+    this.inventory = inventory;
+    this.gameVersion++;
+    this.actionsUsed++;
+    this.situation = judgment.situation;
+    this.lastResult = { success: judgment.success, narrative: judgment.narrative };
+    this.photos = [];
+    this.transcript = '';
+    this.invalidate();
+    ticket.status = 'committed';
+    record.result = result;
+    this.recordCommittedAction(ticket.id, context, proposal, result);
+    this.clock.resume('judgment');
+    this.pending = null;
+    this.status = 'playing';
+    if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
+      this.end('won');
+    else if (judgment.success) {
+      this.obstacleIndex++;
+      this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
+      this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
+    }
+    return structuredClone(result);
   }
 
   async commit(actionId: string, proposalRevision: number) {
