@@ -217,7 +217,7 @@ test('core voice instructions execute once through HTTP and deliver final-genera
       if (final!.actionsUsed === obstacle + 1) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    assert.equal(final!.photoSendsRemaining, 3 - obstacle, JSON.stringify(final));
+    assert.equal(final!.creditsRemaining, 1000 - (obstacle + 1) * 120, JSON.stringify(final));
     assert.equal(final!.inventory.length, obstacle + 1);
     const duplicate = await request('/api/play/events', {
       generation,
@@ -230,8 +230,8 @@ test('core voice instructions execute once through HTTP and deliver final-genera
     });
     assert.equal(duplicate.response.status, 202);
     assert.equal(
-      (await request('/api/play/state', undefined, 'GET')).data.state.photoSendsRemaining,
-      final!.photoSendsRemaining,
+      (await request('/api/play/state', undefined, 'GET')).data.state.creditsRemaining,
+      final!.creditsRemaining,
     );
   }
   assert.equal(final!.status, 'won');

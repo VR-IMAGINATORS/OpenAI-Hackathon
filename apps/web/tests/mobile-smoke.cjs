@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.now()}`;
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   try {
@@ -14,7 +15,9 @@ const fs = require('node:fs');
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
+        name: english
+          ? 'Standard Pro Plan 5 min · 1,000 credits'
+          : 'スタンダードProプラン 5分 · 1,000クレジット',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -113,7 +116,9 @@ const fs = require('node:fs');
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: '動かない扉', index: 0, count: 3 },
       situation: 'ドアノブが外れ、扉を引くことができない。代わりにつかめるものはないだろうか。',
-      photoSendsRemaining: 4,
+      creditsRemaining: 1000,
+      initialCredits: 1000,
+      lastCreditCharge: null,
       actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
@@ -233,7 +238,14 @@ const fs = require('node:fs');
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
-        if (body.images.length) state.photoSendsRemaining--;
+        if (body.images.length) {
+          state.creditsRemaining -= body.images.length * 100;
+          state.lastCreditCharge = {
+            sequence: (state.lastCreditCharge?.sequence ?? 0) + 1,
+            kind: 'photo',
+            amount: body.images.length * 100,
+          };
+        }
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -279,7 +291,7 @@ const fs = require('node:fs');
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
+    await page.getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット' }).click();
     await page.evaluate(() => (window.__denyMic = true));
     await enterCall();
     await page.getByRole('alert').filter({ hasText: 'マイクを許可' }).waitFor();
@@ -307,8 +319,8 @@ const fs = require('node:fs');
       true,
     );
     assert.equal(await page.getByRole('button', { name: '撮影', exact: true }).isEnabled(), true);
-    fs.mkdirSync('artifacts', { recursive: true });
-    await page.screenshot({ path: 'artifacts/mobile-tutorial.png', fullPage: true });
+    fs.mkdirSync(artifactDir, { recursive: true });
+    await page.screenshot({ path: `${artifactDir}/mobile-tutorial.png`, fullPage: true });
 
     await page.evaluate(() => window.__emit({ type: 'session.closed' }));
     await page.getByRole('button', { name: '音声を接続 / 再開する' }).waitFor();
@@ -393,15 +405,15 @@ const fs = require('node:fs');
       .locator('.play-actions button')
       .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
     assert.ok(buttons.every((height) => height >= 44));
-    fs.mkdirSync('artifacts', { recursive: true });
-    await page.screenshot({ path: 'artifacts/mobile-playtest-390.png', fullPage: true });
+    fs.mkdirSync(artifactDir, { recursive: true });
+    await page.screenshot({ path: `${artifactDir}/mobile-playtest-390.png`, fullPage: true });
     await page.getByRole('button', { name: 'この使い方で実行' }).click();
     await page.getByRole('button', { name: '結果を再確認' }).waitFor();
     await page.getByRole('button', { name: '結果を再確認' }).click();
     await page.getByText('吸盤はしっかり張りついた。扉を開けて、次の部屋へ進めた！').waitFor();
     assert.equal(actionIds.length, 2);
     assert.equal(actionIds[0], actionIds[1], 'unknown transport result reuses action ID');
-    assert.equal(state.photoSendsRemaining, 3);
+    assert.equal(state.creditsRemaining, 900);
     assert.ok(
       (await page.evaluate(() => window.__sent)).some(
         (event) => event.type === 'session.commentary.append',
@@ -412,14 +424,16 @@ const fs = require('node:fs');
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
       false,
     );
-    await page.screenshot({ path: 'artifacts/mobile-playtest-desktop.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/mobile-playtest-desktop.png`, fullPage: true });
     await page.getByRole('button', { name: 'プレイを終了', exact: true }).click();
     await page.getByRole('heading', { name: '接続を終了しました' }).waitFor();
     assert.equal(creates, 1, 'reload does not reserve another slot');
     await page.getByRole('button', { name: 'もう一度プレイ' }).waitFor();
     owner = false;
     await page.reload();
-    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Standard Pro Plan 5 min · 1,000 credits', exact: true })
+      .waitFor();
     assert.deepEqual(pageErrors, []);
     console.log(
       'PASS: fake Live connect/reconnect/reload, passphrase authentication, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',

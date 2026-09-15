@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.now()}`;
 const catalog = JSON.parse(fs.readFileSync('scenarios/story-catalog.json', 'utf8'));
 // Use the default catalog's chair rope / fogged window route, which exposed the noun-only HUD bug.
 const scenario = {
@@ -23,7 +24,9 @@ const scenario = {
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
+        name: english
+          ? 'Standard Pro Plan 5 min · 1,000 credits'
+          : 'スタンダードProプラン 5分 · 1,000クレジット',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -106,7 +109,7 @@ const scenario = {
     const photoIds = [];
     const envelope = () => ({
       state,
-      lifecycle: state.status === 'expired' ? 'terminal' : 'active',
+      lifecycle: ['expired', 'lost', 'won'].includes(state.status) ? 'terminal' : 'active',
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       recoveryExpiresAt: null,
     });
@@ -145,7 +148,9 @@ const scenario = {
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: scenario.obstacles[0].title.ja, index: 0, count: 3 },
       situation: scenario.obstacles[0].situationDisplay.ja,
-      photoSendsRemaining: 4,
+      creditsRemaining: 1000,
+      initialCredits: 1000,
+      lastCreditCharge: null,
       actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
@@ -284,7 +289,14 @@ const scenario = {
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
-        if (body.images.length) state.photoSendsRemaining--;
+        if (body.images.length) {
+          state.creditsRemaining -= body.images.length * 100;
+          state.lastCreditCharge = {
+            sequence: (state.lastCreditCharge?.sequence ?? 0) + 1,
+            kind: 'photo',
+            amount: body.images.length * 100,
+          };
+        }
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -360,7 +372,9 @@ const scenario = {
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
-    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Standard Pro Plan 5 min · 1,000 credits', exact: true })
+      .waitFor();
     assert.equal(
       await page.getByRole('combobox').inputValue(),
       'en',
@@ -368,13 +382,17 @@ const scenario = {
     );
     assert.equal(await page.locator('html').getAttribute('lang'), 'en');
     await page.getByRole('combobox').selectOption('ja');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット', exact: true })
+      .waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), 'ja');
     await page.getByRole('combobox').selectOption('en');
-    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
+    await page
+      .getByRole('button', { name: 'Standard Pro Plan 5 min · 1,000 credits', exact: true })
+      .waitFor();
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('demo');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
+    await page.getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット' }).click();
     await enterCall();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));
@@ -403,14 +421,16 @@ const scenario = {
     await assertMessengerLayout();
     await page.getByText('現在の目標', { exact: true }).waitFor();
     await page.getByText('残り時間', { exact: true }).waitFor();
-    await page.getByText('残り送信回数', { exact: true }).waitFor();
+    await page.getByText('残りクレジット', { exact: true }).waitFor();
+    await page.getByText('会話 20 · 写真 100/枚', { exact: true }).waitFor();
+    assert.equal(await page.locator('.messenger-credit-count strong').innerText(), '1,000');
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '05:00');
-    await page.screenshot({ path: 'artifacts/messenger-active-mobile.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/messenger-active-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 320, height: 568 });
     await assertMessengerLayout();
     await page.setViewportSize({ width: 1280, height: 900 });
     await assertMessengerLayout();
-    await page.screenshot({ path: 'artifacts/messenger-active-desktop.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/messenger-active-desktop.png`, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'core-result'));
     assert.equal(await page.getByRole('button', { name: /状況を聞いたら、プレイ開始/ }).count(), 0);
@@ -465,12 +485,42 @@ const scenario = {
     assert.equal(photoIds.length, 0, 'photo is not sent before preview confirmation');
     assert.equal(await page.locator('.messenger-composer .messenger-draft').count(), 1);
     await assertMessengerLayout();
-    await page.screenshot({ path: 'artifacts/messenger-draft-mobile.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/messenger-draft-mobile.png`, fullPage: true });
     await page.getByRole('button', { name: 'この写真を送信', exact: true }).click();
     await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).waitFor();
     await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).click();
     await page.waitForTimeout(500);
     assert.equal(photoIds.length, 2);
+    assert.equal(state.creditsRemaining, 900, 'a retried photo consumes credits once');
+    await page.getByText('画像認識 −100', { exact: true }).waitFor();
+    // The existing photo is included in the next submission, so adding a second costs 200.
+    state.creditsRemaining = 100;
+    await page
+      .locator('.messenger-credit-count strong')
+      .getByText('100', { exact: true })
+      .waitFor();
+    await page.getByText('ご利用可能クレジットが残りわずかです', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '撮影', exact: true }).isDisabled(), true);
+    state.creditsRemaining = 200;
+    await page
+      .getByRole('button', { name: '撮影', exact: true })
+      .and(page.locator(':enabled'))
+      .waitFor();
+    const secondChoice = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '撮影', exact: true }).click();
+    await (await secondChoice).setFiles({ name: 'second.png', mimeType: 'image/png', buffer: png });
+    await page.getByText('消費クレジット: 200', { exact: true }).waitFor();
+    state.creditsRemaining = 100;
+    await page
+      .getByRole('button', { name: 'この写真を送信', exact: true })
+      .and(page.locator(':disabled'))
+      .waitFor();
+    await page.getByRole('button', { name: '撮り直す・取り消す', exact: true }).click();
+    state.creditsRemaining = 900;
+    await page
+      .locator('.messenger-credit-count strong')
+      .getByText('900', { exact: true })
+      .waitFor();
     assert.equal(
       await page.locator('.messenger-composer img').count(),
       0,
@@ -572,8 +622,8 @@ const scenario = {
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
       false,
     );
-    fs.mkdirSync('artifacts', { recursive: true });
-    await page.screenshot({ path: 'artifacts/core-p2-mobile.png', fullPage: true });
+    fs.mkdirSync(artifactDir, { recursive: true });
+    await page.screenshot({ path: `${artifactDir}/core-p2-mobile.png`, fullPage: true });
     await page.reload();
     await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), 'ja', 'Japanese play restored');
@@ -585,7 +635,9 @@ const scenario = {
       briefing: 'Your future self needs your help.',
       obstacle: { ...state.obstacle, title: scenario.obstacles[0].title.en },
       inputRevision: 0,
-      photoSendsRemaining: 4,
+      creditsRemaining: 1000,
+      initialCredits: 1000,
+      lastCreditCharge: null,
       actionsUsed: 0,
     };
     await page.getByRole('combobox').selectOption('en');
@@ -615,13 +667,21 @@ const scenario = {
       false,
       'English PC layout',
     );
-    await page.screenshot({ path: 'artifacts/core-p3-en-restored.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/core-p3-en-restored.png`, fullPage: true });
 
     // Exercise the actual HUD across the warning boundary using authoritative mock state.
+    await page.getByRole('button', { name: 'Reconnect here', exact: true }).click();
+    await page.getByText('Voice connected', { exact: true }).waitFor();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByText('Current objective', { exact: true }).waitFor();
     await page.getByText('Time left', { exact: true }).waitFor();
-    await page.getByText('Photo sends left', { exact: true }).waitFor();
+    await page.getByText('Credits left', { exact: true }).waitFor();
+    await page.getByText('Conversation 20 · Photo 100 each', { exact: true }).waitFor();
+    assert.equal(
+      await page.locator('.game-credit-charge').innerText(),
+      '',
+      'restore does not replay an old charge',
+    );
     const objective = page.locator('.messenger-objective strong');
     assert.equal(await objective.innerText(), scenario.obstacles[0].title.en);
     const hudMetrics = await page.evaluate(() => {
@@ -642,10 +702,10 @@ const scenario = {
       objectiveSize: '20px',
       numberSize: '20px',
     });
-    await page.screenshot({ path: 'artifacts/hud-normal-en-mobile.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/hud-normal-en-mobile.png`, fullPage: true });
     await page
       .locator('.messenger-info')
-      .screenshot({ path: 'artifacts/hud-header-normal-en.png' });
+      .screenshot({ path: `${artifactDir}/hud-header-normal-en.png` });
     await page.setViewportSize({ width: 320, height: 568 });
     await assertMessengerLayout();
     assert.equal(
@@ -653,7 +713,7 @@ const scenario = {
       false,
     );
     assert.ok(await objective.evaluate((e) => e.clientHeight > 26), 'long English objective wraps');
-    await page.screenshot({ path: 'artifacts/hud-small-en-mobile.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/hud-small-en-mobile.png`, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('.messenger-status').click();
     assert.equal(await page.locator('.messenger-info').getAttribute('open'), '');
@@ -667,16 +727,20 @@ const scenario = {
       });
     });
     state.remainingMs = 60_001;
-    state.photoSendsRemaining = 3;
+    state.creditsRemaining = 220;
     await page.locator('.messenger-clock strong').getByText('01:01', { exact: true }).waitFor();
     assert.equal(
       await page.locator('.messenger-resource.is-urgent, .messenger-resource.is-caution').count(),
       0,
     );
+    assert.equal(await page.getByRole('button', { name: 'Camera', exact: true }).isEnabled(), true);
     state.remainingMs = 60_000;
-    state.photoSendsRemaining = 2;
+    state.creditsRemaining = 200;
+    state.lastCreditCharge = { sequence: 1, kind: 'conversation', amount: 20 };
     await page.locator('.messenger-clock.is-urgent').waitFor();
-    await page.locator('.messenger-action-count.is-caution').waitFor();
+    await page.locator('.messenger-credit-count.is-caution').waitFor();
+    await page.getByText('Your available credits are running low.', { exact: true }).waitFor();
+    await page.getByText('Voice conversation −20', { exact: true }).waitFor();
     await page.waitForFunction(() => window.__clockWarnings === 1);
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '01:00');
     assert.equal(await page.locator('.messenger-warning-icon').count(), 2);
@@ -688,27 +752,19 @@ const scenario = {
       1,
       'ticks do not replay warning',
     );
-    await page.screenshot({ path: 'artifacts/hud-warning-en-mobile.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/hud-warning-en-mobile.png`, fullPage: true });
     await page.locator('.messenger-status').evaluate((e) => e.blur());
     await page
       .locator('.messenger-info')
-      .screenshot({ path: 'artifacts/hud-header-warning-en.png' });
-    state.photoSendsRemaining = 1;
-    await page.locator('.messenger-action-count.is-urgent').waitFor();
-    assert.equal(await page.locator('.messenger-action-count strong').innerText(), '1');
-    state.photoSendsRemaining = 0;
-    await page.locator('.messenger-action-count strong').getByText('0', { exact: true }).waitFor();
-    await page
-      .getByText(
-        'No photo sends left. Keep giving voice instructions using the tools already sent.',
-        { exact: true },
-      )
-      .waitFor();
+      .screenshot({ path: `${artifactDir}/hud-header-warning-en.png` });
+    state.creditsRemaining = 80;
+    await page.locator('.messenger-credit-count strong').getByText('80', { exact: true }).waitFor();
     assert.equal(
       await page.locator('.messenger-complete').count(),
       0,
-      'zero sends does not end the game',
+      'a balance below the photo cost leaves the game active for conversation',
     );
+    assert.equal(await page.getByText('Voice connected', { exact: true }).count(), 1);
     assert.equal(
       await page.getByRole('button', { name: 'Camera', exact: true }).isDisabled(),
       true,
@@ -730,9 +786,9 @@ const scenario = {
     await page.reload();
     await page.locator('.messenger-clock.is-urgent').waitFor();
     assert.equal(
-      await page.locator('.messenger-action-count strong').innerText(),
-      '0',
-      'zero sends survives restore',
+      await page.locator('.messenger-credit-count strong').innerText(),
+      '80',
+      'credit balance survives restore',
     );
     assert.equal(
       await page.locator('.clock-warning-pulse').count(),
@@ -754,16 +810,31 @@ const scenario = {
       await page.getByRole('status').filter({ hasText: 'One minute' }).innerText(),
       /One minute or less/,
     );
-    state.status = 'expired';
+    state.creditsRemaining = 0;
+    state.busy = true;
+    await page.getByText('You have used all your credits.', { exact: true }).waitFor();
+    assert.equal(
+      await page.locator('.messenger-complete').count(),
+      0,
+      'the server settles the last action before ending',
+    );
+    state.status = 'lost';
+    state.endReason = 'credits_exhausted';
+    state.busy = false;
     await page.getByText('Call ended', { exact: true }).first().waitFor();
     assert.equal(
       await page.locator('.messenger-counters').count(),
       0,
       'terminal state hides resources',
     );
+    assert.equal(
+      await page.locator('.game-credit-notice').count(),
+      0,
+      'result has no new credit UI or breakdown',
+    );
     assert.deepEqual(pageErrors, []);
     console.log(
-      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, bilingual HUD, warning thresholds, single animation, restore and reduced motion. Fake API/media only.',
+      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, bilingual credits/rates/charges, combined photo affordability, refunds, warning thresholds, last-action settling, unchanged result UI, single animation, restore and reduced motion. Fake API/media only.',
     );
   } finally {
     await browser.close();

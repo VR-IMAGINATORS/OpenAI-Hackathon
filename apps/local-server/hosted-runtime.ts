@@ -31,6 +31,7 @@ import type { PhotoQueue } from '../server/photo-queue.js';
 import { StoryEvidenceLedger } from './story-evidence.js';
 import { endingOutcome, freezeEndingPacket, type EndingPacket } from './ending.js';
 import type { IntentDecision } from '../../packages/shared/conversation.js';
+import { creditCosts } from '../../packages/shared/credits.js';
 import {
   storyClearCount,
   storyContext,
@@ -81,6 +82,10 @@ export class GameRuntime {
     if (this.diagnostics.length > 128) this.diagnostics.shift();
   }
   private readonly processedPhotos = new Set<string>();
+  private readonly chargedEvidence = new Map<number, number>();
+  private readonly correctedEvidence = new Set<string>();
+  private legacyConversation: string | null = null;
+  private lowCreditsNotified = false;
   private photoWorker?: Promise<void>;
   private photoDeciding = false;
   private activeUsage = '';
@@ -156,6 +161,10 @@ export class GameRuntime {
       ),
       now,
       () => {
+        if (this.game.endReason === 'credits_exhausted')
+          this.presentation?.notice?.(
+            this.words('クレジットを使い切りました。', 'You have used all your credits.'),
+          );
         clearTimeout(this.transcriptTimer);
         clearInterval(this.maintenanceTimer);
         this.seen.clear();
@@ -211,7 +220,10 @@ export class GameRuntime {
       this.notifications.reset(this.game.generation);
       this.game.controllerEpoch = this.epoch;
       this.ledger = new ConversationLedger({ generation: this.game.generation, now });
-      this.outbox = new LiveOutbox(this.game.generation, this.epoch);
+      this.outbox = new LiveOutbox(this.game.generation, this.epoch, Date.now, {
+        maxCommands: 1024,
+        maxBytes: 512 * 1024,
+      });
       this.syncCore();
       this.intents = new IntentCoordinator({
         ledger: this.ledger,
@@ -263,6 +275,9 @@ export class GameRuntime {
                 this.game.state().busy
               )
                 return;
+              this.correctedEvidence.add(
+                `${context.generation}:${Math.max(...context.eligibleEvidenceSeq)}`,
+              );
               const item = this.game.proposal?.items.find(
                 (item) => item.photoId === correction.photoId,
               );
@@ -282,9 +297,7 @@ export class GameRuntime {
         onDecision: (decision, delegation) => {
           this.recordDiagnostic('decision_accepted', decision.kind);
           if (decision.kind === 'consult') {
-            this.recordHintDecision(decision);
-            this.sendFacts(this.currentSituation(), delegation.id);
-            this.speak(decision.answer ?? this.currentSituation(), delegation.id);
+            this.answerConsult(decision, delegation.id);
           } else if (decision.kind === 'wait') {
             this.sendFacts(
               this.words(
@@ -311,8 +324,10 @@ export class GameRuntime {
               type: 'session.instructions.append',
             });
           } else if (decision.kind === 'consult') {
-            this.recordHintDecision(decision);
-            this.speak(decision.answer ?? this.currentSituation());
+            this.answerConsult(decision, null);
+            const eligible = this.ledger!.captureUnconsumedContext().eligibleEvidenceSeq;
+            if (decision.evidenceSeq.every((seq) => eligible.includes(seq)))
+              this.ledger!.consume(decision.evidenceSeq);
           }
         },
         onRecoveryExpired: () => this.recoveryNotice('recovery_expired'),
@@ -337,6 +352,27 @@ export class GameRuntime {
     }
   }
   private async executeCore(
+    intent: ExecuteIntent,
+    context: IntentContext,
+    delegationId: string | null,
+  ): Promise<void> {
+    const creditId =
+      intent.origin?.kind === 'photo'
+        ? null
+        : this.reserveConversation(context.generation, intent.evidenceSeq);
+    const before = this.game.gameVersion;
+    let completed = false;
+    try {
+      await this.performCoreAction(intent, context, delegationId);
+      completed = !this.disposed && context.controllerEpoch === this.epoch;
+    } finally {
+      // A confirmed action remains paid even if its later narration fails.
+      if (completed || this.game.gameVersion > before) {
+        this.finishConversation(context.generation, intent.evidenceSeq, creditId);
+      } else if (creditId) this.game.credits.cancel(creditId);
+    }
+  }
+  private async performCoreAction(
     intent: ExecuteIntent,
     context: IntentContext,
     delegationId: string | null,
@@ -452,7 +488,9 @@ export class GameRuntime {
     this.presentScene(result.narrative + '\n' + this.currentSituation(), messageId);
     const spokenResult = this.game.terminal
       ? result.narrative
-      : await composeCompanionReply(this.modelClient(), this.companionContext(), result);
+      : await composeCompanionReply(this.modelClient(), this.companionContext(), result).catch(
+          () => result.narrative,
+        );
     if (
       this.disposed ||
       context.controllerEpoch !== this.epoch ||
@@ -611,6 +649,9 @@ export class GameRuntime {
       this.syncCore();
       this.pendingRisk = undefined;
       if (decision.decision === 'replace') {
+        this.correctedEvidence.add(
+          `${this.game.generation}:${Math.max(...batch.map((f) => f.serverSeq))}`,
+        );
         this.ledger!.promoteControlEvidence(batch.map((f) => f.serverSeq));
         if (control.delegation) this.intents!.acceptDelegation(control.delegation);
         else
@@ -646,13 +687,77 @@ export class GameRuntime {
     return {
       ...this.companionContext(),
       status: this.game.status,
-      photoSendsRemaining: this.game.scenario.rules.maxPhotoSends - this.game.photoSendsUsed,
+      creditsRemaining: this.game.credits.remaining,
       recognizedItems: this.game.proposal?.items.map(({ name }) => name) ?? [],
       lastResult: this.game.lastResult,
     };
   }
   private currentSituation() {
     return this.words('現在の状況: ', 'Current situation: ') + this.game.situation;
+  }
+  private reserveConversation(generation: number, evidence: number[], free = false): string | null {
+    const through = Math.max(0, ...evidence);
+    if (
+      !through ||
+      through <= (this.chargedEvidence.get(generation) ?? 0) ||
+      free ||
+      this.correctedEvidence.has(`${generation}:${through}`) ||
+      this.game.status === 'briefing'
+    )
+      return null;
+    const id = `conversation:${generation}:${through}`;
+    this.game.reserveCredits(id, 'conversation', creditCosts.conversation);
+    return id;
+  }
+  private finishConversation(generation: number, evidence: number[], id: string | null) {
+    if (evidence.length)
+      this.chargedEvidence.set(
+        generation,
+        Math.max(this.chargedEvidence.get(generation) ?? 0, ...evidence),
+      );
+    if (id) this.game.settleCredits(id);
+    this.notifyCredits();
+  }
+  private answerConsult(
+    decision: Extract<IntentDecision, { kind: 'consult' }>,
+    delegationId: string | null,
+  ) {
+    const generation = this.game.generation;
+    if (Math.max(0, ...decision.evidenceSeq) <= (this.chargedEvidence.get(generation) ?? 0)) return;
+    const id = this.reserveConversation(
+      generation,
+      decision.evidenceSeq,
+      decision.responseKind === 'correction' || !!decision.recognitionCorrection,
+    );
+    try {
+      this.recordHintDecision(decision);
+      this.sendFacts(this.currentSituation(), delegationId);
+      this.speak(decision.answer ?? this.currentSituation(), delegationId);
+      if (this.notificationFailed) {
+        if (id) this.game.credits.cancel(id);
+        return;
+      }
+      this.finishConversation(generation, decision.evidenceSeq, id);
+    } catch (error) {
+      if (id) this.game.credits.cancel(id);
+      throw error;
+    }
+  }
+  private notifyCredits() {
+    if (this.game.terminal) return;
+    this.sendFacts(JSON.stringify({ creditsRemaining: this.game.credits.remaining }));
+    if (
+      !this.lowCreditsNotified &&
+      this.game.credits.remaining <= this.game.credits.initial * 0.2
+    ) {
+      this.lowCreditsNotified = true;
+      this.presentation?.notice?.(
+        this.words(
+          'ご利用可能クレジットが残りわずかです',
+          'Your available credits are running low.',
+        ),
+      );
+    }
   }
   private hintsAlreadyGiven(context: import('./conversation.js').IntentContext) {
     const evidence = this.hintEvidence.get(this.game.facts.obstacleId);
@@ -998,6 +1103,8 @@ export class GameRuntime {
           throw new GameError(410, '接続中にプレイが失効しました。');
         }
         this.game.generation++;
+        this.game.credits.cancelPending();
+        this.legacyConversation = null;
         this.openingMessageId = undefined;
         this.openingBriefing?.connect(this.game.generation);
         this.story.startGeneration(this.game.generation, this.now());
@@ -1021,16 +1128,18 @@ export class GameRuntime {
     return promise;
   }
   photos(requestId: string, images: string[], signal?: AbortSignal) {
-    this.check();
     const digest = createHash('sha256').update(JSON.stringify(images)).digest('hex');
     const prior = this.photoRequests.get(requestId);
     if (prior) {
       if (prior.digest !== digest || prior.epoch !== this.epoch)
         throw new GameError(409, '写真の再送内容が変更されています。');
+      if (this.disposed || this.now() >= this.deadline)
+        throw new GameError(410, 'プレイは終了しています。');
       return prior.promise;
     }
+    this.check();
     if (this.photoRequests.size >= 100) throw new GameError(429, '写真送信の試行上限です。');
-    const ticket = this.game.beginPhotos(images.length > 0);
+    const ticket = this.game.beginPhotos(images.length);
     this.pendingRisk = undefined;
     this.photoAcceptance = undefined;
     this.openingMessageId = undefined;
@@ -1044,7 +1153,7 @@ export class GameRuntime {
           signal,
         );
         this.check(epoch);
-        await this.game.finishPhotos(photos, ticket);
+        await this.game.finishPhotos(photos, ticket, true);
         this.check(epoch);
         await this.presentation?.photos(photos);
         this.syncCore(true);
@@ -1052,20 +1161,32 @@ export class GameRuntime {
         this.intents?.onContextChanged();
         if (this.coreSnapshot && this.game.proposal && photos.length) {
           this.photoDeciding = true;
+          const beforeVersion = this.game.gameVersion;
           const photoWorker = this.processPhoto(requestId)
             .catch((error) => {
+              if (
+                this.game.gameVersion === beforeVersion &&
+                !(error instanceof GameError && error.message === 'ACTION_INVALID')
+              )
+                this.game.credits.cancel(ticket.creditId);
               if (!(error instanceof GameError && error.message === 'ACTION_INVALID'))
                 this.recoveryNotice('photo_decision_failed');
             })
             .finally(() => {
               if (this.photoWorker !== photoWorker) return;
               this.photoDeciding = false;
+              this.game.settleCredits(ticket.creditId);
+              this.notifyCredits();
               this.ledger?.contextChanged();
               this.intents?.onContextChanged();
             });
           this.photoWorker = photoWorker;
+        } else {
+          this.game.settleCredits(ticket.creditId);
+          this.notifyCredits();
         }
       } catch (error) {
+        this.game.credits.cancel(ticket.creditId);
         if (epoch === this.epoch) this.game.cancelPhotos();
         if (error instanceof GameError) throw error;
         throw new GameError(
@@ -1165,9 +1286,17 @@ export class GameRuntime {
         },
         this.now(),
       );
+      if (event.delta.trim() && this.legacyConversation && this.game.status === 'playing') {
+        const id = this.legacyConversation;
+        this.game.reserveCredits(id, 'conversation', creditCosts.conversation);
+        this.legacyConversation = null;
+        this.game.settleCredits(id);
+      }
     }
     if (event.type === 'session.input_transcript.delta') {
       this.game.appendTranscript(event.delta);
+      if (event.delta.trim() && this.game.status === 'playing')
+        this.legacyConversation ??= `conversation:${generation}:${event.event_id}`;
       clearTimeout(this.transcriptTimer);
       this.transcriptTimer = setTimeout(() => {
         if (this.valid(epoch)) void this.game.recognize().catch(() => {});
@@ -1178,6 +1307,12 @@ export class GameRuntime {
       clearTimeout(this.transcriptTimer);
       await this.game.recognize();
       this.check(epoch);
+      if (this.game.proposal && this.legacyConversation) {
+        const id = this.legacyConversation;
+        this.game.reserveCredits(id, 'conversation', creditCosts.conversation);
+        this.legacyConversation = null;
+        this.game.settleCredits(id);
+      }
       return [
         factCommand(
           this.game.proposal

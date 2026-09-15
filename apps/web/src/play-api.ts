@@ -5,7 +5,7 @@ export function setApiLocale(locale: 'ja' | 'en') {
   apiLocale = locale;
 }
 const englishMessages: Record<string, string> = {
-  PHOTO_SEND_LIMIT: 'No photo sends left. Continue using the tools already sent.',
+  INSUFFICIENT_CREDITS: 'Not enough credits. A conversation costs 20; each photo costs 100.',
   AUTH_REQUIRED: 'Enter the shared passphrase to join.',
   AUTH_FAILED: 'Incorrect passphrase. Check the passphrase shared by the host.',
   AUTH_RATE_LIMIT: 'Too many attempts. Wait a moment and try again.',
@@ -29,7 +29,7 @@ export function controlHeaders(control: PlayControl | { playId: string }) {
   };
 }
 const publicMessages: Record<string, string> = {
-  PHOTO_SEND_LIMIT: '送信回数を使い切りました。届いた道具を使って続けてください。',
+  INSUFFICIENT_CREDITS: 'クレジットが不足しています。会話は20、写真は1枚100必要です。',
   AUTH_REQUIRED: '合言葉を入力して参加してください。',
   AUTH_FAILED: '合言葉が違います。運営から共有された内容を確認してください。',
   AUTH_RATE_LIMIT: '合言葉の確認回数が上限に達しました。しばらく待って再試行してください。',

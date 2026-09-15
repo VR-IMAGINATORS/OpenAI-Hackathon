@@ -11,9 +11,9 @@ import { localizeScenario } from '../packages/shared/scenario.js';
 import type { Difficulty } from '../packages/shared/difficulty.js';
 
 const cases = [
-  ['normal', 300, 4],
-  ['hard', 240, 3],
-  ['nightmare', 180, 2],
+  ['normal', 300, 1000],
+  ['hard', 240, 700],
+  ['nightmare', 180, 400],
 ] as const;
 const catalog = () =>
   new ScenarioCatalog({
@@ -45,7 +45,7 @@ test('HTTP difficulty is validated, isolated, retained and part of request ident
       headers: { Origin: origin, 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify(body),
     });
-  for (const [difficulty, seconds, actions] of cases) {
+  for (const [difficulty, seconds, credits] of cases) {
     const cookie = (await post('/api/auth', { passphrase: 'difficulty-test' })).headers
       .get('set-cookie')!
       .split(';')[0];
@@ -55,13 +55,17 @@ test('HTTP difficulty is validated, isolated, retained and part of request ident
         (await post('/api/plays', { ...body, difficulty: invalid }, cookie)).status,
         400,
       );
-    assert.equal((await post('/api/plays', { ...body, maxPhotoSends: 99 }, cookie)).status, 400);
+    for (const forged of [{ initialCredits: 100000 }, { creditsRemaining: 100000 }])
+      assert.equal((await post('/api/plays', { ...body, ...forged }, cookie)).status, 400);
     const created = await post('/api/plays', body, cookie);
     assert.equal(created.status, 201);
     const value = await created.json();
     assert.equal(value.state.difficulty, difficulty);
     assert.equal(value.state.remainingMs, seconds * 1000);
-    assert.equal(value.state.photoSendsRemaining, actions);
+    assert.equal(value.state.creditsRemaining, credits);
+    assert.equal(value.state.initialCredits, credits);
+    assert.equal(value.state.lastCreditCharge, null);
+    assert.equal('photoSendsRemaining' in value.state, false);
     const repeated = await post('/api/plays', body, cookie);
     assert.equal(repeated.status, 200);
     assert.equal((await repeated.json()).playId, value.playId);
@@ -79,7 +83,9 @@ test('HTTP difficulty is validated, isolated, retained and part of request ident
       headers: { Cookie: cookie, 'X-Play-Id': value.playId },
     });
     assert.equal(restored.status, 200);
-    assert.equal((await restored.json()).state.difficulty, difficulty);
+    const restoredState = (await restored.json()).state;
+    assert.equal(restoredState.difficulty, difficulty);
+    assert.equal(restoredState.creditsRemaining, credits);
   }
   assert.equal(hosted.registry.occupied, 3);
 });
@@ -142,6 +148,8 @@ function gameFor(difficulty: Difficulty) {
       const photoId = randomUUID();
       if (!reuse)
         await game.finishPhotos([{ id: photoId, jpeg: Buffer.from('test') }], game.beginPhotos());
+      const creditId = randomUUID();
+      game.reserveCredits(creditId, 'conversation', 20);
       const ticket = game.reserveAction(
         {
           kind: 'execute',
@@ -155,11 +163,18 @@ function gameFor(difficulty: Difficulty) {
         game.actionEpoch,
         game.controllerEpoch,
       );
-      return game.judgeAction(ticket);
+      try {
+        const result = await game.judgeAction(ticket);
+        game.settleCredits(creditId);
+        return result;
+      } catch (error) {
+        game.credits.cancel(creditId);
+        throw error;
+      }
     },
   };
 }
-for (const [difficulty, seconds, actions] of cases) {
+for (const [difficulty, seconds, credits] of cases) {
   test(`${difficulty}: timer ends exactly at selected limit`, () => {
     const f = gameFor(difficulty);
     f.advance(seconds * 1000 - 1);
@@ -167,28 +182,51 @@ for (const [difficulty, seconds, actions] of cases) {
     f.advance(1);
     assert.equal(f.game.state().endReason, 'time_limit');
   });
-  test(`${difficulty}: send limit blocks new photos but permits further reuse until timeout`, async () => {
+  test(`${difficulty}: photos can exceed the former send limit and exhaustion ends play`, async () => {
+    const f = gameFor(difficulty);
+    for (let sent = 1; sent <= credits / 100; sent++) {
+      await f.game.finishPhotos(
+        [{ id: randomUUID(), jpeg: Buffer.from('test') }],
+        f.game.beginPhotos(1),
+      );
+      assert.equal(f.game.state().creditsRemaining, credits - sent * 100);
+      assert.equal(f.game.status, sent * 100 === credits ? 'lost' : 'playing');
+    }
+    assert.equal(f.game.endReason, 'credits_exhausted');
+    assert.ok(f.game.state().remainingMs > 0);
+    assert.throws(() => f.game.beginPhotos(1));
+  });
+  test(`${difficulty}: reusing an existing tool costs only its spoken instruction`, async () => {
     const f = gameFor(difficulty);
     f.fail();
-    for (let i = 0; i < actions; i++) await f.act();
-    assert.equal(f.game.state().photoSendsRemaining, 0);
-    assert.equal(f.game.endReason, null);
-    assert.equal(f.game.status, 'playing');
-    await assert.rejects(f.act());
+    await f.act();
+    assert.equal(f.game.state().creditsRemaining, credits - 120);
     await f.act(true);
-    await f.act(true);
-    assert.equal(f.game.actionsUsed, actions + 2);
-    assert.equal(f.game.state().photoSendsRemaining, 0);
+    assert.equal(f.game.actionsUsed, 2);
+    assert.equal(f.game.state().creditsRemaining, credits - 140);
     assert.equal(f.game.state().status, 'playing');
-    f.advance(seconds * 1000);
-    assert.equal(f.game.state().endReason, 'time_limit');
   });
   test(`${difficulty}: three successful actions permit complete escape`, async () => {
     const f = gameFor(difficulty);
-    for (let i = 0; i < 3; i++) await f.act(i >= actions);
+    for (let i = 0; i < 3; i++) await f.act();
     assert.equal(f.game.state().status, 'won');
     assert.equal(f.game.state().endingOutcome, 'happy');
-    assert.equal(f.game.state().photoSendsRemaining, Math.max(0, actions - 3));
+    assert.equal(f.game.state().creditsRemaining, credits - 360);
+  });
+  test(`${difficulty}: escaping with the last conversation credits takes priority over exhaustion`, async () => {
+    const f = gameFor(difficulty);
+    await f.act();
+    await f.act(true);
+    while (f.game.credits.remaining > 20) {
+      const creditId = randomUUID();
+      f.game.reserveCredits(creditId, 'conversation', 20);
+      f.game.settleCredits(creditId);
+    }
+    await f.act(true);
+    assert.equal(f.game.state().creditsRemaining, 0);
+    assert.equal(f.game.state().status, 'won');
+    assert.equal(f.game.state().endReason, 'escaped');
+    assert.equal(f.game.state().endingOutcome, 'happy');
   });
 }
 test('snapshot is immutable and selected limits are checked against deployment budgets', () => {
@@ -196,7 +234,7 @@ test('snapshot is immutable and selected limits are checked against deployment b
   const normal = c.current('en', 'normal');
   const hard = c.current('en', 'hard');
   assert.notEqual(normal.digest, hard.digest);
-  assert.equal(normal.scenarioV2.rules.maxPhotoSends, 4);
+  assert.equal(normal.scenarioV2.rules.initialCredits, 1000);
   assert.ok(Object.isFrozen(hard.scenarioV2.rules));
   assert.throws(() => c.current('en', 'invalid' as Difficulty));
   const limited = new ScenarioCatalog({

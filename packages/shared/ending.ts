@@ -1,7 +1,7 @@
 import type { EndingTagId } from './ending-tags.js';
 
 export type EndingOutcome = 'happy' | 'normal' | 'bad';
-export type GameEndReason = 'escaped' | 'time_limit' | 'interrupted';
+export type GameEndReason = 'escaped' | 'time_limit' | 'credits_exhausted' | 'interrupted';
 export type EndingVideoStatus =
   | 'disabled'
   | 'not_applicable'

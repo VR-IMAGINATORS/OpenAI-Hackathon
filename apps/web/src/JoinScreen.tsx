@@ -224,8 +224,8 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
                   <strong>{preset.label[locale]}</strong>
                   <small>
                     {preset.totalTimeSeconds / 60}
-                    {t('分', ' min')} · {preset.maxPhotoSends}
-                    {t('回送信', ' sends')}
+                    {t('分', ' min')} · {preset.initialCredits.toLocaleString(locale)}
+                    {t('クレジット', ' credits')}
                   </small>
                 </button>
               );

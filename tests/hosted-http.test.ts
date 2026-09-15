@@ -295,7 +295,7 @@ test('HTTP photos and action retries charge once; another owner never receives t
   assert.equal(first.response.status, 200, first.raw);
   const retry = await f.request('/api/play/actions', action, c);
   assert.equal(retry.response.status, 200, retry.raw);
-  assert.equal(retry.data.state.photoSendsRemaining, first.data.state.photoSendsRemaining);
+  assert.equal(retry.data.state.creditsRemaining, first.data.state.creditsRemaining);
   assert.equal(f.counts().judgments, 1);
   const other = await f.auth();
   await f.create(other);
@@ -450,7 +450,7 @@ test('voice activity is advisory, owner-bound, strict and separately limited to 
   );
   const after = (await f.request('/api/play/state', undefined, c, 'GET')).data.state;
   assert.equal(after.remainingMs, before.remainingMs);
-  assert.equal(after.photoSendsRemaining, before.photoSendsRemaining);
+  assert.equal(after.creditsRemaining, before.creditsRemaining);
   assert.equal(after.actionsUsed, before.actionsUsed);
   f.time(2000);
   for (let sequence = 2; sequence <= 9; sequence++)

@@ -8,7 +8,7 @@ test('default scenario exposes only public briefing and settings', () => {
   const scenario = parseScenario(sample());
   const projected = publicScenario(scenario);
   assert.equal(projected.obstacleCount, 3);
-  assert.equal(projected.rules.maxPhotoSends, 4);
+  assert.equal(projected.rules.initialCredits, 1000);
   assert.deepEqual(Object.keys(projected).sort(), [
     'id',
     'obstacleCount',
@@ -21,10 +21,19 @@ test('default scenario exposes only public briefing and settings', () => {
 test('planner typos, duplicate IDs, impossible counts and unknown event references are rejected', () => {
   const cases = [
     (s: any) => {
-      s.rules.maxPhotoSends = 0;
+      s.rules.initialCredits = 0;
     },
     (s: any) => {
-      s.rules.maxPhotoSends = 21;
+      s.rules.initialCredits = 100020;
+    },
+    (s: any) => {
+      s.rules.initialCredits = 21;
+    },
+    (s: any) => {
+      s.rules.initialCredits = 20.5;
+    },
+    (s: any) => {
+      s.rules.maxPhotoSends = 4;
     },
     (s: any) => {
       s.rules.maxPhotosPerSend = 3;
@@ -60,10 +69,18 @@ test('planner typos, duplicate IDs, impossible counts and unknown event referenc
 test('planner can tune values, replace scenario and disable an event', () => {
   const value = sample();
   value.id = 'another-scenario';
-  value.rules.maxPhotoSends = 6;
+  value.rules.initialCredits = 600;
   value.rules.totalTimeSeconds = 180;
   value.events[0].mode = 'disabled';
   const scenario = parseScenario(value);
-  assert.equal(scenario.rules.maxPhotoSends, 6);
+  assert.equal(scenario.rules.initialCredits, 600);
   assert.equal(scenario.events[0].mode, 'disabled');
+});
+
+test('initial credit configuration accepts the minimum and maximum multiples of twenty', () => {
+  for (const initialCredits of [20, 100000]) {
+    const value = sample();
+    value.rules.initialCredits = initialCredits;
+    assert.equal(parseScenario(value).rules.initialCredits, initialCredits);
+  }
 });

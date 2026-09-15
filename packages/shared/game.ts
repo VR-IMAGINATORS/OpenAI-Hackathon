@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { EndingOutcome, GameEndReason } from './ending.js';
 import type { Difficulty } from './difficulty.js';
+import type { CreditCharge } from './credits.js';
 const short = z.string().max(1000);
 export const itemStatus = z.enum(['available', 'damaged', 'consumed']);
 export const proposalSchema = z
@@ -68,7 +69,9 @@ export interface PublicGameState {
   briefing: string;
   obstacle: { title: string; index: number; count: number };
   situation: string;
-  photoSendsRemaining: number;
+  creditsRemaining: number;
+  initialCredits: number;
+  lastCreditCharge: CreditCharge | null;
   actionsUsed: number;
   remainingMs: number;
   waitingRemainingMs: number;

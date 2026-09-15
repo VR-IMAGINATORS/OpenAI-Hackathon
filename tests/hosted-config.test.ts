@@ -97,7 +97,7 @@ test('hosted invalid scenario reports the planner field location', (t) => {
   const cwd = fixture(t),
     path = resolve(cwd, 'scenarios/story-catalog.json');
   const scenario = JSON.parse(readFileSync(path, 'utf8'));
-  scenario.rules.maxPhotoSends = 0;
+  scenario.rules.initialCredits = 0;
   writeFileSync(path, JSON.stringify(scenario));
-  assert.throws(() => loadHostedConfig(base, cwd), /"rules"[\s\S]*"maxPhotoSends"/);
+  assert.throws(() => loadHostedConfig(base, cwd), /"rules"[\s\S]*"initialCredits"/);
 });

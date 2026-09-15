@@ -46,6 +46,7 @@ async function setup(
   photoDecision?: (input: any) => unknown | Promise<unknown>,
   judgeResponse?: (input: any, signal?: AbortSignal) => unknown | Promise<unknown>,
   locale: 'ja' | 'en' = 'ja',
+  initialCredits = 1000,
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0, photo: 0, control: 0, reply: 0 };
@@ -131,6 +132,7 @@ async function setup(
     }).current(locale),
   );
   const queue = new PhotoQueue();
+  snapshot.scenarioV2.rules.initialCredits = initialCredits;
   const notices: string[] = [];
   const scenes: any[] = [];
   const results = new ResultStore();
@@ -268,8 +270,174 @@ test('call check updates its image bubble across pauses and retries, then reply 
   assert.equal(messages[1]!.text, 'うん、聞こえるよ');
   assert.equal(messages[2]!.text, 'よかった、つながった。私は未来のあなたを助けるAI。');
   assert.equal(messages[2]!.kind, 'transcript');
-  assert.equal(h.runtime.state().photoSendsRemaining, 4);
+  assert.equal(h.runtime.state().creditsRemaining, 1000);
   assert.equal(h.calls.judge, 0);
+});
+
+test('credits: transcript fragments and duplicate delegations form one paid consultation; corrections are free', async (t) => {
+  const h = await setup(t, (context) => ({
+    kind: 'consult',
+    evidenceSeq: context.conversation.eligibleEvidenceSeq,
+    reason: 'Answer the user',
+    answer: 'わかったよ。',
+    responseKind: context.conversation.fragments.some((f: any) => f.delta.includes('聞き間違い'))
+      ? 'correction'
+      : 'answer',
+  }));
+  await h.say('いま');
+  await h.say('どんな状況？');
+  const delegation = randomUUID();
+  await h.delegate(delegation);
+  await until(() => h.runtime.state().creditsRemaining === 980);
+  await h.delegate(delegation);
+  await tick();
+  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.runtime.state().lastCreditCharge?.amount, 20);
+  await h.say('今のは聞き間違いです');
+  await h.delegate();
+  await until(() => h.calls.classify >= 2);
+  await tick();
+  assert.equal(h.runtime.state().creditsRemaining, 980);
+});
+
+test('credits: final consultation ends through existing result outcome with the exact exhaustion notice', async (t) => {
+  const h = await setup(
+    t,
+    (context) => ({
+      kind: 'consult',
+      evidenceSeq: context.conversation.eligibleEvidenceSeq,
+      reason: 'Question',
+      answer: 'ロープがあるよ。',
+    }),
+    undefined,
+    false,
+    undefined,
+    undefined,
+    undefined,
+    'ja',
+    20,
+  );
+  await h.say('何がある？');
+  await h.delegate();
+  await until(() => h.runtime.game.terminal);
+  const state = h.runtime.state();
+  assert.equal(state.creditsRemaining, 0);
+  assert.equal(state.status, 'lost');
+  assert.equal(state.endReason, 'credits_exhausted');
+  assert.equal(state.endingOutcome, 'bad');
+  assert.deepEqual(h.notices, ['クレジットを使い切りました。']);
+  assert.ok(
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.some((c) => c.content.includes('ロープがあるよ。')),
+  );
+});
+
+test('credits: last photo reserves its full cost and completes the winning automatic action before exhaustion', async (t) => {
+  const gate = deferred<void>();
+  const h = await setup(
+    t,
+    () => ({ kind: 'wait', reason: 'No speech' }),
+    undefined,
+    false,
+    undefined,
+    (context) => ({
+      decision: 'execute',
+      usage: 'Use the scissors',
+      itemRefs: [{ photoId: context.photos[0] }],
+      message: '使ってみる。',
+      reason: 'Obvious tool',
+    }),
+    async () => {
+      await gate.promise;
+      return {
+        success: true,
+        narrative: '出口が開いた。',
+        situation: '外に出た。',
+        inventoryChanges: [],
+        factChanges: [],
+        shortReason: '解除',
+      };
+    },
+    'ja',
+    100,
+  );
+  h.runtime.game.obstacleIndex = 2;
+  h.runtime.game.facts.obstacleId = h.runtime.game.scenario.obstacles[2].id;
+  const requestId = randomUUID();
+  await h.runtime.photos(requestId, [h.photo]);
+  await until(() => h.calls.judge === 1);
+  assert.equal(h.runtime.state().creditsRemaining, 0);
+  assert.equal(h.runtime.state().status, 'judging');
+  await assert.rejects(async () => h.runtime.photos(randomUUID(), [h.photo]));
+  gate.resolve();
+  await until(() => h.runtime.game.terminal);
+  assert.equal(h.runtime.state().status, 'won');
+  assert.equal(h.runtime.state().endReason, 'escaped');
+  assert.equal(h.runtime.state().creditsRemaining, 0);
+  assert.equal(h.calls.judge, 1);
+  await h.runtime.photos(requestId, [h.photo]);
+  assert.equal(h.calls.recognize, 1);
+  assert.ok(!h.notices.includes('クレジットを使い切りました。'));
+});
+
+test('credits: failed photo processing releases the reservation without ending or charging', async (t) => {
+  const h = await setup(
+    t,
+    () => ({ kind: 'wait', reason: 'No speech' }),
+    undefined,
+    false,
+    undefined,
+    () => {
+      throw new Error('Upstream unavailable');
+    },
+    undefined,
+    'ja',
+    100,
+  );
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => !h.runtime.game.credits.pending);
+  assert.equal(h.runtime.state().creditsRemaining, 100);
+  assert.equal(h.runtime.state().status, 'playing');
+  assert.equal(h.runtime.state().lastCreditCharge, null);
+});
+
+test('credits: missing-delegation consultation and a later real delegation never charge twice', async (t) => {
+  const h = await setup(t, (context) => ({
+    kind: 'consult',
+    evidenceSeq: context.conversation.eligibleEvidenceSeq,
+    reason: 'Small talk',
+    answer: '一緒にがんばろう。',
+  }));
+  await h.say('応援して');
+  h.setNow(5000);
+  h.runtime.tick();
+  await until(() => h.runtime.state().creditsRemaining === 980);
+  await h.delegate();
+  await tick();
+  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.runtime.state().lastCreditCharge?.sequence, 1);
+});
+
+test('credits: Pro permits fifty short exchanges and emits its low-balance notice once', async (t) => {
+  const h = await setup(t, (context) => ({
+    kind: 'consult',
+    evidenceSeq: context.conversation.eligibleEvidenceSeq,
+    reason: 'Small talk',
+    answer: '聞いているよ。',
+  }));
+  for (let i = 1; i <= 50; i++) {
+    await h.say('応援して');
+    await h.delegate();
+    await until(() => h.runtime.state().creditsRemaining === 1000 - i * 20);
+  }
+  assert.equal(h.runtime.state().status, 'lost');
+  assert.equal(h.runtime.state().endReason, 'credits_exhausted');
+  assert.equal(h.runtime.state().lastCreditCharge?.sequence, 50);
+  assert.deepEqual(h.notices, [
+    'ご利用可能クレジットが残りわずかです',
+    'クレジットを使い切りました。',
+  ]);
 });
 
 test('reconnection keeps the original opening and puts new speech in a separate bubble', async (t) => {
@@ -319,7 +487,7 @@ test('runtime accepts correction while classification is pending and discards th
   );
   assert.equal(contexts.length, 2);
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 880);
 });
 
 test('runtime consult consumes no action and a subsequent directive executes once', async (t) => {
@@ -342,7 +510,7 @@ test('runtime consult consumes no action and a subsequent directive executes onc
     h.runtime.pollCommands(h.generation, 0).commands.some((c) => c.content === '切れるか相談中'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 880);
   await h.say('実行して');
   const id = randomUUID();
   await h.delegate(id);
@@ -350,7 +518,7 @@ test('runtime consult consumes no action and a subsequent directive executes onc
   await h.delegate(id);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 860);
 });
 
 test('execution adds no server acknowledgement while judging and still delivers its result once', async (t) => {
@@ -388,14 +556,19 @@ test('execution adds no server acknowledgement while judging and still delivers 
   await h.delegate(delegationId);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 880);
   assert.deepEqual(
     newCommands()
       .filter((c) => c.type === 'session.commentary.append')
       .map((c) => c.content),
     [h.runtime.game.lastResult!.narrative + '\n' + h.runtime.game.situation],
   );
-  assert.equal(newCommands().filter((c) => c.type === 'session.thinking.append').length, 0);
+  assert.deepEqual(
+    newCommands()
+      .filter((c) => c.type === 'session.thinking.append')
+      .map((c) => JSON.parse(c.content)),
+    [{ creditsRemaining: 880 }],
+  );
 });
 
 test('ambiguous photo use question arrives only after recognition and an upload retry does not repeat it', async (t) => {
@@ -697,7 +870,7 @@ test('runtime missing delegation requests recovery but never judges, then announ
       .commands.some((c) => c.type === 'session.instructions.append'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 900);
   h.setNow(24002);
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
@@ -722,7 +895,7 @@ test('obvious photo starts one action without a usage question or fabricated del
   assert.equal(h.calls.photo, 1);
   assert.equal(h.calls.classify, 0);
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 900);
   const spoken = h.runtime
     .pollCommands(h.generation, 0)
     .commands.filter((c) => c.type === 'session.commentary.append');
@@ -746,7 +919,7 @@ for (const decision of ['confirm_risk', 'reject'] as const) {
     await tick();
     assert.equal(h.calls.judge, 0);
     assert.equal(h.runtime.state().actionsUsed, 0);
-    assert.equal(h.runtime.state().photoSendsRemaining, 3);
+    assert.equal(h.runtime.state().creditsRemaining, 900);
     assert.ok(
       h.runtime
         .pollCommands(h.generation, 0)
@@ -778,7 +951,7 @@ test('speech cancels an automatic photo action before result and image commit', 
   assert.equal(h.runtime.state().actionsUsed, 0);
   assert.equal(h.runtime.game.gameVersion, 0);
   assert.equal(h.scenes.length, 1);
-  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  assert.equal(h.runtime.state().creditsRemaining, 900);
 });
 
 test('same spoken instruction during automatic action remains one operation', async (t) => {
@@ -871,7 +1044,7 @@ test('cooperative judgment abort releases normal lane for actual corrected speec
     );
   assert.equal(resultCommands.length, 1);
   assert.equal(resultCommands[0]!.delegation_id, delegationId);
-  assert.equal(h.runtime.game.photoSendsUsed, 1);
+  assert.equal(h.runtime.game.credits.remaining, 900);
 });
 
 test('rejected photo stays rejected under pressure but new physical information permits reassessment without another send', async (t) => {
@@ -917,6 +1090,6 @@ test('rejected photo stays rejected under pressure but new physical information 
   assert.equal(inputs.length, 3);
   assert.match(inputs[2].userSpeech, /中身は常温の水です/);
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.game.photoSendsUsed, 1);
+  assert.equal(h.runtime.game.credits.remaining, 860);
   assert.equal(h.calls.recognize, 1);
 });

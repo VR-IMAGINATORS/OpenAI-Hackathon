@@ -24,6 +24,8 @@ import type { GamePhoto } from './photo.js';
 import type { GameAI, AIContext } from './game-ai.js';
 import type { GameEndReason } from '../../packages/shared/ending.js';
 import { endingOutcome, type CommittedEndingAction } from './ending.js';
+import { GameCredits } from './credits.js';
+import { creditCosts, type CreditKind } from '../../packages/shared/credits.js';
 export class GameError extends Error {
   constructor(
     public status: number,
@@ -59,7 +61,7 @@ export class GameSession {
   status: PublicGameState['status'] = 'briefing';
   obstacleIndex = 0;
   actionsUsed = 0;
-  photoSendsUsed = 0;
+  readonly credits: GameCredits;
   readonly clearedIds: string[] = [];
   readonly committedActions: CommittedEndingAction[] = [];
   endReason: GameEndReason | null = null;
@@ -89,6 +91,7 @@ export class GameSession {
     private onEnd: () => void = () => {},
     readonly coreSnapshot?: ScenarioSnapshot,
   ) {
+    this.credits = new GameCredits(scenario.rules.initialCredits);
     this.situation = scenario.obstacles[0].situation;
     if (coreSnapshot) this.generation = 1;
     this.facts = {
@@ -108,6 +111,7 @@ export class GameSession {
       if (this.clock.waitingRemainingMs <= 0) this.end('expired');
       else if (this.clock.remainingMs <= 0) this.end('lost', 'time_limit');
     }
+    this.checkCredits();
   }
   state(): PublicGameState {
     this.check();
@@ -127,7 +131,9 @@ export class GameSession {
         count: this.scenario.obstacles.length,
       },
       situation: this.situation,
-      photoSendsRemaining: this.scenario.rules.maxPhotoSends - this.photoSendsUsed,
+      creditsRemaining: this.credits.remaining,
+      initialCredits: this.credits.initial,
+      lastCreditCharge: this.credits.lastCharge,
       actionsUsed: this.actionsUsed,
       remainingMs: this.clock.remainingMs,
       waitingRemainingMs: this.clock.waitingRemainingMs,
@@ -168,7 +174,11 @@ export class GameSession {
     if (this.terminal) return;
     this.status = status;
     this.endReason =
-      status === 'expired' ? 'interrupted' : status === 'won' ? 'escaped' : 'time_limit';
+      status === 'expired'
+        ? 'interrupted'
+        : status === 'won'
+          ? 'escaped'
+          : (reason ?? 'time_limit');
     if (!this.coreSnapshot) this.generation++;
     this.invalidateCoreActions();
     for (const action of this.actions.values())
@@ -185,6 +195,32 @@ export class GameSession {
     if (this.terminal) throw new GameError(410, 'プレイは終了しています。');
     if (this.pending) throw new GameError(409, '判定中です。');
   }
+  reserveCredits(id: string, kind: CreditKind, amount: number) {
+    this.check();
+    if (this.terminal) throw new GameError(410, 'プレイは終了しています。');
+    if (!this.credits.reserve(id, kind, amount))
+      throw new GameError(
+        409,
+        this.coreSnapshot?.locale === 'en' ? 'Not enough credits.' : 'クレジットが不足しています。',
+        'INSUFFICIENT_CREDITS',
+      );
+  }
+  settleCredits(id: string) {
+    this.credits.settle(id);
+    this.checkCredits();
+  }
+  checkCredits() {
+    if (
+      !this.terminal &&
+      this.status === 'playing' &&
+      !this.credits.pending &&
+      this.credits.remaining === 0 &&
+      !this.pending &&
+      !this.recognizing &&
+      !this.photoBusy
+    )
+      this.end('lost', 'credits_exhausted');
+  }
   invalidate() {
     this.inputRevision++;
     this.proposal = null;
@@ -192,6 +228,7 @@ export class GameSession {
   }
   /** Invalidate work from the previous tab without restarting the game. */
   changeController() {
+    this.credits.cancelPending();
     this.generation++;
     this.controllerEpoch++;
     this.invalidateCoreActions();
@@ -204,36 +241,45 @@ export class GameSession {
     this.clock.resume('judgment');
     this.invalidate();
   }
-  beginPhotos(hasImages = true) {
+  beginPhotos(count: number | boolean = 1) {
     this.editable();
     if (this.photoBusy || this.recognizing) throw new GameError(409, '写真を処理中です。');
-    if (hasImages && this.photoSendsUsed >= this.scenario.rules.maxPhotoSends)
+    if (Number(count) * creditCosts.photo > this.credits.remaining)
       throw new GameError(
         409,
-        '写真の送信回数を使い切りました。手持ちの道具を使って続けてください。',
-        'PHOTO_SEND_LIMIT',
+        this.coreSnapshot?.locale === 'en'
+          ? 'Not enough credits for this photo.'
+          : '写真を送るクレジットが不足しています。',
+        'INSUFFICIENT_CREDITS',
       );
     this.photoBusy = true;
     this.invalidate();
-    return { generation: this.generation, revision: this.inputRevision };
+    return { generation: this.generation, revision: this.inputRevision, creditId: randomUUID() };
   }
-  async finishPhotos(photos: GamePhoto[], ticket: { generation: number; revision: number }) {
+  async finishPhotos(
+    photos: GamePhoto[],
+    ticket: { generation: number; revision: number; creditId: string },
+    deferCredits = false,
+  ) {
     if (this.terminal || ticket.generation !== this.generation)
       throw new GameError(410, 'プレイが失効しました。');
     if (!this.photoBusy) throw new GameError(409, '写真の送信はすでに処理済みです。');
     if (photos.length > this.scenario.rules.maxPhotosPerSend)
       throw new GameError(400, '写真の枚数が上限を超えています。');
-    if (photos.length && this.photoSendsUsed >= this.scenario.rules.maxPhotoSends)
-      throw new GameError(
-        409,
-        '写真の送信回数を使い切りました。手持ちの道具を使って続けてください。',
-        'PHOTO_SEND_LIMIT',
-      );
+    if (photos.length)
+      this.reserveCredits(ticket.creditId, 'photo', photos.length * creditCosts.photo);
     this.photoBusy = false;
-    if (photos.length) this.photoSendsUsed++;
     this.photos = photos;
     this.invalidate();
-    await this.recognize(true);
+    try {
+      await this.recognize(true);
+      if (!this.proposal || ticket.generation !== this.generation)
+        this.credits.cancel(ticket.creditId);
+      else if (!deferCredits) this.settleCredits(ticket.creditId);
+    } catch (error) {
+      this.credits.cancel(ticket.creditId);
+      throw error;
+    }
   }
   cancelPhotos() {
     this.photoBusy = false;

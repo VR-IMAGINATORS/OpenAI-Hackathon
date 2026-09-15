@@ -7,7 +7,8 @@ import type { PublicGameState, PlayUpdate } from '../../../packages/shared/game.
 import { LiveConnection, type VoiceState } from './live.js';
 import { preparePhoto, type PreparedPhoto } from './photo.js';
 import { PlayApiError, playRequest, clientId, controlHeaders, setApiLocale } from './play-api.js';
-import GameStatusSummary, { GameResourceCounters } from './GameStatusSummary.js';
+import GameStatusSummary, { GameResourceCounters, GameCreditNotice } from './GameStatusSummary.js';
+import { creditCosts } from '../../../packages/shared/credits.js';
 import { discardWarning } from './live-command-delivery.js';
 
 const voiceLabels: Record<VoiceState, string> = {
@@ -260,12 +261,7 @@ export default function PlayScreen({
     )
       return;
     if (next.automaticActions && next.actionsUsed > previous.actionsUsed) setPhotos([]);
-    if (
-      next.id === previous.id &&
-      (next.inputRevision < previous.inputRevision ||
-        next.photoSendsRemaining > previous.photoSendsRemaining)
-    )
-      return;
+    if (next.id === previous.id && next.inputRevision < previous.inputRevision) return;
     if (next.id === previous.id)
       next = {
         ...next,
@@ -495,8 +491,14 @@ export default function PlayScreen({
       setBusy(false);
     }
   }
-  async function sendPhotos(next: PreparedPhoto[], requestId: string = crypto.randomUUID()) {
+  async function sendPhotos(next: PreparedPhoto[], retryRequestId?: string) {
     if (locked.current) return;
+    // A same-ID retry may already have reserved its credits on the server.
+    if (!retryRequestId && current.current.creditsRemaining < next.length * creditCosts.photo) {
+      setError(t('写真を送るクレジットが足りません。', 'Not enough credits to send these photos.'));
+      return;
+    }
+    const requestId = retryRequestId ?? crypto.randomUUID();
     locked.current = true;
     setBusy(true);
     setError('');
@@ -515,7 +517,7 @@ export default function PlayScreen({
       setUncertainAction(null);
     } catch (error) {
       setRetryPhotos(
-        error instanceof PlayApiError && error.code === 'PHOTO_SEND_LIMIT'
+        error instanceof PlayApiError && error.code === 'INSUFFICIENT_CREDITS'
           ? null
           : {
               photos: next,
@@ -532,7 +534,13 @@ export default function PlayScreen({
     }
   }
   async function choosePhoto(file?: File) {
-    if (!file || locked.current || current.current.photoSendsRemaining <= 0) return;
+    if (
+      !file ||
+      locked.current ||
+      photos.length >= current.current.maxPhotos ||
+      current.current.creditsRemaining < (photos.length + 1) * creditCosts.photo
+    )
+      return;
     locked.current = true;
     setBusy(true);
     setError('');
@@ -608,6 +616,8 @@ export default function PlayScreen({
     }
   }
   const ended = terminal(state) || invalid;
+  const nextPhotoCost = (photos.length + 1) * creditCosts.photo;
+  const canAffordNextPhoto = state.creditsRemaining >= nextPhotoCost;
   const canExecute =
     pendingInput === 0 &&
     !lostInput &&
@@ -623,7 +633,7 @@ export default function PlayScreen({
 
   if (state.automaticActions) {
     const cameraDisabled =
-      state.photoSendsRemaining <= 0 ||
+      !canAffordNextPhoto ||
       voice !== 'connected' ||
       busy ||
       state.busy ||
@@ -763,17 +773,18 @@ export default function PlayScreen({
             <GameResourceCounters
               key={playId}
               remainingMs={state.remainingMs}
-              photoSendsRemaining={state.photoSendsRemaining}
+              creditsRemaining={state.creditsRemaining}
+              initialCredits={state.initialCredits}
               locale={locale}
             />
           )}
-          {!ended && state.photoSendsRemaining === 0 && (
-            <p className="messenger-notice" role="status">
-              {t(
-                '送信回数を使い切りました。届いた道具を使って、声で指示を続けてください。',
-                'No photo sends left. Keep giving voice instructions using the tools already sent.',
-              )}
-            </p>
+          {!ended && (
+            <GameCreditNotice
+              creditsRemaining={state.creditsRemaining}
+              initialCredits={state.initialCredits}
+              lastCreditCharge={state.lastCreditCharge}
+              locale={locale}
+            />
           )}
           {state.paused && !ended && (
             <p className="messenger-notice" role="status">
@@ -816,6 +827,9 @@ export default function PlayScreen({
                   <img src={draftPhoto.preview} alt={t('送信前の写真', 'Photo to send')} />
                   <div>
                     <h2>{t('この写真を送りますか？', 'Send this photo?')}</h2>
+                    <p className="photo-credit-cost">
+                      {t('消費クレジット', 'Credit cost')}: {nextPhotoCost}
+                    </p>
                     <button onClick={() => setDraftPhoto(null)}>
                       {t('撮り直す・取り消す', 'Retake / cancel')}
                     </button>
@@ -886,7 +900,7 @@ export default function PlayScreen({
                   className="messenger-icon messenger-send"
                   aria-label={t('この写真を送信', 'Send photo')}
                   disabled={
-                    state.photoSendsRemaining <= 0 ||
+                    !canAffordNextPhoto ||
                     !draftPhoto ||
                     busy ||
                     state.busy ||
@@ -947,11 +961,8 @@ export default function PlayScreen({
             <strong>{time(state.remainingMs)}</strong>
           </div>
           <div>
-            <span>{t('残り送信回数', 'Photo sends left')}</span>
-            <strong>
-              {state.photoSendsRemaining}
-              <small>{t(' 回', '')}</small>
-            </strong>
+            <span>{t('残りクレジット', 'Credits left')}</span>
+            <strong>{state.creditsRemaining.toLocaleString(locale)}</strong>
           </div>
           <div>
             <span>{t('障害', 'Obstacle')}</span>
@@ -961,6 +972,14 @@ export default function PlayScreen({
             </strong>
           </div>
         </div>
+      )}
+      {!ended && (
+        <GameCreditNotice
+          creditsRemaining={state.creditsRemaining}
+          initialCredits={state.initialCredits}
+          lastCreditCharge={state.lastCreditCharge}
+          locale={locale}
+        />
       )}
       {!state.automaticActions && !ended && (
         <figure className="opening-scene">
@@ -1129,8 +1148,8 @@ export default function PlayScreen({
                   <strong>{t('声で返事をする', 'Answer by voice')}</strong>
                   <span>
                     {t(
-                      '相手の状況を聞こう。質問しても行動は減りません。',
-                      'Listen to the situation. Questions do not use actions.',
+                      '相手の状況を聞こう。導入中の会話は無料です。',
+                      'Listen to the situation. Conversation during the introduction is free.',
                     )}
                   </span>
                 </li>
@@ -1213,7 +1232,12 @@ export default function PlayScreen({
                     />
                     <button
                       aria-label={t('写真 ', 'Remove photo ') + (index + 1) + t(' を取り消す', '')}
-                      disabled={busy || state.busy || !!uncertainAction}
+                      disabled={
+                        busy ||
+                        state.busy ||
+                        !!uncertainAction ||
+                        state.creditsRemaining < (photos.length - 1) * creditCosts.photo
+                      }
                       onClick={() => void sendPhotos(photos.filter((_, i) => i !== index))}
                     >
                       ×
@@ -1258,6 +1282,7 @@ export default function PlayScreen({
               <button
                 className="file-choice"
                 disabled={
+                  !canAffordNextPhoto ||
                   voice !== 'connected' ||
                   busy ||
                   state.busy ||
@@ -1302,9 +1327,12 @@ export default function PlayScreen({
         <section className="photo-preview" aria-label={t('送信前の写真確認', 'Photo preview')}>
           <h2>{t('この写真を送りますか？', 'Send this photo?')}</h2>
           <img src={draftPhoto.preview} alt={t('送信前の写真', 'Photo to send')} />
+          <p className="photo-credit-cost">
+            {t('消費クレジット', 'Credit cost')}: {nextPhotoCost}
+          </p>
           <button
             className="primary-button"
-            disabled={busy || state.busy || state.photoSendsRemaining <= 0}
+            disabled={busy || state.busy || !canAffordNextPhoto}
             onClick={() => {
               const next = [...photos, draftPhoto].slice(0, state.maxPhotos);
               setDraftPhoto(null);
@@ -1353,7 +1381,7 @@ export default function PlayScreen({
           <button
             className="photo-button"
             disabled={
-              state.photoSendsRemaining <= 0 ||
+              !canAffordNextPhoto ||
               voice !== 'connected' ||
               busy ||
               state.busy ||
@@ -1381,14 +1409,6 @@ export default function PlayScreen({
         </div>
       )}
       <footer className="play-footer">
-        {!ended && state.photoSendsRemaining === 0 && (
-          <p role="status">
-            {t(
-              '送信回数を使い切りました。届いた道具を使って続けてください。',
-              'No photo sends left. Continue using the tools already sent.',
-            )}
-          </p>
-        )}
         <p>
           {t('写真と声でつながる、未来への通信', 'A call to the future, through photos and voice')}
         </p>

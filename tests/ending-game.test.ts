@@ -6,7 +6,7 @@ import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 import type { CoreJudgment, GameAI } from '../apps/local-server/game-ai.js';
 
-function fixture(core: boolean, maxPhotoSends = 4, judgment?: GameAI['judge']) {
+function fixture(core: boolean, photoBudget = 4, judgment?: GameAI['judge']) {
   let now = 0;
   let success = true;
   let calls = 0;
@@ -16,7 +16,7 @@ function fixture(core: boolean, maxPhotoSends = 4, judgment?: GameAI['judge']) {
       coreConfigPath: 'config/game-core.json',
     }).current('ja'),
   );
-  snapshot.scenarioV2.rules.maxPhotoSends = maxPhotoSends;
+  snapshot.scenarioV2.rules.initialCredits = photoBudget * 100 + 100;
   const scenario = localizeScenario(snapshot.scenarioV2, 'ja');
   const endingStates: unknown[] = [];
   const game = new GameSession(
@@ -118,7 +118,7 @@ for (const core of [true, false]) {
       );
     });
   }
-  test(`${path}: last send permits progress; later timeout preserves second clearance`, async () => {
+  test(`${path}: paid photos permit progress; later timeout preserves second clearance`, async () => {
     const f = fixture(core, 3);
     f.setSuccess(false);
     await f.act();
@@ -129,7 +129,7 @@ for (const core of [true, false]) {
     assert.deepEqual(await repeat(), result);
     assert.equal(f.calls(), 3);
     assert.equal(f.game.state().status, 'playing');
-    assert.equal(f.game.state().photoSendsRemaining, 0);
+    assert.equal(f.game.state().creditsRemaining, 100);
     f.advance(1_000_000);
     assert.equal(f.game.state().endingOutcome, 'normal');
     assert.equal(f.game.endReason, 'time_limit');

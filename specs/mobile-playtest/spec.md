@@ -1,6 +1,6 @@
 # モバイル音声・写真プレイテスト
 
-2026-09-14追記: 開始画面と難易度は [difficulty-selection/spec.md](../difficulty-selection/spec.md)、時間・写真送信上限・0回後の道具再利用は [photo-send-limit/spec.md](../photo-send-limit/spec.md) を参照。以下の行動回数上限に関する記述は後者で置き換える。
+2026-09-15追記: 開始画面は [difficulty-selection/spec.md](../difficulty-selection/spec.md)、難易度名・写真と会話の消費・残高0の終了は [game-credits/spec.md](../game-credits/spec.md) を参照。以下の行動回数上限と旧写真送信上限はクレジットで置き換える。
 
 Status: approved (2026-09-12)
 

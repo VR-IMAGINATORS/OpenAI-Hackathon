@@ -79,7 +79,7 @@ test('late evidence is restricted to pre-ending audio, the same generation and t
   assert.equal(ledger.snapshot().records.length, 1);
 });
 
-async function runtimeFixture(t: TestContext, core = true, maxPhotoSends = 3) {
+async function runtimeFixture(t: TestContext, core = true, photoBudget = 3) {
   let now = 1000;
   let judgmentCount = 0;
   const config = loadAiConfig({ AI_MODE: 'mock' });
@@ -89,7 +89,7 @@ async function runtimeFixture(t: TestContext, core = true, maxPhotoSends = 3) {
       coreConfigPath: 'config/game-core.json',
     }).current('ja'),
   );
-  snapshot.scenarioV2.rules.maxPhotoSends = maxPhotoSends;
+  snapshot.scenarioV2.rules.initialCredits = photoBudget * 100 + 100;
   const response = (value: unknown) => ({
     output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
   });

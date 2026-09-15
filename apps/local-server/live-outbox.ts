@@ -34,6 +34,7 @@ export class LiveOutbox {
     generation = 1,
     controllerEpoch = 0,
     private wallNow: () => number = Date.now,
+    private limits = { maxCommands: MAX_COMMANDS, maxBytes: MAX_BYTES },
   ) {
     this.validateConnection(generation, controllerEpoch);
     this.generation = generation;
@@ -79,7 +80,10 @@ export class LiveOutbox {
       return { ...previous };
     }
     const size = Buffer.byteLength(JSON.stringify(parsed.data), 'utf8');
-    if (this.commands.length >= MAX_COMMANDS || this.bytes + size > MAX_BYTES) {
+    if (
+      this.commands.length >= this.limits.maxCommands ||
+      this.bytes + size > this.limits.maxBytes
+    ) {
       throw new LiveOutboxError(409, 'LIVE_OUTBOX_FULL');
     }
     const entry: CoreLiveCommand = {

@@ -1,5 +1,7 @@
 # 写真送信回数の制限
 
+2026-09-15: 以下の回数制限・終了条件は [AI利用クレジット](../game-credits/spec.md) で置換。過去の合意記録として残す。
+
 Status: user-requested (2026-09-14)
 
 ユーザーは「行動回数ではなく送れる回数を制限、HELLは2回」を決定。difficulty-selectionとgame-core/story-integrationの行動上限・終了条件を本仕様で更新する。

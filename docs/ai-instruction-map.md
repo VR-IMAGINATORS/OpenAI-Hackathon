@@ -60,8 +60,8 @@ flowchart TD
 
 ### 確認できた事実
 
-1. Liveの初期状態にphotoSendsRemainingとremainingMsを渡している（live.ts）。分類AIにも公開状態として残り写真送信回数が渡る（hosted-runtime.ts / publicContext）。
-2. Liveの指示には「実行可否・成否・写真送信回数はサーバーが判断する」、残り0回で「もう新しい道具は送れない。届いた道具でなんとかしよう」と話す指示がある。回数0の案内は明示的な仕様。
+1. Liveの初期状態にcreditsRemainingとremainingMsを渡している（live.ts）。分類AIにも公開状態として残りクレジットが渡る（hosted-runtime.ts / publicContext）。
+2. 会話20・写真100/枚とサーバー確定の残高を渡す。100未満なら写真を要求せず手持ちで工夫する。0でも受理済み処理中は終了を宣言せず、確定通知に従う。警告は「ご利用可能クレジットが残りわずかです」、枯渇は「クレジットを使い切りました。」。
 3. warnings.milestonesの通常警告は「おっと、残り時間が少なくなってきた。」。最終警告は「あっ、まずい！ もう時間がない！」等の切替表現。残されたtimeWarningは旧形式互換用で、v2の警告設定はwarningsが正本。
 4. 分類AIのconsult.answerは、そのまま発話用通知へ回る。「短いユーザー向け回答」とは指示するが、世界内の言葉に置き換える表現規則は十分に定義されていない。
 5. 行動判定AIには「脱出ゲームの裏方」「現在障害のgoal」「factChanges」など内部の概念を与え、同じ出力でユーザー向けnarrative/situationも書かせている。

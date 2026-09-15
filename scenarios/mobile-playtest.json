@@ -14,7 +14,7 @@
     "en": "Your future self is calling for help. Photograph everyday objects and describe your idea to open a path to escape."
   },
   "rules": {
-    "maxPhotoSends": 4,
+    "initialCredits": 1000,
     "maxPhotosPerSend": 2,
     "totalTimeSeconds": 300
   },

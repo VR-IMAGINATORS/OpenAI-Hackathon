@@ -158,7 +158,7 @@ export class ScenarioCatalog {
           rules: {
             ...scenarioV2.rules,
             totalTimeSeconds: preset.totalTimeSeconds,
-            maxPhotoSends: preset.maxPhotoSends,
+            initialCredits: preset.initialCredits,
           },
         });
         this.validateBudgets(scenarioV2.rules);

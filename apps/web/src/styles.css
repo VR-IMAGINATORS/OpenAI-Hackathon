@@ -1810,6 +1810,12 @@ h1 span {
 .messenger-resource .messenger-resource-label {
   font-size: 12px;
 }
+.messenger-credit-count {
+  flex-wrap: wrap;
+}
+.messenger-credit-count strong {
+  margin-left: auto;
+}
 .messenger-resource strong {
   display: flex;
   align-items: center;
@@ -1855,6 +1861,30 @@ h1 span {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+.game-credit-notice {
+  margin-bottom: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.game-credit-rates {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 12px;
+  color: #91a6ae;
+}
+.game-credit-charge {
+  color: #c4ebdf;
+}
+.game-credit-warning {
+  margin: 4px 0 0;
+  color: #ffc578;
+}
+.photo-credit-cost {
+  margin: 4px 0;
+  color: #91a6ae;
+  font-size: 12px;
 }
 @media (prefers-reduced-motion: reduce) {
   .clock-warning-pulse {

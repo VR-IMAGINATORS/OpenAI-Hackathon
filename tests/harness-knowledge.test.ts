@@ -164,7 +164,7 @@ test('consult selection sends only eligible cues and rebuilds answer after autho
   const state = {
     obstacle: { title: 'goal' },
     inventory: [],
-    photoSendsRemaining: 2,
+    creditsRemaining: 2,
     remainingMs: 120000,
   } as unknown as PublicGameState;
   const seen: string[] = [];
@@ -428,7 +428,7 @@ test('initial and reconnect Live payloads exclude hidden scenario and raw judgme
     lastResult: { narrative: secret },
     inventory: [{ id: 'tool', name: 'scissors', status: 'available', description: secret }],
     remainingMs: 120000,
-    photoSendsRemaining: 2,
+    creditsRemaining: 2,
   } as unknown as PublicGameState;
   for (const status of ['briefing', 'playing'] as const) {
     const state = { ...baseState, status };

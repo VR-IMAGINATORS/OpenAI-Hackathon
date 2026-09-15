@@ -123,7 +123,7 @@ test('all candidates compile in master order with isolated progress facts, compl
     assert.equal(scenario.setting.location, scene.description.ja);
     assert.equal(scenario.core.characterAppearance, scene.anchor.ja);
     assert.deepEqual(scenario.rules, {
-      maxPhotoSends: 4,
+      initialCredits: 1000,
       maxPhotosPerSend: 2,
       totalTimeSeconds: 300,
     });
@@ -195,7 +195,7 @@ test('catalog rejects bad references, stage order, properties, photos and typos 
       c.gimmicks[0]!.referenceSolutions[0]!.photoCount = 2;
     },
     (c) => {
-      c.rules.maxPhotoSends = 0;
+      c.rules.initialCredits = 0;
     },
     (c) => {
       c.story.world.en = '';

@@ -10,7 +10,7 @@ Web版の既定は `scenarios/story-catalog.json`（version 3）。モック版�
 | -------------------------- | --------------------------------------------------------- |
 | `title` / `playerBriefing` | 開始前に公開する共通の概要（日英）                        |
 | `rules.totalTimeSeconds`   | 制限時間。既定300秒。難易度を調整するときの共通設定箇所   |
-| `rules.maxPhotoSends`       | 写真を送れる回数。1以上。障害数より少なくても道具の再利用で続行できる |
+| `rules.initialCredits`     | 初期クレジット。既定1000。20以上100000以下の20の倍数 |
 | `rules.maxPhotosPerSend`    | 1回の送信にまとめられる写真の上限。既定2枚 |
 | `story`                    | AIの名前、世界観、序盤・中盤・終盤の展開方針              |
 | `scenes`                   | 舞台、謎、最初の手掛かり、採用できるギミック順            |
@@ -37,13 +37,13 @@ Web版の既定は `scenarios/story-catalog.json`（version 3）。モック版�
 
 ゲームの時間は `rules.totalTimeSeconds` で管理する。環境変数 `PLAY_TTL_SECONDS` は接続開始からのプレイ枠の寿命で、別の設定。接続待ち（`RECOVERY_GRACE_SECONDS`）、ゲーム待機枠60秒、終了処理12秒を含めて収まる必要がある。
 
-既定のプレイ枠600秒・接続待ち60秒では、ゲーム時間は最大468秒。枠に収まらない設定は起動時・新規開始時に拒否する。進行中の時計を途中で短縮しない。環境変数の変更にはサーバー再起動が必要。開始画面では Normal（300秒・4回送信）、Hard（240秒・3回送信）、HELL（180秒・2回送信）を選べる。難易度指定時は `packages/shared/difficulty.ts` のプリセットを適用し、未指定APIではシナリオ設定を使う。
+既定のプレイ枠600秒・接続待ち60秒では、ゲーム時間は最大468秒。枠に収まらない設定は起動時・新規開始時に拒否する。進行中の時計を途中で短縮しない。環境変数の変更にはサーバー再起動が必要。開始画面ではスタンダードProプラン（300秒・1000）、ハードPlusプラン（240秒・700）、ヘル無料プラン（180秒・400）を選べる。難易度指定時は `packages/shared/difficulty.ts` のプリセットを適用し、未指定APIではシナリオ設定を使う。
 
-有効な写真をサーバーが受け取った送信1回につき1回分を使う。まとめて2枚送っても1回分。送信0回になっても終了せず、時間内は届いた道具を音声で使い回せる。使用済みで消失した道具の再利用は不可。撮影・プレビュー・相談・行動では送信数を減らさない。AI認識の失敗でも受信済み写真は1回分となり、声で再認識できる。同じ送信IDでの通信再試行は重複消費しない。
+会話1往復20、写真は1枚100（2枚200）。写真の説明・自動行動は写真費用に含む。手持ちの再利用は音声指示20だけで、新しい写真は不要。撮影・プレビュー・自動の状況説明・生成画像・動画・誤認の訂正は無料。処理前に予約し、AI失敗時は返却、同じ要求の再送は追加消費しない。残高0は受理済みの最後の応答・行動を確定後に終了し、その行動で脱出できた場合は勝利を優先する。運用API予算はゲーム内クレジットとは別に維持する。
 
 ## 既存シナリオとの互換性
 
-旧 `rules.maxActions` を `rules.maxPhotoSends`、`rules.maxPhotosPerAction` を `rules.maxPhotosPerSend` に移行する。意味も行動上限から送信上限へ変わるため、旧キーは検証で拒否する。標準JSONは移行済み。公開状態も `actionsRemaining` から `photoSendsRemaining` へ変更し、確定行動数は `actionsUsed` として別に保持する。詳細は [写真送信回数の制限](../specs/photo-send-limit/spec.md)。
+旧 `rules.maxPhotoSends` / `rules.maxActions` は廃止し `rules.initialCredits` に移行する。1送信あたりの枚数上限 `rules.maxPhotosPerSend` は維持。旧キーは検証で拒否し、標準JSONは移行済み。公開状態の残量は `creditsRemaining`、初期値は `initialCredits`。確定行動数は `actionsUsed` として別に保持する。詳細は [AI利用クレジット](../specs/game-credits/spec.md)。
 
 旧Web版は `.env.local` の `SCENARIO_PATH=scenarios/mobile-playtest.json` で明示的に選べる（version 2）。設定を省略すると6舞台になる。`npm run play:mobile` もこの指定に従う。`scenarios/default.json`（version 1）は構成の参考資料で、統合サーバーの実行対象ではない。
 

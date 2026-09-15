@@ -4,6 +4,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
+const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.now()}`;
 const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -15,7 +16,9 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
-        name: english ? 'Normal 5 min · 4 sends' : 'ノーマル 5分 · 4回送信',
+        name: english
+          ? 'Standard Pro Plan 5 min · 1,000 credits'
+          : 'スタンダードProプラン 5分 · 1,000クレジット',
         exact: true,
       });
       const answer = page.getByRole('button', {
@@ -148,7 +151,9 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         '未来の私は、研究室に閉じ込められている。身近な道具の写真と、あなたの声を届けてほしい。',
       obstacle: { title: '動かない扉', index: 0, count: 3 },
       situation: 'ドアノブが外れ、扉を引くことができない。代わりにつかめるものはないだろうか。',
-      photoSendsRemaining: 4,
+      creditsRemaining: 1000,
+      initialCredits: 1000,
+      lastCreditCharge: null,
       actionsUsed: 0,
       remainingMs: 300000,
       waitingRemainingMs: 60000,
@@ -284,7 +289,14 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         }
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
-        if (body.images.length) state.photoSendsRemaining--;
+        if (body.images.length) {
+          state.creditsRemaining -= body.images.length * 100;
+          state.lastCreditCharge = {
+            sequence: (state.lastCreditCharge?.sequence ?? 0) + 1,
+            kind: 'photo',
+            amount: body.images.length * 100,
+          };
+        }
         state.inputRevision++;
         state.proposal = {
           revision: 1,
@@ -360,8 +372,10 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
       return respond(route, { ...envelope(), commands: [] });
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
-    await page.getByRole('button', { name: 'Normal 5 min · 4 sends', exact: true }).waitFor();
-    fs.mkdirSync('artifacts', { recursive: true });
+    await page
+      .getByRole('button', { name: 'Standard Pro Plan 5 min · 1,000 credits', exact: true })
+      .waitFor();
+    fs.mkdirSync(artifactDir, { recursive: true });
     for (const locale of ['en', 'ja']) {
       await page.getByRole('combobox').selectOption(locale);
       for (const size of [
@@ -388,7 +402,10 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         );
       }
       await page.setViewportSize({ width: 390, height: 664 });
-      await page.screenshot({ path: `artifacts/join-difficulty-${locale}.png`, fullPage: true });
+      await page.screenshot({
+        path: `${artifactDir}/join-difficulty-${locale}.png`,
+        fullPage: true,
+      });
       for (const button of await page.locator('.difficulty-card').all()) {
         const popup = page.waitForEvent('dialog');
         const click = button.click();
@@ -411,7 +428,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     }
     await page.getByRole('combobox').selectOption('ja');
     await page.getByLabel('参加の合言葉').fill('wrong');
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信' }).click();
+    await page.getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット' }).click();
     await page.getByRole('alert').filter({ hasText: '合言葉が違います' }).waitFor();
     assert.equal(await page.locator('video').count(), 0);
     await page.getByLabel('参加の合言葉').fill('demo');
@@ -433,7 +450,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     assert.equal(createIds.length, 0);
     assert.equal(liveIds.length, 0);
     assert.equal(await page.evaluate(() => window.__micCalls || 0), 0);
-    await page.screenshot({ path: 'artifacts/incoming-call-mobile.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/incoming-call-mobile.png`, fullPage: true });
     await page.getByRole('button', { name: '応答する', exact: true }).click();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
     assert.equal(createIds.length, 1);
@@ -446,7 +463,9 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     await page.reload();
     await page.getByRole('combobox').selectOption('ja');
     await page.evaluate(() => (window.__blockMedia = true));
-    await page.getByRole('button', { name: 'ノーマル 5分 · 4回送信', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット', exact: true })
+      .click();
     await page.getByRole('button', { name: '動画を再生', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.getByRole('button', { name: '着信音を再生', exact: true }).waitFor();
@@ -460,7 +479,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
       false,
     );
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.screenshot({ path: 'artifacts/incoming-call-desktop.png', fullPage: true });
+    await page.screenshot({ path: `${artifactDir}/incoming-call-desktop.png`, fullPage: true });
     console.log(
       'PASS entry/opening: responsive difficulty selection in Japanese/English, empty-passphrase popup/focus, invalid auth, selected difficulty request, actual MP4 metadata, ended/Skip, ringtone lifecycle, no mic/game/AI before Answer, autoplay fallback. Voice provider and media playback mocked.',
     );
