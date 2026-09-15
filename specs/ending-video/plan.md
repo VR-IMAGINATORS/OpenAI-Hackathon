@@ -44,6 +44,7 @@ flowchart LR
 - 演出AIの失敗時は`ending-fallback.ts`で確定結果から簡潔な余韻の演出を構成する。公開済みの文章・タグを作り直さず、行動再演や未提示の伏線を要求しない。画像生成・検査は通常の経路を通す。演出の代替処理と再試行は`ending_recovery`へ記録する。
 - 映像に採用する行動は原則直近最大2件。序盤の伏線は物語の入力に残す。行動前の見た目の根拠が足りなければ行動後の反応から描く。
   - 2026-09-15補足: `hosted-runtime.ts` の `presentScene` で画像のgameVersionと一致する確定行動を複製し、`app.ts` → `SceneInput.action` へ渡す。`image-service.ts` は用途・道具・対象の前後factsを公開済みの範囲で生成と検査へ渡す。`ending-ai.ts` は既存の再演可否と直近2件の範囲を維持し、行動前参照がある道具による成功を `preferredActionIds` として渡す。`ending-image-service.ts` は選択行動を両フレームの生成・検査へ引き継ぐ。既存履歴を接続する修正で、公開API・DB・追加AI呼出しは不要。
+  - 2026-09-15複数場面の補足: `ending-ai.ts` で最初の行動前参照と道具による成功を持つ直近2件を `preferredSequenceActionIds` として時系列で渡し、接続案を先に検討する。`preferredActionIds` は1行動へ絞る際の順位に使う。1回の演出生成の中で、行動別ショット→結末、カット時刻、道具の連続性、両端画像の構図を具体化する。2画像・15秒・768P・balanced・4,096出力tokens・画像待機条件は維持する。比較・遅延見積・検証は[multi-scene-investigation.md](multi-scene-investigation.md)を参照。
 
 ## P3: fal transportと有限ジョブ
 

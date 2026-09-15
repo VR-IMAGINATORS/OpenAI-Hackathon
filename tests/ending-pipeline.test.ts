@@ -435,27 +435,37 @@ test('ending writer receives early clues and every confirmed action, distinct pe
   assert.match(f.calls[0].body.instructions, /prefer mode=actions and include a preferred action/);
 });
 
-test('film prioritizes recent tool clears with references, retaining aftermath when replay is unsupported', async () => {
+test('film prefers a chronological pair with supported progress and keeps single-action and aftermath fallbacks', async () => {
   for (const variant of [
     'latest',
     'failed',
+    'all-failed',
     'environment',
     'missing-before',
+    'missing-first-before',
     'opening-only',
   ] as const) {
     const p = packet();
     p.actions[3].success = true;
     p.actions[3].cleared = true;
     if (variant === 'failed') p.actions[3].success = p.actions[3].cleared = false;
+    if (variant === 'all-failed')
+      for (const action of p.actions.slice(-2)) action.success = action.cleared = false;
     if (variant === 'environment') p.actions[3].items = [];
-    const refs = variant === 'missing-before' ? [before] : [before, { ...before, gameVersion: 3 }];
+    const latestBefore = { ...before, gameVersion: 3 };
+    const refs =
+      variant === 'missing-before'
+        ? [before]
+        : variant === 'missing-first-before'
+          ? [latestBefore]
+          : [before, latestBefore];
     const f = fakeAi(() => response(design({ mode: 'aftermath', usedActionIds: [] })));
     await createEndingDesign(
       f.ai,
       'job',
       p,
       variant === 'opening-only' ? { ...final, gameVersion: 0 } : final,
-      before,
+      refs[0],
       signal(),
       narrative(p),
       refs,
@@ -463,13 +473,30 @@ test('film prioritizes recent tool clears with references, retaining aftermath w
     const input = payloadOf(f.calls[0]);
     assert.deepEqual(
       input.preferredActionIds,
-      variant === 'opening-only'
+      variant === 'opening-only' || variant === 'all-failed'
         ? []
         : variant === 'latest'
           ? ['action-4', 'action-3']
-          : ['action-3'],
+          : variant === 'missing-first-before'
+            ? ['action-4']
+            : ['action-3'],
+    );
+    assert.deepEqual(
+      input.preferredSequenceActionIds,
+      ['opening-only', 'all-failed', 'missing-first-before'].includes(variant)
+        ? []
+        : ['action-3', 'action-4'],
+      'the pair follows chronology, includes a confirmed failure, and requires its opening reference',
     );
     assert.deepEqual(input.actions, p.actions, 'all confirmed attempts still reach the director');
+    parseEndingResponseRequest(f.calls[0].body);
+    assert.equal(f.calls.length, 1, 'sequence planning adds no AI call');
+    assert.equal(f.calls[0].body.max_output_tokens, 4096);
+    assert.equal(
+      f.calls[0].body.input[0].content.length,
+      3,
+      'reference images remain capped at two',
+    );
     if (variant === 'opening-only') assert.deepEqual(input.allowedModes, ['aftermath']);
   }
 });
@@ -578,6 +605,7 @@ test('missing or wrong before-action references force aftermath; no-action endin
   assert.deepEqual(input.actions, []);
   assert.deepEqual(input.recentActionIds, []);
   assert.deepEqual(input.preferredActionIds, []);
+  assert.deepEqual(input.preferredSequenceActionIds, []);
   assert.deepEqual(input.references, [
     { role: 'confirmed final state', messageId: final.messageId, gameVersion: 4 },
   ]);
