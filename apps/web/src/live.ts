@@ -1,11 +1,13 @@
 import type { PlayControl } from '../../../packages/shared/api.js';
 import { playRequest, retryUncertain, PlayApiError } from './play-api.js';
+import { VoiceActivityMonitor, type VoiceActivitySnapshot } from './voice-activity.js';
 export type VoiceState = 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 import type { LiveCommand } from '../../../packages/shared/game.js';
 interface LiveOptions {
   onState: (state: VoiceState) => void;
   onEvent: (event: Record<string, unknown>, generation: number) => void;
   onPlaybackBlocked: () => void;
+  onVoiceActivity?: (snapshot: VoiceActivitySnapshot) => void;
 }
 export class LiveConnection {
   generation = 0;
@@ -16,9 +18,14 @@ export class LiveConnection {
   private channel: RTCDataChannel | null = null;
   private audio = new Audio();
   private cancelled = false;
+  private activity: VoiceActivityMonitor | null = null;
   constructor(private options: LiveOptions) {
     this.audio.autoplay = true;
     this.audio.setAttribute('playsinline', '');
+    this.audio.addEventListener('playing', () => this.activity?.setPlaybackReady(true));
+    for (const event of ['pause', 'waiting', 'stalled', 'ended', 'error']) {
+      this.audio.addEventListener(event, () => this.activity?.setPlaybackReady(false));
+    }
   }
   private update(state: VoiceState) {
     this.state = state;
@@ -37,6 +44,11 @@ export class LiveConnection {
     }
     this.cancelled = false;
     this.update('connecting');
+    this.activity?.close();
+    const activity = (this.activity = new VoiceActivityMonitor((snapshot) =>
+      this.options.onVoiceActivity?.(snapshot),
+    ));
+    void activity.resume();
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
@@ -45,11 +57,18 @@ export class LiveConnection {
         this.stream.getTracks().forEach((track) => track.stop());
         return;
       }
+      activity.setInput(this.stream);
       const peer = (this.peer = new RTCPeerConnection());
       this.stream.getTracks().forEach((track) => peer.addTrack(track, this.stream!));
       peer.ontrack = (event) => {
-        this.audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
-        void this.audio.play().catch(() => this.options.onPlaybackBlocked());
+        if (this.cancelled || this.peer !== peer) return;
+        const remote = event.streams[0] ?? new MediaStream([event.track]);
+        this.audio.srcObject = remote;
+        activity.setOutput(remote);
+        void this.audio.play().catch(() => {
+          activity.setPlaybackReady(false);
+          this.options.onPlaybackBlocked();
+        });
       };
       peer.onconnectionstatechange = () => {
         if (this.cancelled) return;
@@ -130,6 +149,7 @@ export class LiveConnection {
       if (this.cancelled) return;
       this.pendingRequest = null;
       this.generation = answer.generation;
+      this.activity?.setGeneration(answer.generation);
       this.opening = answer.opening ?? null;
       await peer.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
       await new Promise<void>((resolve, reject) => {
@@ -166,7 +186,16 @@ export class LiveConnection {
     return true;
   }
   async resumeAudio() {
-    await this.audio.play();
+    const resume = this.activity?.resume();
+    try {
+      await this.audio.play();
+      this.activity?.setPlaybackReady(true);
+    } catch (error) {
+      this.activity?.setPlaybackReady(false);
+      this.options.onPlaybackBlocked();
+      throw error;
+    }
+    await resume;
   }
   close() {
     if (this.channel?.readyState === 'open')
@@ -176,6 +205,8 @@ export class LiveConnection {
     this.update('closed');
   }
   private release() {
+    this.activity?.close();
+    this.activity = null;
     this.channel?.close();
     this.peer?.close();
     this.stream?.getTracks().forEach((track) => track.stop());

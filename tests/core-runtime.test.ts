@@ -43,9 +43,11 @@ async function setup(
   recognizeGate?: Promise<void>,
   traceEnabled = false,
   judgeGate?: Promise<void>,
+  photoDecision?: (input: any) => unknown | Promise<unknown>,
+  judgeResponse?: (input: any, signal?: AbortSignal) => unknown | Promise<unknown>,
 ) {
   let now = 1000;
-  const calls = { classify: 0, judge: 0, recognize: 0 };
+  const calls = { classify: 0, judge: 0, recognize: 0, photo: 0, control: 0, reply: 0 };
   const config = loadAiConfig({ AI_MODE: 'mock' });
   const ai = new AiService(
     config,
@@ -57,17 +59,49 @@ async function setup(
         };
       },
       async hangup() {},
-      async createResponse(body) {
+      async createResponse(body, signal) {
         assert.equal((body as any).model, 'gpt-5.6-sol');
         assert.deepEqual((body as any).reasoning, { effort: 'low' });
         const parts = (body as any).input[0].content;
         const context = JSON.parse(parts.find((part: any) => part.type === 'input_text').text);
-        if (context.conversation) {
+        const schemaName = (body as any).text.format.name;
+        if (schemaName === 'harness_photo') {
+          calls.photo++;
+          return response(
+            photoDecision
+              ? await photoDecision(context)
+              : {
+                  decision: 'clarify',
+                  usage: '',
+                  itemRefs: [],
+                  message: '写真が届いたよ。これをどう使う？',
+                  reason: 'Mock photo has ambiguous intended use',
+                },
+          );
+        }
+        if (schemaName === 'harness_control') {
+          calls.control++;
+          return response({
+            decision: /切る場所を変えて/.test(context.userSpeech)
+              ? 'replace'
+              : /待って|止めて/.test(context.userSpeech)
+                ? 'cancel'
+                : 'keep',
+            replacement: /切る場所を変えて/.test(context.userSpeech) ? context.userSpeech : '',
+          });
+        }
+        if (schemaName === 'companion_reply') {
+          calls.reply++;
+          return response({ reply: context.result.narrative + '\n' + context.context.situation });
+        }
+        if (schemaName === 'knowledge_selection') return response({ ids: [] });
+        if (schemaName === 'core_intent') {
           calls.classify++;
           return response({ decision: await classify(context) });
         }
         if (context.proposal) {
           calls.judge++;
+          if (judgeResponse) return response(await judgeResponse(context, signal));
           await judgeGate;
           return response({
             success: false,
@@ -158,6 +192,14 @@ async function setup(
     scenes,
     feed: () => results.feed('test', playId),
     calls,
+    quiet: () =>
+      runtime.reportVoiceActivity({
+        generation: live.generation,
+        sequence: 1,
+        input: 'quiet',
+        output: 'quiet',
+        playbackReady: true,
+      }),
     generation: live.generation,
     photo,
     setNow: (value: number) => {
@@ -260,6 +302,8 @@ test('runtime accepts correction while classification is pending and discards th
     };
   });
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   await h.say('ロープを切って');
   // The delegation call must resolve without waiting for the classifier's promise.
   await h.delegate();
@@ -289,6 +333,8 @@ test('runtime consult consumes no action and a subsequent directive executes onc
         },
   );
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   await h.say('このハサミで切れるかな？');
   await h.delegate();
   await until(() =>
@@ -311,6 +357,8 @@ test('execution adds no server acknowledgement while judging and still delivers 
   const h = await setup(t, execute, undefined, false, gate.promise);
   t.after(() => gate.resolve());
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   const before = h.runtime.pollCommands(h.generation, 0).commands;
   const lastSeq = before.at(-1)?.seq ?? 0;
   const newCommands = () =>
@@ -332,7 +380,8 @@ test('execution adds no server acknowledgement while judging and still delivers 
   await until(() =>
     newCommands().some(
       (c) =>
-        c.type === 'session.commentary.append' && c.content.startsWith('ロープは切れなかった。'),
+        c.type === 'session.commentary.append' &&
+        c.content.startsWith(h.runtime.game.lastResult!.narrative),
     ),
   );
   await h.delegate(delegationId);
@@ -343,12 +392,12 @@ test('execution adds no server acknowledgement while judging and still delivers 
     newCommands()
       .filter((c) => c.type === 'session.commentary.append')
       .map((c) => c.content),
-    ['ロープは切れなかった。\n現在の状況: ' + h.runtime.game.situation],
+    [h.runtime.game.lastResult!.narrative + '\n' + h.runtime.game.situation],
   );
   assert.equal(newCommands().filter((c) => c.type === 'session.thinking.append').length, 0);
 });
 
-test('photo use question arrives only after recognition and an upload retry does not repeat it', async (t) => {
+test('ambiguous photo use question arrives only after recognition and an upload retry does not repeat it', async (t) => {
   const gate = deferred<void>();
   const h = await setup(t, () => ({ kind: 'wait', reason: 'まだ指示なし' }), gate.promise);
   const requestId = randomUUID();
@@ -357,6 +406,8 @@ test('photo use question arrives only after recognition and an upload retry does
   assert.equal(h.runtime.pollCommands(h.generation, 0).commands.length, 0);
   gate.resolve();
   await upload;
+  await until(() => h.calls.photo === 1);
+  await tick();
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
   assert.equal(
     commands.filter(
@@ -372,6 +423,8 @@ test('photo use question arrives only after recognition and an upload retry does
 test('terminal voice grace retains generation, rejects stale polls and closes at the deadline', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: '未完了' }));
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   h.runtime.game.end('won');
   assert.equal(h.runtime.state().generation, h.generation);
   assert.ok(h.runtime.pollCommands(h.generation, 0).commands.length);
@@ -396,6 +449,8 @@ test('terminal voice grace retains generation, rejects stale polls and closes at
 test('diagnostics distinguish missing delegation, wait and expiration without raw speech or photos', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: '未完了' }), undefined, true);
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   await h.say('ハサミで切って');
   let trace = h.runtime.trace();
   assert.equal(trace.photoCount, 1);
@@ -427,20 +482,25 @@ test('diagnostics are absent when not enabled', async (t) => {
   assert.deepEqual(h.runtime.trace(), { entries: [] });
 });
 
-test('time warning uses game time once, includes instruction and survives reconnect without repetition', async (t) => {
+test('time warning waits for quiet, sends only commentary and survives reconnect without repetition', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
-  h.runtime.game.clock.remainingMs = 60000;
+  h.runtime.game.clock.remainingMs = 60001;
   h.runtime.tick();
   assert.equal(h.notices.length, 0);
-  h.setNow(1001);
+  h.setNow(1002);
+  h.runtime.tick();
+  assert.equal(h.notices.length, 0);
+  h.quiet();
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.ok(!commands.some((c) => c.type === 'session.instructions.append'));
   assert.ok(
-    commands.some((c) => c.type === 'session.instructions.append' && c.delegation_id === null),
-  );
-  assert.ok(
-    commands.some((c) => c.type === 'session.commentary.append' && c.content.includes('60秒')),
+    commands.some(
+      (c) =>
+        c.type === 'session.commentary.append' &&
+        c.content === h.snapshot.coreConfig.warnings.milestones[0]!.message.ja,
+    ),
   );
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
@@ -452,9 +512,10 @@ test('time warning uses game time once, includes instruction and survives reconn
 
 test('time warning respects pause, disabled setting, configured message and terminal state', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
-  const warning = h.snapshot.coreConfig.timeWarning!;
-  warning.thresholdSeconds = 30;
-  warning.message.ja = 'あと{thresholdSeconds}秒未満です';
+  const warning = h.snapshot.coreConfig.warnings;
+  warning.milestones[0]!.thresholdSeconds = 30;
+  warning.milestones[0]!.message.ja = 'あと{thresholdSeconds}秒未満です';
+  h.quiet();
   h.runtime.game.clock.remainingMs = 29999;
   h.runtime.game.clock.pause('test');
   h.setNow(2000);
@@ -489,6 +550,8 @@ test('consult speaks answer rather than classification reason and action speaks 
         };
   });
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   await h.say('今どういう状況？');
   await h.delegate();
   await until(() =>
@@ -510,8 +573,7 @@ test('consult speaks answer rather than classification reason and action speaks 
       .pollCommands(h.generation, 0)
       .commands.some(
         (c) =>
-          c.type === 'session.commentary.append' &&
-          c.content.includes('現在の状況: ' + h.runtime.game.situation),
+          c.type === 'session.commentary.append' && c.content.includes(h.runtime.game.situation),
       ),
   );
   assert.equal(h.scenes.length, 2);
@@ -521,6 +583,8 @@ test('consult speaks answer rather than classification reason and action speaks 
 test('runtime missing delegation requests recovery but never judges, then announces timeout', async (t) => {
   const h = await setup(t, execute);
   await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
   await h.say('切って');
   h.setNow(4001);
   h.runtime.tick();
@@ -535,4 +599,221 @@ test('runtime missing delegation requests recovery but never judges, then announ
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
   assert.equal(h.calls.judge, 0);
+});
+
+const obviousPhoto = (input: any) => ({
+  decision: 'execute',
+  usage: 'ハサミでロープを切って',
+  itemRefs: [{ photoId: input.photos[0] }],
+  message: 'やってみる。',
+  reason: '切る道具を求めているため',
+});
+
+test('obvious photo starts one action without a usage question or fabricated delegation', async (t) => {
+  const h = await setup(t, execute, undefined, false, undefined, obviousPhoto);
+  const requestId = randomUUID();
+  await h.runtime.photos(requestId, [h.photo]);
+  await until(() => h.runtime.state().actionsUsed === 1 && h.scenes.length === 2);
+  await h.runtime.photos(requestId, [h.photo]);
+  await tick();
+  assert.equal(h.calls.photo, 1);
+  assert.equal(h.calls.classify, 0);
+  assert.equal(h.calls.judge, 1);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+  const spoken = h.runtime
+    .pollCommands(h.generation, 0)
+    .commands.filter((c) => c.type === 'session.commentary.append');
+  assert.ok(spoken.length > 0);
+  assert.ok(spoken.every((c) => c.delegation_id === null));
+  assert.ok(spoken.every((c) => !c.content.includes('これをどう使う')));
+});
+
+for (const decision of ['confirm_risk', 'reject'] as const) {
+  test(`photo ${decision} reports its reason without executing or refunding the send`, async (t) => {
+    const h = await setup(t, execute, undefined, false, undefined, (input) => ({
+      ...obviousPhoto(input),
+      decision,
+      message:
+        decision === 'reject'
+          ? 'こちらでは道具にできそうにない。'
+          : '刃が折れるかもしれない。それでも試す？',
+    }));
+    await h.runtime.photos(randomUUID(), [h.photo]);
+    await until(() => h.calls.photo === 1);
+    await tick();
+    assert.equal(h.calls.judge, 0);
+    assert.equal(h.runtime.state().actionsUsed, 0);
+    assert.equal(h.runtime.state().photoSendsRemaining, 3);
+    assert.ok(
+      h.runtime
+        .pollCommands(h.generation, 0)
+        .commands.some((c) =>
+          c.content.includes(decision === 'reject' ? '道具にできそうにない' : '刃が折れる'),
+        ),
+    );
+    if (decision === 'reject') {
+      await h.say('それで切って');
+      await h.delegate();
+      await until(() => h.calls.classify === 1);
+      await tick();
+      assert.equal(h.calls.judge, 0);
+    }
+  });
+}
+
+test('speech cancels an automatic photo action before result and image commit', async (t) => {
+  const gate = deferred<void>();
+  const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto);
+  t.after(() => gate.resolve());
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.judge === 1);
+  await h.say('待って、止めて');
+  await until(() => h.calls.control === 1 && h.runtime.game.pendingActionId === null);
+  gate.resolve();
+  await tick();
+  await tick();
+  assert.equal(h.runtime.state().actionsUsed, 0);
+  assert.equal(h.runtime.game.gameVersion, 0);
+  assert.equal(h.scenes.length, 1);
+  assert.equal(h.runtime.state().photoSendsRemaining, 3);
+});
+
+test('same spoken instruction during automatic action remains one operation', async (t) => {
+  const gate = deferred<void>();
+  const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto);
+  t.after(() => gate.resolve());
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.judge === 1);
+  await h.say('ハサミでロープを切って');
+  await h.delegate();
+  await until(() => h.calls.control === 1);
+  gate.resolve();
+  await until(() => h.runtime.state().actionsUsed === 1 && h.scenes.length === 2);
+  await h.delegate();
+  await tick();
+  assert.equal(h.calls.judge, 1);
+  assert.equal(h.runtime.game.gameVersion, 1);
+});
+
+test('cooperative judgment abort releases normal lane for actual corrected speech delegation', async (t) => {
+  const contexts: any[] = [];
+  const usages: string[] = [];
+  let firstAborted = false;
+  const correction = '切る場所を変えて。手首から離れたロープの端を切って';
+  const h = await setup(
+    t,
+    (context) => {
+      contexts.push(context);
+      return { ...execute(context), usage: correction };
+    },
+    undefined,
+    false,
+    undefined,
+    obviousPhoto,
+    async (context, signal) => {
+      usages.push(context.proposal.usage);
+      if (usages.length === 1) {
+        assert.ok(signal, 'runtime must forward GameSession cancellation signal');
+        return new Promise((_, reject) => {
+          signal!.addEventListener(
+            'abort',
+            () => {
+              firstAborted = true;
+              reject(new Error('cooperative abort'));
+            },
+            { once: true },
+          );
+        });
+      }
+      assert.equal(firstAborted, true);
+      return {
+        success: false,
+        narrative: 'PRIVATE_RESULT',
+        situation: 'PRIVATE_RESULT',
+        shortReason: 'test',
+        inventoryChanges: [],
+        factChanges: [],
+      };
+    },
+  );
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.judge === 1);
+  await h.say(correction);
+  await until(() => firstAborted && h.runtime.game.pendingActionId === null);
+  assert.equal(h.runtime.game.gameVersion, 0);
+  assert.equal(h.scenes.length, 1);
+  // Live now delegates the real user's correction; no synthetic delegation is inserted.
+  const delegationId = randomUUID();
+  await h.delegate(delegationId);
+  await until(() => h.runtime.game.gameVersion === 1 && h.scenes.length === 2);
+  assert.equal(h.calls.judge, 2);
+  assert.equal(h.runtime.game.actionsUsed, 1);
+  assert.equal(h.runtime.game.committedActions.length, 1);
+  assert.equal(h.runtime.game.committedActions[0]!.usage, correction);
+  const captured = contexts.at(-1)!;
+  const evidence = new Set(captured.conversation.eligibleEvidenceSeq);
+  assert.ok(
+    captured.conversation.fragments.some(
+      (fragment: any) =>
+        evidence.has(fragment.serverSeq) &&
+        fragment.speaker === 'user' &&
+        fragment.delta === correction,
+    ),
+  );
+  const resultCommands = h.runtime
+    .pollCommands(h.generation, 0)
+    .commands.filter(
+      (command) =>
+        command.messageId === h.scenes[1].messageId && command.type === 'session.commentary.append',
+    );
+  assert.equal(resultCommands.length, 1);
+  assert.equal(resultCommands[0]!.delegation_id, delegationId);
+  assert.equal(h.runtime.game.photoSendsUsed, 1);
+});
+
+test('rejected photo stays rejected under pressure but new physical information permits reassessment without another send', async (t) => {
+  const inputs: any[] = [];
+  const rejection = '高温のままではこちらで扱えそうにない。';
+  const newInformation = '中身は常温の水です';
+  const h = await setup(t, execute, undefined, false, undefined, (input) => {
+    inputs.push(input);
+    if (inputs.length > 1) {
+      assert.equal(input.priorDecision.decision, 'reject');
+      assert.equal(input.priorDecision.message, rejection);
+      assert.equal(typeof input.userSpeech, 'string');
+      assert.ok(input.publicState.situation);
+    }
+    return input.userSpeech?.includes(newInformation)
+      ? obviousPhoto(input)
+      : {
+          ...obviousPhoto(input),
+          decision: 'reject',
+          message: rejection,
+          reason: '既知の物性のままでは扱えない',
+        };
+  });
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
+  const rejects = () =>
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.filter((command) => command.content === rejection).length;
+  assert.equal(rejects(), 1);
+
+  await h.say('いいからそのまま切って');
+  await h.delegate();
+  await until(() => h.calls.photo === 2 && rejects() === 2);
+  assert.equal(h.runtime.game.actionsUsed, 0);
+  assert.equal(h.calls.judge, 0);
+  assert.match(inputs[1].userSpeech, /いいからそのまま切って/);
+
+  await h.say(newInformation + '。赤く見えるだけで熱くないので、それを使って');
+  await h.delegate();
+  await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+  assert.equal(inputs.length, 3);
+  assert.match(inputs[2].userSpeech, /中身は常温の水です/);
+  assert.equal(h.calls.judge, 1);
+  assert.equal(h.runtime.game.photoSendsUsed, 1);
+  assert.equal(h.calls.recognize, 1);
 });

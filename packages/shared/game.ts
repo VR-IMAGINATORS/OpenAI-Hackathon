@@ -39,6 +39,9 @@ export interface InventoryItem {
   status: z.infer<typeof itemStatus>;
 }
 export interface Proposal extends RecognizedProposal {
+  /** Server-validated action metadata; recognition models do not assign authority. */
+  mode?: 'tool' | 'environment';
+  environmentTargetIds?: string[];
   revision: number;
   inputRevision: number;
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { warningPolicySchema } from './harness.js';
 
 export const localeSchema = z.enum(['ja', 'en']);
 export type Locale = z.infer<typeof localeSchema>;
@@ -30,9 +31,18 @@ const localeConversationSchema = z
       }
     }
   });
-export const coreConfigSchema = z
+const currentCoreConfigSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
+    acceptancePolicy: localizedTextSchema,
+    recovery: z
+      .object({
+        retrying: localizedTextSchema,
+        failed: localizedTextSchema,
+        cancelled: localizedTextSchema,
+      })
+      .strict(),
+    warnings: warningPolicySchema,
     conversation: z.object({ ja: localeConversationSchema, en: localeConversationSchema }).strict(),
     judgment: z.object({ physicality: text, ambiguity: text, partialProgress: text }).strict(),
     visualInspection: z.object({ majorContradictions: text }).strict(),
@@ -48,6 +58,50 @@ export const coreConfigSchema = z
     chatGroupingGapMs: z.number().int().min(0).max(10000),
   })
   .strict();
+const acceptancePolicy = {
+  ja: '身近な物の通常の物性と筋の通る工夫を認める。溶岩など日常から大きく離れた物は認めない。舞台の物理的制約と扱える主体を守り、特殊能力を加えない。',
+  en: 'Allow everyday objects and physically plausible creative uses. Reject extraordinary objects such as lava. Preserve world constraints and the companion’s capabilities; do not add special powers.',
+};
+const recovery = {
+  retrying: { ja: 'ごめん、もう一度確かめるね。', en: 'Sorry, let me check once more.' },
+  failed: {
+    ja: 'ごめん、今は確かめられなかった。もう一度どうしたいか教えて。',
+    en: 'Sorry, I could not check that just now. Tell me what you want to try again.',
+  },
+  cancelled: { ja: 'わかった、いったん止めるね。', en: 'All right, I will stop for now.' },
+};
+/** Explicit compatibility conversion. Unknown new-format fields still fail strict parsing. */
+export function normalizeCoreConfig(value: unknown): unknown {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    (value as { schemaVersion?: unknown }).schemaVersion !== 1
+  )
+    return value;
+  const legacy = value as Record<string, any>;
+  const warning = legacy.timeWarning;
+  return {
+    ...legacy,
+    schemaVersion: 2,
+    acceptancePolicy,
+    recovery,
+    warnings: {
+      enabled: warning?.enabled ?? false,
+      milestones: warning
+        ? [
+            {
+              id: 'legacy-warning',
+              kind: 'normal',
+              thresholdSeconds: warning.thresholdSeconds,
+              message: warning.message,
+              transitionMessage: warning.message,
+            },
+          ]
+        : [],
+    },
+  };
+}
+export const coreConfigSchema = z.preprocess(normalizeCoreConfig, currentCoreConfigSchema);
 export type CoreConfig = z.infer<typeof coreConfigSchema>;
 export function parseCoreConfig(value: unknown): CoreConfig {
   return coreConfigSchema.parse(value);

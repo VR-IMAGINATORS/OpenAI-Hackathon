@@ -52,6 +52,23 @@ test('core voice instructions execute once through HTTP and deliver final-genera
         assert.equal(value.store, false);
         const parts = value.input[0]!.content;
         const context: any = JSON.parse(parts.find((p) => p.type === 'input_text')!.text!);
+        const schemaName = (body as any).text.format.name;
+        const wrap = (value: unknown) => ({
+          output: [
+            { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] },
+          ],
+        });
+        if (schemaName === 'harness_photo')
+          return wrap({
+            decision: 'clarify',
+            usage: '',
+            itemRefs: [],
+            message: 'どう使う？',
+            reason: '用途が不明',
+          });
+        if (schemaName === 'companion_reply')
+          return wrap({ reply: context.result.narrative + ' ' + context.context.situation });
+        if (schemaName === 'knowledge_selection') return wrap({ ids: [] });
         const picture = parts.find((p) => p.type === 'input_image');
         assert.match(picture!.image_url!, /^data:image\/jpeg;base64,/);
         const metadata = await sharp(
@@ -226,7 +243,8 @@ test('core voice instructions execute once through HTTP and deliver final-genera
   assert.equal(batch.response.status, 200, batch.raw);
   assert.ok(batch.data.commands.some((c: any) => c.messageId));
   const replay = await request('/api/play/commands/poll', { generation, ackThrough: 0 });
-  assert.deepEqual(replay.data, batch.data);
+  assert.ok(replay.data.serverNow >= batch.data.serverNow);
+  assert.deepEqual({ ...replay.data, serverNow: 0 }, { ...batch.data, serverNow: 0 });
   assert.equal(
     (await request('/api/play/actions', { actionId: randomUUID(), proposalRevision: 0 })).data.error
       .code,

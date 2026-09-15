@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { actionOriginSchema } from './harness.js';
 import { itemStatus } from './game.js';
 
 const sequence = z.number().int().min(1);
@@ -66,10 +67,15 @@ export type ItemReference = z.infer<typeof itemReferenceSchema>;
 export const executeIntentSchema = z
   .object({
     kind: z.literal('execute'),
-    evidenceSeq,
+    evidenceSeq: z.array(sequence).max(10000),
+    origin: actionOriginSchema.optional(),
+    mode: z.enum(['tool', 'environment']).optional(),
+    environmentTargetIds: z
+      .array(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/))
+      .max(10)
+      .optional(),
     itemRefs: z
       .array(itemReferenceSchema)
-      .min(1)
       .max(40)
       .refine(
         (refs) =>
@@ -83,7 +89,62 @@ export const executeIntentSchema = z
     usage: z.string().min(1).max(1000),
     reason,
   })
+  .strict()
+  .superRefine((intent, ctx) => {
+    const mode = intent.mode ?? 'tool';
+    const targets = intent.environmentTargetIds ?? [];
+    if (mode === 'tool' && (!intent.itemRefs.length || targets.length))
+      ctx.addIssue({ code: 'custom', message: 'Tool action requires item references only' });
+    if (
+      mode === 'environment' &&
+      (intent.itemRefs.length || !targets.length || new Set(targets).size !== targets.length)
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Environment action requires unique targets and no tools',
+      });
+    if (
+      intent.origin?.kind === 'photo' &&
+      (mode !== 'tool' ||
+        !intent.itemRefs.some(
+          (ref) =>
+            'photoId' in ref &&
+            intent.origin!.kind === 'photo' &&
+            intent.origin!.photoIds.includes(ref.photoId),
+        ))
+    )
+      ctx.addIssue({ code: 'custom', message: 'Photo action must use an originating photo' });
+    if (intent.origin?.kind !== 'photo' && !intent.evidenceSeq.length)
+      ctx.addIssue({ code: 'custom', message: 'Speech evidence required' });
+    if (new Set(intent.evidenceSeq).size !== intent.evidenceSeq.length)
+      ctx.addIssue({ code: 'custom', message: 'Duplicate evidence' });
+  });
+export const riskProposalSchema = z
+  .object({
+    usage: z.string().min(1).max(1000),
+    itemRefs: executeIntentSchema.shape.itemRefs,
+    mode: executeIntentSchema.shape.mode,
+    environmentTargetIds: executeIntentSchema.shape.environmentTargetIds,
+    message: z.string().min(1).max(2000),
+  })
+  .strict()
+  .superRefine((proposal, ctx) => {
+    const mode = proposal.mode ?? 'tool';
+    const targets = proposal.environmentTargetIds ?? [];
+    if (
+      (mode === 'tool' && (!proposal.itemRefs.length || targets.length)) ||
+      (mode === 'environment' &&
+        (proposal.itemRefs.length || !targets.length || new Set(targets).size !== targets.length))
+    )
+      ctx.addIssue({ code: 'custom', message: 'Invalid risk action references' });
+  });
+export type RiskProposal = z.infer<typeof riskProposalSchema>;
+export const recognitionCorrectionSchema = z
+  .object({ photoId: uuid, name: z.string().trim().min(1).max(120) })
   .strict();
+export type RecognitionCorrection = z.infer<typeof recognitionCorrectionSchema>;
+
+// Photo receipt is a separate authority; empty speech evidence alone is never sufficient.
 export const intentDecisionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('wait'), reason }).strict(),
   z
@@ -92,6 +153,8 @@ export const intentDecisionSchema = z.discriminatedUnion('kind', [
       evidenceSeq,
       reason,
       answer: z.string().min(1).max(2000).optional(),
+      riskProposal: riskProposalSchema.nullable().optional(),
+      recognitionCorrection: recognitionCorrectionSchema.nullable().optional(),
     })
     .strict(),
   executeIntentSchema,
@@ -108,7 +171,7 @@ export const actionTicketSchema = z
     controllerEpoch: version,
     gameVersion: version,
     contextVersion: version,
-    evidenceSeq,
+    evidenceSeq: z.array(sequence).max(10000),
     intent: executeIntentSchema,
     status: z.enum(['pending', 'committed', 'failed', 'invalid']),
   })
@@ -189,6 +252,8 @@ export const liveOutboxEntrySchema = z
     commandType,
     content: z.string().max(2000),
     messageId: uuid.nullable(),
+    validUntil: z.number().nonnegative().optional(),
+    noticeKind: z.literal('time-warning').optional(),
   })
   .strict();
 export type LiveOutboxEntry = z.infer<typeof liveOutboxEntrySchema>;
@@ -202,6 +267,8 @@ export const liveCommandSchema = z
     delegation_id: z.string().max(200).nullable(),
     content: z.string().max(2000),
     messageId: uuid.nullable(),
+    validUntil: z.number().nonnegative().optional(),
+    noticeKind: z.literal('time-warning').optional(),
   })
   .strict();
 export type CoreLiveCommand = z.infer<typeof liveCommandSchema>;

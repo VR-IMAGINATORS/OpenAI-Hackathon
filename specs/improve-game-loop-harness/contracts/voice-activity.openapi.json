@@ -1,0 +1,53 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Harness voice activity additions (design)", "version": "0.1.0", "description": "Existing hosted API is retained. This contract adds advisory voice activity and expiring warning metadata; it does not grant game-state mutation."},
+  "paths": {
+    "/api/play/voice-activity": {
+      "post": {
+        "operationId": "reportVoiceActivity",
+        "security": [{"session": []}],
+        "parameters": [
+          {"name": "X-Play-Id", "in": "header", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "X-Client-Id", "in": "header", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "X-Control-Epoch", "in": "header", "required": true, "schema": {"type": "integer", "minimum": 0}}
+        ],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/VoiceActivity"}}}},
+        "responses": {
+          "202": {"description": "Latest activity accepted or older sequence ignored; no game state mutation"},
+          "400": {"description": "Invalid payload"},
+          "401": {"description": "Authentication required"},
+          "403": {"description": "Origin or ownership rejected"},
+          "409": {"description": "Stale generation or control ownership"},
+          "410": {"description": "Play ended or expired"},
+          "429": {"description": "Rate limited; coalesce updates, do not queue retries"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {"session": {"type": "apiKey", "in": "cookie", "name": "play_session"}},
+    "schemas": {
+      "VoiceActivity": {
+        "type": "object", "additionalProperties": false,
+        "required": ["generation", "sequence", "input", "output", "playbackReady"],
+        "properties": {
+          "generation": {"type": "integer", "minimum": 1},
+          "sequence": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+          "input": {"type": "string", "enum": ["active", "quiet", "unknown"]},
+          "output": {"type": "string", "enum": ["active", "quiet", "unknown"]},
+          "playbackReady": {"type": "boolean"}
+        }
+      },
+      "CommandBatchAdditions": {
+        "description": "Add serverNow to existing POST /api/play/commands/poll response. Existing command fields and sequence/ack semantics remain. Expired warnings are skipped but acknowledged by the browser.",
+        "type": "object", "required": ["serverNow"],
+        "properties": {"serverNow": {"type": "integer", "minimum": 0}}
+      },
+      "WarningCommandAdditions": {
+        "description": "Optional metadata on existing CoreLiveCommand for warnings only; remove metadata before sending to OpenAI. validUntil is server epoch milliseconds. Non-warning commands keep their existing retention.",
+        "type": "object",
+        "properties": {"validUntil": {"type": "integer", "minimum": 0}, "noticeKind": {"type": "string", "enum": ["time-warning"]}}
+      }
+    }
+  }
+}

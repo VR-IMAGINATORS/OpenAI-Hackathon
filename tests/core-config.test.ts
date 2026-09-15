@@ -138,7 +138,7 @@ test('v2 rejects duplicate identifiers and inconsistent fact or transition refer
 });
 
 test('common config requires both languages and complete classification examples with bounded display timing', () => {
-  assert.equal(parseCoreConfig(config()).schemaVersion, 1);
+  assert.equal(parseCoreConfig(config()).schemaVersion, 2);
   const cases = [
     (c: any) => {
       delete c.conversation.en;

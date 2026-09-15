@@ -56,6 +56,7 @@ interface PlayBudget {
   liveAttempts: number;
   responseAttempts: number;
   responseBusy: number;
+  controlBusy: number;
   live?: LiveReservation;
 }
 
@@ -102,6 +103,7 @@ export class AiService {
       liveAttempts: 0,
       responseAttempts: 0,
       responseBusy: 0,
+      controlBusy: 0,
     });
   }
 
@@ -420,15 +422,23 @@ export class AiService {
   private limit(): never {
     throw new AiServiceError(429, 'REQUEST_LIMIT', '利用上限または終了確認待ちです。');
   }
-  private async bounded<T>(promise: Promise<T>): Promise<T> {
+  private async bounded<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
     let timer: ReturnType<typeof setTimeout>;
+    let abort: (() => void) | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new UpstreamError(502)), this.config.timeoutMs);
+      if (signal) {
+        abort = () =>
+          reject(new AiServiceError(409, 'CONTROL_CANCELLED', '制御の確認を中止しました。'));
+        if (signal.aborted) abort();
+        else signal.addEventListener('abort', abort, { once: true });
+      }
     });
     try {
       return await Promise.race([promise, timeout]);
     } finally {
       clearTimeout(timer!);
+      if (abort) signal?.removeEventListener('abort', abort);
     }
   }
   async createLive(playId: string, body: unknown, deadline?: number) {
@@ -501,35 +511,60 @@ export class AiService {
       );
     }
   }
-  async respond(playId: string, body: unknown): Promise<unknown> {
+  respond(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
+    return this.respondInLane(playId, body, false, signal);
+  }
+
+  /** Internal control classification only. HTTP request bodies cannot select this lane. */
+  respondControl(playId: string, body: unknown, signal?: AbortSignal): Promise<unknown> {
+    return this.respondInLane(playId, body, true, signal);
+  }
+
+  private async respondInLane(
+    playId: string,
+    body: unknown,
+    control: boolean,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    if (signal?.aborted)
+      throw new AiServiceError(409, 'CONTROL_CANCELLED', '制御の確認を中止しました。');
     const play = this.active(playId);
     const parsed = responseRequest.safeParse(body);
     if (
       !parsed.success ||
       !this.config.responseModels.includes(parsed.data.model) ||
-      parsed.data.max_output_tokens > this.config.outputTokens
+      parsed.data.max_output_tokens > this.config.outputTokens ||
+      (control && parsed.data.text.format.name !== 'harness_control')
     )
       throw new AiServiceError(400, 'INVALID_REQUEST', '認識要求の設定を確認してください。');
     if (
-      play.responseBusy >= this.config.responseConcurrentPerPlay ||
+      (control
+        ? play.controlBusy >= 1
+        : play.responseBusy - play.controlBusy >= this.config.responseConcurrentPerPlay) ||
       play.responseAttempts >= this.config.responsesPerPlay ||
       this.responseAttempts >= this.config.globalResponseAttempts ||
       this.responseBusy >= this.config.responseConcurrentGlobal
     )
       this.limit();
     play.responseBusy++;
+    if (control) play.controlBusy++;
     play.responseAttempts++;
     this.responseBusy++;
     this.responseAttempts++;
-    const raw = Promise.resolve().then(() => this.transport.createResponse(parsed.data));
+    const raw = Promise.resolve().then(() => {
+      if (signal?.aborted)
+        throw new AiServiceError(409, 'CONTROL_CANCELLED', '制御の確認を中止しました。');
+      return this.transport.createResponse(parsed.data, signal);
+    });
     const release = () => {
       play.responseBusy--;
+      if (control) play.controlBusy--;
       this.responseBusy--;
       if (play.retired) this.forget(playId);
     };
     void raw.then(release, release);
     try {
-      const value = await this.bounded(raw);
+      const value = await this.bounded(raw, signal);
       this.active(playId);
       return value;
     } catch (error) {
