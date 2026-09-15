@@ -21,6 +21,8 @@ import {
   storyClearCount,
   storyContext,
   storyOpening,
+  storyOpeningBriefing,
+  openingHandoff,
   storyHint,
 } from '../apps/local-server/story.js';
 import {
@@ -32,6 +34,7 @@ import {
 import { PhotoQueue } from '../apps/server/photo-queue.js';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
+import { liveRequest } from '../packages/server/openai.js';
 
 const localized = (ja: string, en = ja) => ({ ja, en });
 const base = parseScenarioV2(JSON.parse(readFileSync('scenarios/mobile-playtest.json', 'utf8')));
@@ -296,67 +299,160 @@ test('all ten imported gimmicks accept a retained partial state followed by a co
   assert.equal(seen.size, 10);
 });
 
+test('all 18 localized openings fit the Live contract and keep current clues in the silent briefing', () => {
+  const catalog = parseStoryCatalog(
+    JSON.parse(readFileSync('scenarios/story-catalog.json', 'utf8')),
+  );
+  for (let index = 0; index < storyCandidateCount(catalog); index++) {
+    const scenario = compileStoryScenario(catalog, index);
+    for (const locale of ['ja', 'en'] as const) {
+      const snap = snapshot(locale, scenario);
+      const game = fixture(snap, []).game;
+      for (const status of ['briefing', 'playing'] as const) {
+        liveRequest.parse({
+          session: {
+            model: 'gpt-live-1',
+            delegation: { type: 'client' },
+            store: false,
+            instructions: liveInstructions({ ...game.state(), status }, snap),
+          },
+          transport: { type: 'webrtc', sdp: 'offer' },
+        });
+      }
+      const speech = storyOpening(snap);
+      const briefing = storyOpeningBriefing(snap);
+      assert.ok(speech.includes(scenario.title[locale]));
+      assert.ok(!speech.includes(scenario.obstacles[0].situationDisplay[locale]));
+      assert.ok(briefing.includes(scenario.story!.openingClue[locale]));
+      assert.ok(briefing.includes(scenario.obstacles[0].situationDisplay[locale]));
+      assert.ok(!briefing.includes(scenario.obstacles[1].situationDisplay[locale]));
+      assert.ok(briefing.length <= 4000);
+    }
+  }
+});
+
 for (const locale of ['ja', 'en'] as const)
-  test('story opening is visible, localized and includes the clue: ' + locale, async (t) => {
-    const snap = snapshot(locale);
-    const config = loadAiConfig({ AI_MODE: 'mock' });
-    let livePrompt = '';
-    const ai = new AiService(
-      config,
-      {
-        async createLiveSession(body) {
-          livePrompt = (body as { session: { instructions: string } }).session.instructions;
-          return { session: { id: 'story-live' }, transport: { type: 'webrtc', sdp: 'answer' } };
+  test(
+    'short spoken opening precedes a silent localized briefing without another AI call: ' + locale,
+    async (t) => {
+      const snap = snapshot(locale);
+      const config = loadAiConfig({ AI_MODE: 'mock' });
+      let livePrompt = '';
+      const ai = new AiService(
+        config,
+        {
+          async createLiveSession(body) {
+            livePrompt = (body as { session: { instructions: string } }).session.instructions;
+            return { session: { id: 'story-live' }, transport: { type: 'webrtc', sdp: 'answer' } };
+          },
+          async hangup() {},
+          async createResponse() {
+            throw new Error('No additional AI call expected');
+          },
         },
-        async hangup() {},
-        async createResponse() {
-          throw new Error('No additional AI call expected');
+        () => 0,
+      );
+      const scenes: Array<{ text: string }> = [];
+      const notices: string[] = [];
+      const runtime = new GameRuntime(
+        randomUUID(),
+        600000,
+        localizeScenario(snap.scenarioV2, locale),
+        ai,
+        config,
+        new PhotoQueue(),
+        () => 0,
+        snap,
+        {
+          transcript() {},
+          async photos() {},
+          scene(scene) {
+            scenes.push(scene);
+          },
+          notice(text) {
+            notices.push(text);
+          },
+          ended() {},
         },
-      },
-      () => 0,
-    );
-    const scenes: Array<{ text: string }> = [];
-    const runtime = new GameRuntime(
-      randomUUID(),
-      600000,
-      localizeScenario(snap.scenarioV2, locale),
-      ai,
-      config,
-      new PhotoQueue(),
-      () => 0,
-      snap,
-      {
-        transcript() {},
-        async photos() {},
-        scene(scene) {
-          scenes.push(scene);
-        },
-        ended() {},
-      },
-    );
-    t.after(async () => {
-      runtime.dispose();
-      await runtime.close();
-    });
-    await runtime.live(randomUUID(), 'offer');
-    runtime.heartbeat('connected');
-    const expected = storyOpening(snap, runtime.game.situation);
-    assert.equal(scenes[0].text, expected);
-    assert.ok(expected.includes(snap.scenarioV2.story!.aiName[locale]));
-    assert.ok(expected.includes(snap.scenarioV2.story!.openingClue[locale]));
-    const liveContext = JSON.parse(livePrompt.split('\n').at(-1)!);
-    const publicContext = buildCompanionContext(
-      snap,
-      new KnowledgeStore(snap),
-      runtime.game.state(),
-    );
-    assert.equal(liveContext.openingMessage, storyOpening(snap, publicContext.situation));
-    assert.equal(liveContext.situation, publicContext.situation);
-    assert.ok(!expected.includes('PRIVATE_MYSTERY_DIRECTION'));
-    assert.ok(!expected.includes('PRIVATE_MECHANISM'));
-    assert.ok(!livePrompt.includes('HINT_'));
-    assert.ok(factCommands(expected).every((command) => Buffer.byteLength(command.content) <= 480));
-  });
+      );
+      t.after(async () => {
+        runtime.dispose();
+        await runtime.close();
+      });
+      const live = await runtime.live(randomUUID(), 'offer');
+      runtime.heartbeat('connected');
+      const expected = storyOpening(snap);
+      assert.equal(scenes[0].text, expected);
+      assert.ok(expected.includes(snap.scenarioV2.story!.aiName[locale]));
+      assert.ok(!expected.includes(snap.scenarioV2.story!.openingClue[locale]));
+      assert.ok(expected.endsWith(openingHandoff[locale]));
+      assert.deepEqual(notices, []);
+      const liveContext = JSON.parse(livePrompt.split('\n').at(-1)!);
+      const publicContext = buildCompanionContext(
+        snap,
+        new KnowledgeStore(snap),
+        runtime.game.state(),
+      );
+      assert.equal(liveContext.openingMessage, expected);
+      assert.equal(liveContext.situation, publicContext.situation);
+      assert.ok(!expected.includes('PRIVATE_MYSTERY_DIRECTION'));
+      assert.ok(!expected.includes('PRIVATE_MECHANISM'));
+      assert.ok(!livePrompt.includes('HINT_'));
+      assert.ok(
+        factCommands(expected).every((command) => Buffer.byteLength(command.content) <= 480),
+      );
+      await runtime.event(live.generation, {
+        type: 'session.input_transcript.delta',
+        event_id: randomUUID(),
+        delta: locale === 'ja' ? '聞こえるよ' : 'I can hear you',
+        start_ms: 10,
+        end_ms: 100,
+      });
+      runtime.reportVoiceActivity({
+        generation: live.generation,
+        sequence: 1,
+        input: 'quiet',
+        output: 'active',
+        playbackReady: true,
+      });
+      await runtime.event(live.generation, {
+        type: 'session.output_transcript.delta',
+        event_id: randomUUID(),
+        delta: expected,
+        start_ms: 200,
+        end_ms: 20000,
+      });
+      assert.deepEqual(notices, [], 'transcript receipt is not playback completion');
+      runtime.reportVoiceActivity({
+        generation: live.generation,
+        sequence: 2,
+        input: 'quiet',
+        output: 'quiet',
+        playbackReady: true,
+      });
+      const briefing = storyOpeningBriefing(snap);
+      assert.deepEqual(notices, [briefing]);
+      assert.ok(briefing.includes(snap.scenarioV2.story!.openingClue[locale]));
+      assert.ok(briefing.includes(snap.scenarioV2.obstacles[0].situationDisplay[locale]));
+      assert.ok(!/PRIVATE_|HINT_|VISIBLE_PUZZLE/.test(briefing));
+      assert.equal(scenes.length, 1, 'the silent briefing must not generate a second scene image');
+      assert.equal(runtime.pollCommands(live.generation, 0).commands.length, 0);
+      runtime.heartbeat('connected');
+      runtime.start();
+      runtime.reportVoiceActivity({
+        generation: live.generation,
+        sequence: 3,
+        input: 'quiet',
+        output: 'quiet',
+        playbackReady: true,
+      });
+      assert.deepEqual(notices, [briefing], 'the briefing is displayed once');
+      const reconnected = await runtime.live(randomUUID(), 'offer-2');
+      runtime.heartbeat('connected');
+      assert.equal(reconnected.opening, null);
+      assert.deepEqual(notices, [briefing]);
+    },
+  );
 
 test('lore and ordinary consultation receive only public story; hints are opt-in, staged and current only', async () => {
   const snap = snapshot();
@@ -488,7 +584,7 @@ test('scene generation and inspection exclude future obstacle facts and keep sel
 test('legacy V2 preserves its opening and Live instructions without story metadata', () => {
   const snap = { ...snapshot(), scenarioV2: base };
   const game = fixture(snap, []).game;
-  assert.equal(storyOpening(snap, game.situation), coreConfig.conversation.ja.openingMessage);
+  assert.equal(storyOpening(snap), coreConfig.conversation.ja.openingMessage);
   assert.ok(
     liveInstructions(game.state(), snap).includes(coreConfig.conversation.ja.openingMessage),
   );
@@ -496,12 +592,13 @@ test('legacy V2 preserves its opening and Live instructions without story metada
 
 test('expanding world lore does not lengthen the spoken opening, while Live retains it for consultation', () => {
   const snap = snapshot();
-  const before = storyOpening(snap, '現在の観察。');
+  const before = storyOpening(snap);
   snap.scenarioV2.story!.world = localized(
     '詳しい世界設定。'.repeat(100),
     'Detailed world lore. '.repeat(50),
   );
-  assert.equal(storyOpening(snap, '現在の観察。'), before);
+  snap.scenarioV2.knowledge[0].localizedText = localized('長い手がかり。'.repeat(100));
+  assert.equal(storyOpening(snap), before);
   const game = fixture(snap, []).game;
   assert.ok(liveInstructions(game.state(), snap).includes(snap.scenarioV2.story!.world.ja));
   assert.ok(storyContext(snap, 0)?.world.includes('詳しい世界設定。'));

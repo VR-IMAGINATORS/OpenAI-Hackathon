@@ -6,8 +6,9 @@ import { test, type TestContext } from 'node:test';
 import sharp from 'sharp';
 import { createHostedApp } from '../apps/server/app.js';
 import { loadHostedConfig } from '../apps/server/config.js';
+import { openingHandoff } from '../apps/local-server/story.js';
 
-async function setup(t: TestContext) {
+async function setup(t: TestContext, withLive = false) {
   let now = 0;
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
@@ -18,6 +19,22 @@ async function setup(t: TestContext) {
     now: () => now,
     wallNow: () => Date.UTC(2026, 8, 13),
     log: () => {},
+    ...(withLive
+      ? {
+          transport: {
+            async createLiveSession() {
+              return {
+                session: { id: 'test-briefing-live' },
+                transport: { type: 'webrtc', sdp: 'answer' },
+              };
+            },
+            async hangup() {},
+            async createResponse() {
+              throw new Error('No text AI call expected for the opening');
+            },
+          },
+        }
+      : {}),
   });
   const server = hosted.app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -126,6 +143,99 @@ test('HTTP opening feed starts without text and streams into the same image bubb
     assert.ok(current.upserts[0].imageSlot);
   }
 });
+
+for (const locale of ['ja', 'en'] as const)
+  test(
+    'HTTP delivers a separate silent briefing after intro playback and retains it on reconnect: ' +
+      locale,
+    async (t) => {
+      const f = await setup(t, true);
+      const cookie = await f.login();
+      const play = await f.create(cookie, locale);
+      const control = { cookie, playId: play.playId, clientId: play.clientId };
+      const post = async (path: string, body: unknown) => {
+        const response = await f.request(path, { ...control, body });
+        assert.ok(
+          response.ok,
+          `${path}: ${response.status} ${response.ok ? '' : await response.text()}`,
+        );
+        return response;
+      };
+      const live = await (
+        await post('/api/play/live', { requestId: randomUUID(), sdp: 'offer' })
+      ).json();
+      await post('/api/play/heartbeat', { generation: live.generation, voiceState: 'connected' });
+      const feed = async () => (await f.request('/api/play/feed', control)).json();
+      const initial = await feed();
+      assert.equal(initial.upserts.length, 1);
+      assert.ok(initial.upserts[0].imageSlot, 'image generation begins before the introduction');
+      let position = 100;
+      const say = async (speaker: 'input' | 'output', delta: string) => {
+        const event = {
+          type: `session.${speaker}_transcript.delta`,
+          event_id: randomUUID(),
+          delta,
+          start_ms: position,
+          end_ms: position + 100,
+        };
+        position += 1000;
+        await post('/api/play/events', { generation: live.generation, event });
+        return event;
+      };
+      let sequence = 0;
+      const activity = async (output: 'active' | 'quiet' | 'unknown', playbackReady = true) => {
+        f.advance(100);
+        await post('/api/play/voice-activity', {
+          generation: live.generation,
+          sequence: ++sequence,
+          input: 'quiet',
+          output,
+          playbackReady,
+        });
+      };
+      await say('output', locale === 'ja' ? '聞こえる？' : 'Can you hear me?');
+      await say('input', locale === 'ja' ? '聞こえるよ' : 'I can hear you');
+      await activity('active');
+      await say('output', locale === 'ja' ? '私はメイ。' : 'I’m Mei.');
+      await activity('quiet');
+      assert.equal((await feed()).upserts.length, 3, 'a pause does not reveal the briefing');
+      await activity('active');
+      const finalEvent = await say('output', openingHandoff[locale]);
+      await activity('quiet', false);
+      assert.equal((await feed()).upserts.length, 3, 'blocked playback is not completion');
+      await activity('unknown');
+      assert.equal((await feed()).upserts.length, 3);
+      await activity('quiet');
+      const delivered = await feed();
+      assert.equal(delivered.upserts.length, 4);
+      const briefing = delivered.upserts[3];
+      assert.equal(briefing.side, 'assistant');
+      assert.equal(briefing.kind, 'system');
+      assert.equal(briefing.relatedCommandSeq, null, 'display-only text has no speech command');
+      assert.equal(briefing.imageSlot, null, 'no additional scene image job');
+      assert.match(briefing.text, locale === 'ja' ? /特殊な通信/ : /special connection/);
+      assert.ok(
+        briefing.text.endsWith(
+          locale === 'ja'
+            ? '身近なものの写真を撮って、私に送ってください。そして、それをどう使うか教えて。'
+            : 'Take a photo of something nearby and send it to me. Then tell me how to use it.',
+        ),
+      );
+      await post('/api/play/events', { generation: live.generation, event: finalEvent });
+      const reconnected = await (
+        await post('/api/play/live', { requestId: randomUUID(), sdp: 'offer-2' })
+      ).json();
+      assert.equal(reconnected.opening, null);
+      await post('/api/play/heartbeat', {
+        generation: reconnected.generation,
+        voiceState: 'connected',
+      });
+      assert.deepEqual(
+        (await feed()).upserts.map((m: { id: string }) => m.id),
+        delivered.upserts.map((m: { id: string }) => m.id),
+      );
+    },
+  );
 
 test('HTTP feed/assets require owner but no control lease and expose only JPEG bytes', async (t) => {
   const f = await setup(t),

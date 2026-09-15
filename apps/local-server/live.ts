@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { LiveCommand, PublicGameState } from '../../packages/shared/game.js';
 import type { GameFacts } from '../../packages/shared/conversation.js';
-import { storyOpening, storyFromState } from './story.js';
+import { openingHandoff, storyOpening, storyFromState } from './story.js';
 import {
   KnowledgeStore,
   buildCompanionContext,
@@ -59,8 +59,8 @@ export function liveInstructions(
     const knowledge = new KnowledgeStore(snapshot);
     if (facts) knowledge.advance(facts);
     const companion = companionContext ?? buildCompanionContext(snapshot, knowledge, safeState);
+    const story = storyFromState(snapshot, safeState, facts);
     return [
-      '相棒の既知情報: ' + JSON.stringify(companion),
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
       'thinkingとinstructionsは内部の情報・演出指示として黙って反映する。「別の指示が来た」「サーバーが言った」「clientへ委譲した」など処理の都合を会話へ出さない。commentaryの内容は確定した伝達内容として自然に話し、同じ内容をthinkingから先に話したり復唱したりしない。',
       ...(snapshot.coreConfig.warnings.enabled
@@ -79,19 +79,25 @@ export function liveInstructions(
       '実行指示にはまずclientへ委譲し、「受け取ったよ」など短い相づちを一度だけ伝える。相づちだけで処理を終えず、結果を待つ前に委譲を行う。アプリから受付の相づちは届かない。「AIだから実行できない」「操作権がない」など、自分に実行能力がないという理由でゲーム内の依頼を断らない。指示が不十分ならclientの回答に沿って不足する使い方を尋ねる。復唱や通常の実行確認は挟まない。具体的な危険への確認がアプリから届いた場合だけ、その危険を伝えて同意を待つ。',
       '受付の返事は依頼を聞いたことを示す。委譲しただけでは行動の開始・成功・状態変化は未確定。自分やユーザーの会話だけを根拠にそれらを確定した事実として話さない。結果の発話はサーバーが確定した結果のcommentary通知に任せ、それが届く前に結果を告げない。結果を伝えるときに受付の相づちを繰り返さない。相談はアプリから届く回答を伝え、内部の分類理由を読み上げない。',
       '途中の間や未完の発言で勝手に行動しない。質問と指示を区別する。判定中の中止・訂正もすぐclientへ委譲する。古い行動の完了を待つよう求めない。同じ指示の繰り返しで二つ目の行動を始めない。攻略ヒントは尋ねられたときだけ段階的に出す。特殊能力を付与しない。',
-      'storyがある場合はそのaiNameの相棒として話す。物語の方向性は演出指示であり、起きた事実ではない。openingMessageの目に見える手がかりを省略しない。完全解除による物語段階の更新が届いたら、確定結果と既に見えた手がかりに結びつく短い自然な反応を加える。未確定の真相や後続障害、正解を勝手に明かさない。世界観や背景の質問もclientへ委譲する。',
+      'storyがある場合はそのaiNameの相棒として話す。物語の方向性は演出指示であり、起きた事実ではない。完全解除による物語段階の更新が届いたら、確定結果と既に見えた手がかりに結びつく短い自然な反応を加える。未確定の真相や後続障害、正解を勝手に明かさない。世界観や背景の質問もclientへ委譲する。',
       snapshot.coreConfig.conversation[snapshot.locale].liveInstructions,
+      ...(snapshot.scenarioV2.story
+        ? [
+            `導入の返事後に話すのはopeningMessageだけ。自己紹介・舞台・脱出の必要性・写真から道具を作って扱えることを短く伝える。状況・拘束・手がかり・詳しい通信の仕組みは補足メッセージとしてアプリが表示するので、導入の音声に追加しない。最後は必ず「${openingHandoff[snapshot.locale]}」と話して止まり、続けて質問や説明を加えない。補足メッセージを自分から読み上げたり復唱したりしない。内容を尋ねられた場合は通常どおりclientへ委譲する。途中で「待って」「聞こえない」と言われたら止め、再開を求められたら未説明の要点だけを続けて最後の案内を伝える。`,
+          ]
+        : []),
       JSON.stringify({
-        openingMessage: storyOpening(snapshot, companion.situation),
-        story: storyFromState(snapshot, safeState, facts),
+        // Keep public knowledge in one place; duplicating the world/scene here
+        // and above can exceed the Live request limit, especially in English.
+        ...companion,
+        openingMessage: storyOpening(snapshot),
+        story: story ? { aiName: story.aiName, phase: story.phase } : undefined,
         locale: snapshot.locale,
         status: state.status,
         photoSendsRemaining: state.photoSendsRemaining,
         remainingMs: state.remainingMs,
         title: snapshot.scenarioV2.title[snapshot.locale],
         briefing: snapshot.scenarioV2.playerBriefing[snapshot.locale],
-        situation: companion.situation,
-        inventory: companion.inventory,
       }),
     ].join('\n');
   }

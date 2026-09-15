@@ -8,6 +8,7 @@ import { PhotoQueue } from '../apps/server/photo-queue.js';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
+import { storyOpening } from '../apps/local-server/story.js';
 
 // Exercise the shared runtime boundary between the independently implemented branches.
 // Judgments are fake; these checks do not establish real AI or video quality.
@@ -26,7 +27,10 @@ for (const locale of ['ja', 'en'] as const) {
           config,
           {
             async createLiveSession() {
-              throw new Error('Live must not be called');
+              return {
+                session: { id: 'test-ending-live' },
+                transport: { type: 'webrtc', sdp: 'answer' },
+              };
             },
             async hangup() {},
             async createResponse(body) {
@@ -58,6 +62,7 @@ for (const locale of ['ja', 'en'] as const) {
         );
         let packet: EndingPacket | undefined;
         const scenes: string[] = [];
+        const notices: string[] = [];
         const runtime = new GameRuntime(
           randomUUID(),
           600_000,
@@ -73,6 +78,9 @@ for (const locale of ['ja', 'en'] as const) {
             scene(input) {
               scenes.push(input.text);
             },
+            notice(text) {
+              notices.push(text);
+            },
             ended() {},
             ending(value) {
               packet = value;
@@ -80,7 +88,36 @@ for (const locale of ['ja', 'en'] as const) {
           },
         );
         try {
+          const live = await runtime.live(randomUUID(), 'offer');
           runtime.heartbeat('connected');
+          await runtime.event(live.generation, {
+            type: 'session.input_transcript.delta',
+            event_id: randomUUID(),
+            delta: locale === 'ja' ? '聞こえるよ' : 'I can hear you',
+            start_ms: 10,
+            end_ms: 100,
+          });
+          runtime.reportVoiceActivity({
+            generation: live.generation,
+            sequence: 1,
+            input: 'quiet',
+            output: 'active',
+            playbackReady: true,
+          });
+          await runtime.event(live.generation, {
+            type: 'session.output_transcript.delta',
+            event_id: randomUUID(),
+            delta: storyOpening(snapshot),
+            start_ms: 200,
+            end_ms: 20000,
+          });
+          runtime.reportVoiceActivity({
+            generation: live.generation,
+            sequence: 2,
+            input: 'quiet',
+            output: 'quiet',
+            playbackReady: true,
+          });
           const game = runtime.game;
           game.inventory = [
             { id: randomUUID(), name: 'Tool', description: 'Ordinary tool', status: 'available' },
@@ -124,7 +161,9 @@ for (const locale of ['ja', 'en'] as const) {
           );
           assert.equal(packet.actions.length, clearedCount);
           assert.deepEqual(packet.facts, game.facts);
-          assert.ok(scenes[0].includes(snapshot.scenarioV2.story!.openingClue[locale]));
+          assert.ok(!scenes[0].includes(snapshot.scenarioV2.story!.openingClue[locale]));
+          assert.ok(notices[0].includes(snapshot.scenarioV2.story!.openingClue[locale]));
+          assert.ok(packet.evidence.records.some((record) => record.text === notices[0]));
           assert.ok(packet.evidence.records.some((record) => record.text === scenes[0]));
           assert.ok(Object.isFrozen(packet));
         } finally {

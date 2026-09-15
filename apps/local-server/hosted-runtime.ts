@@ -1,6 +1,7 @@
 import { KnowledgeStore, buildCompanionContext } from './companion-knowledge.js';
 import { composeCompanionReply } from './companion-response.js';
 import { VoiceNotificationScheduler } from './voice-notifications.js';
+import { OpeningBriefingDelivery } from './opening-briefing.js';
 import { voiceActivitySchema, type VoiceActivity } from '../../packages/shared/harness.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -35,6 +36,7 @@ import {
   storyContext,
   storyNarration,
   storyOpening,
+  storyOpeningBriefing,
   requestsStoryHint,
 } from './story.js';
 
@@ -111,6 +113,8 @@ export class GameRuntime {
   private epoch = 1;
   private openingIssued = false;
   private openingMessageId?: string;
+  private openingBriefing?: OpeningBriefingDelivery;
+  private pendingOpeningBriefing?: string;
   private seen = new Set<string>();
   private maintenanceTimer?: ReturnType<typeof setInterval>;
   private knowledge?: KnowledgeStore;
@@ -194,6 +198,8 @@ export class GameRuntime {
       text: scenario.playerBriefing,
     });
     if (coreSnapshot) {
+      if (coreSnapshot.scenarioV2.story)
+        this.openingBriefing = new OpeningBriefingDelivery(coreSnapshot.locale, now);
       this.knowledge = new KnowledgeStore(coreSnapshot);
       this.knowledge.advance(this.game.facts);
       this.notifications = new VoiceNotificationScheduler(
@@ -703,6 +709,7 @@ export class GameRuntime {
     if (this.disposed || !this.coreSnapshot) return;
     this.game.check();
     if (!this.valid()) return;
+    this.deliverOpeningBriefing();
     const state = this.game.state();
     if (
       state.status !== 'playing' ||
@@ -725,6 +732,22 @@ export class GameRuntime {
     if (activity.generation !== this.game.generation)
       throw new GameError(409, 'LIVE_CONNECTION_STALE');
     this.notifications?.report(activity);
+    this.openingBriefing?.report(activity);
+    this.deliverOpeningBriefing();
+  }
+  private deliverOpeningBriefing() {
+    if (
+      this.pendingOpeningBriefing &&
+      this.valid() &&
+      this.game.status === 'playing' &&
+      this.game.voiceState === 'connected' &&
+      this.openingBriefing?.takeReady()
+    ) {
+      const text = this.pendingOpeningBriefing;
+      this.pendingOpeningBriefing = undefined;
+      // A separate text-only bubble. Never enqueue a Live commentary command.
+      this.presentNotice(text);
+    }
   }
   private drainNotifications() {
     let first: ReturnType<GameRuntime['enqueue']>;
@@ -924,6 +947,7 @@ export class GameRuntime {
   }
   async transferControl() {
     this.openingMessageId = undefined;
+    this.openingBriefing?.suspend();
     this.epoch++;
     this.game.changeController();
     this.syncCore();
@@ -973,6 +997,7 @@ export class GameRuntime {
         }
         this.game.generation++;
         this.openingMessageId = undefined;
+        this.openingBriefing?.connect(this.game.generation);
         this.story.startGeneration(this.game.generation, this.now());
         this.syncCore();
         this.intents?.reset();
@@ -1108,6 +1133,8 @@ export class GameRuntime {
             fragment,
             fragment.speaker === 'assistant' ? this.openingMessageId : undefined,
           );
+          this.openingBriefing?.transcript(fragment);
+          this.deliverOpeningBriefing();
         }
         this.syncCore();
         if (!this.game.terminal) this.intents!.onContextChanged();
@@ -1162,10 +1189,12 @@ export class GameRuntime {
   }
   heartbeat(voice: Parameters<GameSession['heartbeat']>[0]) {
     this.game.heartbeat(voice);
+    if (voice !== 'connected') this.openingBriefing?.suspend();
     // Start only once, after the answered call actually connects.
     if (this.coreSnapshot && voice === 'connected' && this.game.status === 'briefing') {
       this.start();
     }
+    this.deliverOpeningBriefing();
   }
   start(): LiveCommand[] {
     this.check();
@@ -1176,16 +1205,17 @@ export class GameRuntime {
     }
     this.game.start();
     if (wasBriefing) {
+      if (this.coreSnapshot?.scenarioV2.story)
+        this.pendingOpeningBriefing = storyOpeningBriefing(this.coreSnapshot);
       const messageId = randomUUID();
       this.presentScene(
-        this.coreSnapshot?.scenarioV2.story
-          ? storyOpening(this.coreSnapshot, this.game.situation)
-          : this.game.situation,
+        this.coreSnapshot?.scenarioV2.story ? storyOpening(this.coreSnapshot) : this.game.situation,
         messageId,
         null,
         !!this.coreSnapshot,
       );
-      // Live reads this scene aloud; its opening deltas update the same bubble.
+      // Call-check deltas share the initial image bubble. The user's reply ends
+      // that binding; the short introduction and silent briefing get their own rows.
       this.openingMessageId = messageId;
     }
     this.syncCore(true);
