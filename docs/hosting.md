@@ -62,6 +62,12 @@
 
 ## 配信失敗からの復旧
 
+Actionsの `drain_progress` と `drain_timeout` に、終了待ちの総数 `remaining` と種類別の `blockers` を記録する。`registryOccupied` は終了前・隔離中のプレイ枠、`liveBusy` は音声、`pendingCreates` / `unknownCreates` は音声の作成待ち・受理不明、`unconfirmedLive` は3回の終了試行後も未確認の音声、`responseBusy` / `imageBusy` / `inspectionBusy` はAI要求、`endingJobs` は停止待ちのエンディング処理。同じ処理が複数の数に含まれるため、内訳は単純に合算しない。内訳を返さない旧版では総数だけ記録する。
+
+再実行時に旧プロセスが `409 DRAIN_ALREADY_STARTED` を返した場合は、同じversion/bootIdの既存drainを監視する。他の409や認証失敗は再試行扱いにしない。120秒以内の `readyToDeploy=true` かつ `remaining=0` が配信条件であり、既存drainへの参加はこの条件を省略しない。
+
+GPT-Live WebRTCは、作成したsession IDへサーバーからsidebandを接続し、`session.close` と `session.closed` で終了を確認する。1回の終了待機は15秒、3回まで試行する。待機が失敗しても最初の終了要求から最大120秒は接続が生きていれば完了イベントを受け取る。完了記録はプレイ管理へ反映するまで保持し、後から終了が確定した隔離枠も解放する。切断や時間経過だけでは終了扱いにしない。会話内容はsidebandのログへ出さない。
+
 自動resumeは行わない。まず対象account/region/serviceを確認し、AWSのcurrent/next deploymentと公開 `/healthz` のversion/bootIdを照合する。終了未確認のLiveがある場合は、予約を強制解放したりプロセスを再起動して隠したりしない。運営が上流の接続状態を確認する。
 
 動画もdrain時に新しい生成を止め、既知のfal要求をキャンセルする。キャンセル応答だけで完了とせず、上流の停止が未確認の動画や受理不明の送信はdrainのremainingに残る。120秒で停止を確認できない場合は配信を止め、運営がfal側の状態を確認する。結果を保持しているだけの状態と、進行中・停止未確認の要求を混同しない。

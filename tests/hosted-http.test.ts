@@ -16,7 +16,13 @@ interface Client {
   epoch: number;
   generation?: number;
 }
-async function fixture(t: TestContext, failClose = false, core = false) {
+async function fixture(
+  t: TestContext,
+  failClose = false,
+  core = false,
+  hangup?: () => Promise<void>,
+  closeTimeoutMs?: number,
+) {
   let now = 0,
     liveCreates = 0,
     responses = 0,
@@ -32,6 +38,7 @@ async function fixture(t: TestContext, failClose = false, core = false) {
   });
   // Keep the legacy endpoint regression suite explicit during the core migration.
   if (!core) config.scenarioCatalog = undefined;
+  if (closeTimeoutMs !== undefined) config.ai.timeoutMs = closeTimeoutMs;
   const hosted = createHostedApp(config, {
     now: () => now,
     wallNow: () => 1_000_000 + now,
@@ -73,6 +80,7 @@ async function fixture(t: TestContext, failClose = false, core = false) {
       },
       async hangup() {
         hangups++;
+        if (hangup) return hangup();
         if (failClose) throw new Error('private-provider-failure');
       },
     },
@@ -333,6 +341,17 @@ test('HTTP ops require Bearer, reject browser Origin, drain closes audio and per
   const status = await ops('/api/ops/drain');
   assert.equal(status.status, 200);
   assert.equal(status.data.readyToDeploy, true);
+  assert.deepEqual(status.data.blockers, {
+    registryOccupied: 0,
+    liveBusy: 0,
+    pendingCreates: 0,
+    unknownCreates: 0,
+    unconfirmedLive: 0,
+    responseBusy: 0,
+    imageBusy: 0,
+    inspectionBusy: 0,
+    endingJobs: 0,
+  });
   assert.equal(f.counts().hangups, 1);
   assert.equal((await f.create(await f.auth())).response.status, 503);
   const resumed = await ops('/api/ops/resume', 'POST', {
@@ -357,6 +376,44 @@ test('HTTP restart invalidates cookies and unknown Live close keeps player reser
     (await otherProcess.request('/api/session', undefined, c, 'GET')).response.status,
     410,
   );
+});
+
+test('HTTP drain status reconciles a provider close confirmed after local timeout', async (t) => {
+  let attempts = 0;
+  let confirm!: () => void;
+  const lateConfirmation = new Promise<void>((resolve) => {
+    confirm = resolve;
+  });
+  const f = await fixture(
+    t,
+    false,
+    false,
+    () => (++attempts === 1 ? lateConfirmation : Promise.reject(new Error('still unknown'))),
+    10,
+  );
+  const c = await f.auth();
+  await f.create(c);
+  await f.live(c);
+  await f.request('/api/play/end', {}, c);
+  await f.hosted.drain();
+  const opsStatus = async () => {
+    const response = await fetch(f.origin + '/api/ops/drain', {
+      headers: { Authorization: 'Bearer ' + opsToken },
+    });
+    return response.json();
+  };
+  const blocked = await opsStatus();
+  assert.equal(blocked.readyToDeploy, false);
+  assert.equal(blocked.blockers.registryOccupied, 1);
+  assert.equal(blocked.blockers.liveBusy, 1);
+  assert.equal(blocked.blockers.unconfirmedLive, 1);
+  confirm();
+  await new Promise((r) => setImmediate(r));
+  const ready = await opsStatus();
+  assert.equal(ready.readyToDeploy, true);
+  assert.equal(ready.remaining, 0);
+  assert.equal(ready.blockers.registryOccupied, 0);
+  assert.equal(ready.blockers.liveBusy, 0);
 });
 
 test('HTTP five simultaneous Live connections and retries reserve only five upstream calls', async (t) => {
