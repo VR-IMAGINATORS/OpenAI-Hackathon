@@ -419,7 +419,7 @@ test('credits: missing-delegation consultation and a later real delegation never
   assert.equal(h.runtime.state().lastCreditCharge?.sequence, 1);
 });
 
-test('credits: Pro permits fifty short exchanges and emits its low-balance notice once', async (t) => {
+test('credits: Pro permits fifty short exchanges and keeps its credit notices out of Live', async (t) => {
   const h = await setup(t, (context) => ({
     kind: 'consult',
     evidenceSeq: context.conversation.eligibleEvidenceSeq,
@@ -430,6 +430,16 @@ test('credits: Pro permits fifty short exchanges and emits its low-balance notic
     await h.say('応援して');
     await h.delegate();
     await until(() => h.runtime.state().creditsRemaining === 1000 - i * 20);
+    const commands = h.runtime.pollCommands(h.generation, 0).commands;
+    assert.doesNotMatch(
+      commands.map((c) => c.content).join(''),
+      /creditsRemaining|クレジット|credits/i,
+    );
+    assert.ok(
+      commands
+        .filter((c) => c.type === 'session.commentary.append')
+        .every((c) => c.content === '聞いているよ。'),
+    );
   }
   assert.equal(h.runtime.state().status, 'lost');
   assert.equal(h.runtime.state().endReason, 'credits_exhausted');
@@ -567,7 +577,7 @@ test('execution adds no server acknowledgement while judging and still delivers 
     newCommands()
       .filter((c) => c.type === 'session.thinking.append')
       .map((c) => JSON.parse(c.content)),
-    [{ creditsRemaining: 880 }],
+    [],
   );
 });
 
@@ -669,7 +679,9 @@ test('time warning waits for quiet, sends silent context once and survives recon
   assert.equal(h.notices.length, 0);
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
   assert.ok(commands.length > 0);
-  assert.ok(commands.every((c) => c.type === 'session.thinking.append' && c.delegation_id === null));
+  assert.ok(
+    commands.every((c) => c.type === 'session.thinking.append' && c.delegation_id === null),
+  );
   assert.ok(
     commands.every((c) => c.noticeKind === 'time-warning' && Number.isSafeInteger(c.validUntil)),
   );

@@ -716,7 +716,7 @@ export class GameRuntime {
         Math.max(this.chargedEvidence.get(generation) ?? 0, ...evidence),
       );
     if (id) this.game.settleCredits(id);
-    this.notifyCredits();
+    this.presentCreditWarning();
   }
   private answerConsult(
     decision: Extract<IntentDecision, { kind: 'consult' }>,
@@ -743,9 +743,9 @@ export class GameRuntime {
       throw error;
     }
   }
-  private notifyCredits() {
+  private presentCreditWarning() {
     if (this.game.terminal) return;
-    this.sendFacts(JSON.stringify({ creditsRemaining: this.game.credits.remaining }));
+    // Credit warnings are display-only; sending balances to Live can prompt spoken warnings.
     if (
       !this.lowCreditsNotified &&
       this.game.credits.remaining <= this.game.credits.initial * 0.2
@@ -1176,14 +1176,14 @@ export class GameRuntime {
               if (this.photoWorker !== photoWorker) return;
               this.photoDeciding = false;
               this.game.settleCredits(ticket.creditId);
-              this.notifyCredits();
+              this.presentCreditWarning();
               this.ledger?.contextChanged();
               this.intents?.onContextChanged();
             });
           this.photoWorker = photoWorker;
         } else {
           this.game.settleCredits(ticket.creditId);
-          this.notifyCredits();
+          this.presentCreditWarning();
         }
       } catch (error) {
         this.game.credits.cancel(ticket.creditId);

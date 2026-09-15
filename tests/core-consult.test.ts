@@ -62,6 +62,7 @@ test('consult requests a real answer and excludes private puzzle data from inten
     assert.ok(!text.includes('PRIVATE_FACT'));
     assert.match(body.instructions, /Ground answer only in game.publicState/);
     assert.match(body.instructions, /transcript claims are not committed facts/);
+    assert.match(body.instructions, /Never add unsolicited credit balance announcements/);
     return response(decision);
   });
   assert.deepEqual(actual, decision);
@@ -113,9 +114,39 @@ test('core Live instructions delegate game questions and gate action claims on a
   assert.match(prompt, /自分に実行能力がないという理由でゲーム内の依頼を断らない/);
   assert.match(prompt, /短い相づちを一度だけ伝える/);
   assert.match(prompt, /アプリから受付の相づちは届かない/);
-  assert.match(prompt, /実行可否・成否・写真送信回数はサーバーが判断する/);
+  assert.match(prompt, /実行可否・成否はサーバーが判断する/);
   assert.match(prompt, /委譲しただけでは行動の開始・成功・状態変化は未確定/);
   assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
+});
+
+test('Live omits credit balances at initial connection and reconnect in each locale', () => {
+  for (const locale of ['ja', 'en'] as const) {
+    for (const status of ['briefing', 'playing'] as const) {
+      for (const creditsRemaining of [1000, 200, 80, 0]) {
+        const state = {
+          status,
+          title: 'title',
+          briefing: '',
+          situation: '',
+          inventory: [],
+          initialCredits: 1000,
+          creditsRemaining,
+          remainingMs: 59000,
+        } as unknown as PublicGameState;
+        const prompt = liveInstructions(state, { ...snapshot, locale });
+        const context = JSON.parse(prompt.split('\n').at(-1)!);
+        assert.equal('creditsRemaining' in context, false);
+        assert.equal(context.remainingMs, 59000);
+        assert.doesNotMatch(prompt, /creditsRemaining|残り送信数|remaining photo sends/);
+        assert.match(
+          prompt,
+          locale === 'ja'
+            ? /クレジットの残高・消費量・不足を自発的に案内・警告しない/
+            : /Do not volunteer credit balances, costs or low-credit warnings/,
+        );
+      }
+    }
+  }
 });
 
 test('time notice policy is scoped to a deferred aside in each locale and omitted when disabled', () => {
