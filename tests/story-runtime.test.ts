@@ -713,15 +713,18 @@ test('runtime advances requested hint levels across partial progress and resets 
         if (body.text.format.name === 'companion_reply')
           return response({ reply: data.result.narrative + '\n' + data.context.situation });
         if (body.text.format.name === 'knowledge_selection') return response({ ids: [] });
+        if (body.text.format.name === 'investigation_reply') {
+          hints.push(data.stagedHint);
+          return response({ answer: data.stagedHint.hint, inferences: [] });
+        }
         if (body.text.format.name === 'core_intent') {
           if (data.game.requestedHint) {
-            hints.push(data.game.requestedHint);
             return response({
               decision: {
                 kind: 'consult',
                 evidenceSeq: data.conversation.eligibleEvidenceSeq,
                 reason: 'requested hint',
-                answer: data.game.requestedHint.hint,
+                answer: 'ヒントを確かめるね。',
               },
             });
           }

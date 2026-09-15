@@ -1,0 +1,1 @@
+Play style: early attempts. Try a plausible ordinary object or use early, then revise using the actual result and ask targeted questions when needed. Avoid repeating an unchanged failed idea. You still respect known constraints and risk confirmations.

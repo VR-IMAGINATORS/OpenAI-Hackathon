@@ -1,0 +1,1 @@
+Play style: broad questions. Ask short, rough questions about what is around, what looks unusual, or what is happening. Refine your idea using the answers. You may act when a plausible opportunity emerges.
