@@ -11,7 +11,6 @@ import type { EndingPacket } from '../apps/local-server/ending.js';
 import type { EndingView } from '../packages/shared/ending.js';
 import { syntheticEndingMp4 } from './helpers/ending-mp4.js';
 
-const passphrase = 'test-only-ending-password';
 const video = syntheticEndingMp4();
 const prepared: PreparedEnding & { story: import('../packages/shared/ending.js').EndingStory } = {
   start: Buffer.from('injected-start-image'),
@@ -30,7 +29,7 @@ async function setup(t: TestContext, holdPreparation = false) {
   let now = 0;
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: passphrase,
+
     AI_MODE: 'mock',
     ENDING_VIDEO_ENABLED: 'true',
     FAL_KEY: 'test-only-fal-key',
@@ -155,7 +154,7 @@ async function setup(t: TestContext, holdPreparation = false) {
     });
   }
   async function login() {
-    const response = await request('/api/auth', { body: { passphrase } });
+    const response = await request('/api/auth', { body: {} });
     assert.equal(response.status, 200);
     return response.headers.get('set-cookie')!.split(';')[0]!;
   }
@@ -447,7 +446,7 @@ test('retained video reads survive expired login, never extend retention, and re
   f.setNow(600_000);
   await f.hosted.tick();
   // Renew authentication without recreating the missing result, so expiry is tested independently.
-  const renewed = await f.request('/api/auth', { cookie, body: { passphrase } });
+  const renewed = await f.request('/api/auth', { cookie, body: {} });
   assert.equal(renewed.status, 200);
   const renewedCookie = renewed.headers.get('set-cookie')!.split(';')[0]!;
   assert.equal((await f.request(f.statusPath(playId), { cookie: renewedCookie })).status, 410);

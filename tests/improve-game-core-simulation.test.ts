@@ -347,40 +347,58 @@ test('photo danger waits and ask confirms through the same classifier and action
     a.close();
   }
 });
-test('failed result narration remains incomplete even when common runtime has public fallback', async () =>
-  fixture(async (ctx, setClient) => {
-    const mock = createMockPlayClient();
-    setClient({
-      respond: async (body, signal) => {
-        const b = body as any,
-          data = JSON.parse(b.input[0].content[0].text);
-        if (b.text.format.name === 'expansion_player')
-          return response(b, {
-            request: {
-              kind: 'send_items',
-              catalogIds: [input.config.objectCatalog[0]!.id],
-              usage: null,
-            },
-          });
-        if (b.text.format.name === 'harness_photo')
-          return response(b, {
-            decision: 'execute',
-            itemRefs: [{ photoId: data.photos[0] }],
-            usage: '試す',
-            message: '試す',
-            reason: 'fixture',
-          });
-        if (b.text.format.name === 'companion_reply') throw new Error('upstream failure');
-        return mock.respond(body, signal);
-      },
-    });
-    const play = await runPlay(ctx, pilotRows(ctx.input.config)[0]!);
-    assert.equal(play.status, 'incomplete');
-    assert.equal(play.terminationReason, 'GAME_API_INCOMPLETE');
-    assert.equal(play.turns.length, 0);
-    assert.ok((await ctx.store.readCalls()).some((c) => c.status !== 'completed'));
-    assert.equal((play.stateVersions.at(-1) as any).gameVersion, 1);
-  }));
+for (const failedJudgment of [false, true])
+  test(
+    'simulation uses public action facts without narration and preserves API failures: ' +
+      failedJudgment,
+    async () =>
+      fixture(async (ctx, setClient) => {
+        const mock = createMockPlayClient();
+        const schemas: string[] = [];
+        setClient({
+          respond: async (body, signal) => {
+            const b = body as any,
+              data = JSON.parse(b.input[0].content[0].text);
+            schemas.push(b.text.format.name);
+            if (failedJudgment && b.text.format.name === 'game_result')
+              throw new Error('upstream failure');
+            if (b.text.format.name === 'expansion_player')
+              return response(b, {
+                request: {
+                  kind: 'send_items',
+                  catalogIds: [input.config.objectCatalog[0]!.id],
+                  usage: null,
+                },
+              });
+            if (b.text.format.name === 'harness_photo')
+              return response(b, {
+                decision: 'execute',
+                itemRefs: [{ photoId: data.photos[0] }],
+                usage: '試す',
+                message: '試す',
+                reason: 'fixture',
+              });
+            if (b.text.format.name === 'companion_reply') throw new Error('upstream failure');
+            return mock.respond(body, signal);
+          },
+        });
+        const play = await runPlay(ctx, pilotRows(ctx.input.config)[0]!);
+        assert.equal(schemas.includes('companion_reply'), false);
+        assert.equal(play.status, failedJudgment ? 'incomplete' : 'uncleared');
+        assert.equal(play.turns.length, failedJudgment ? 0 : 1);
+        assert.equal(
+          (await ctx.store.readCalls()).some((c) => c.status !== 'completed'),
+          failedJudgment,
+        );
+        assert.equal((play.stateVersions.at(-1) as any).gameVersion, failedJudgment ? 0 : 1);
+        if (!failedJudgment) {
+          const reply = (play.turns[0] as { publicReply: string }).publicReply;
+          assert.ok(reply.trim());
+          assert.doesNotMatch(reply, /action_result|notificationId|shortReason/);
+        }
+      }, 1),
+  );
+
 test('abort before the first call checkpoints incomplete without charging or continuing', async () =>
   fixture(async (ctx) => {
     const controller = new AbortController();

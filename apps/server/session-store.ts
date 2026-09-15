@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { SessionError } from './control.js';
 import type { Difficulty } from '../../packages/shared/difficulty.js';
 
@@ -14,7 +14,6 @@ export interface AuthSession {
 }
 
 export interface SessionStoreOptions {
-  passphrase: string;
   now?: () => number;
   ttlMs?: number;
   capacity?: number;
@@ -31,16 +30,12 @@ export class SessionStore {
   private attempts = 0;
   private windowStart: number;
 
-  constructor(private readonly options: SessionStoreOptions) {
-    if (!options.passphrase) throw new Error('APP_PASSPHRASE_REQUIRED');
+  constructor(private readonly options: SessionStoreOptions = {}) {
     this.now = options.now ?? (() => performance.now());
     this.windowStart = this.now();
   }
 
-  authenticate(
-    passphrase: string,
-    existingToken?: string,
-  ): { token: string; session: AuthSession } {
+  createSession(existingToken?: string): { token: string; session: AuthSession } {
     const now = this.now();
     if (now - this.windowStart >= 60_000) {
       this.windowStart = now;
@@ -48,12 +43,6 @@ export class SessionStore {
     }
     if (++this.attempts > (this.options.authAttemptsPerMinute ?? 100))
       throw new SessionError('AUTH_RATE_LIMIT', 429);
-    if (
-      passphrase.length > 256 ||
-      !timingSafeEqual(digest(passphrase), digest(this.options.passphrase))
-    ) {
-      throw new SessionError('AUTH_FAILED', 401);
-    }
     this.sweep();
     const existing = existingToken ? this.lookup(existingToken) : undefined;
     if (existing) {

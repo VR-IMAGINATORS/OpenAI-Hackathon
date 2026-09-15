@@ -176,7 +176,7 @@ export async function runPlay(context: PilotContext, row: PlayMatrixRow): Promis
       });
       const result = await adapter.turn(request, context.signal);
       const calls = budget.calls.slice(firstCall);
-      // Real Runtime can provide a narration fallback; evaluation must still mark its failed API incomplete.
+      // A public reply never excuses a failed or unaccounted API call in an evaluation.
       if (calls.some((call) => call.status !== 'completed'))
         throw new ExpansionLimitError('GAME_API_INCOMPLETE');
       const diagnostics = adapter.diagnostics();

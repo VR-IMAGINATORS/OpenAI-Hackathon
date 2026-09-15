@@ -182,17 +182,33 @@ test('second transport failure ends retry and never commits', async () => {
   assert.equal(f.game.clock.paused, false);
 });
 
-test('model schema errors, invalid facts, limits and game failure are not retried', async () => {
+test('model schema and fact errors get one repair without committing invalid output', async () => {
   for (const judge of [
     async () => ({ bad: true }) as unknown as CoreJudgment,
     async () => ({ ...partial, factChanges: [{ key: 'invented', from: 'a', to: 'b' }] }),
-    async () => {
-      throw Object.assign(new Error('limit'), { code: 'REQUEST_LIMIT', status: 429 });
-    },
   ]) {
     const f = await fixture(judge);
     await assert.rejects(f.game.judgeAction(f.reserve()), /ACTION_FAILED/);
+    assert.equal(f.calls(), 2);
+    assert.equal(f.game.gameVersion, 0);
+    assert.equal(f.game.inventory.length, 0);
+  }
+});
+
+test('limits, refusals, client errors and ordinary physical failure are not retried', async () => {
+  for (const [code, status] of [
+    ['REQUEST_LIMIT', 429],
+    ['AI_OUTPUT_REFUSED', 422],
+    ['UPSTREAM_FAILED', 400],
+    ['DRAINING', 503],
+    ['UNKNOWN_FAILURE', 500],
+  ] as const) {
+    const f = await fixture(async () => {
+      throw Object.assign(new Error(code), { code, status });
+    });
+    await assert.rejects(f.game.judgeAction(f.reserve()), /ACTION_FAILED/);
     assert.equal(f.calls(), 1);
+    assert.equal(f.game.gameVersion, 0);
   }
   const f = await fixture(async () => ({ ...partial, factChanges: [] }));
   await f.game.judgeAction(f.reserve());

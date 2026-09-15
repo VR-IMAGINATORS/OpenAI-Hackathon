@@ -49,7 +49,7 @@ function packet(index = 0): EndingPacket {
     endedAt: 0,
     gameVersion: 0,
     finalMessageId: 'opening',
-    recentActionScenes: [],
+    actionScenes: [],
   };
 }
 
@@ -125,6 +125,7 @@ test('real story frames share revealed facts and visual definitions with inspect
   scenario.core.facts[2].visualDescription = 'UNREVEALED_VISUAL_SECRET';
   const design: EndingDesign = {
     usedActionIds: ['first'],
+    itemCoverage: [],
     usedEvidenceIds: [],
     mode: 'actions',
     candidates: [
@@ -237,6 +238,7 @@ test('aftermath applies confirmed changes to an old opening and bases the end on
     } as unknown as AiService;
     const design: EndingDesign = {
       usedActionIds: [],
+      itemCoverage: [],
       usedEvidenceIds: [],
       mode: 'aftermath',
       candidates: [
@@ -409,6 +411,17 @@ for (let candidate = 0; candidate < candidateCount; candidate++) {
                 const output: EndingDesign = {
                   usedEvidenceIds: [],
                   usedActionIds: expectedReplay ? [first.actionId] : [],
+                  itemCoverage: partial
+                    ? [
+                        {
+                          itemId: 'tool',
+                          actionId: p.actions.at(-1)!.actionId,
+                          shot: 1,
+                          depiction: 'trace',
+                          reason: 'Keep the confirmed tool damage.',
+                        },
+                      ]
+                    : [],
                   mode: expectedReplay ? 'actions' : 'aftermath',
                   candidates: [
                     { focus: 'two', reason: 'compare' },
@@ -418,7 +431,8 @@ for (let candidate = 0; candidate < candidateCount; candidate++) {
                   selectionReason: 'Supported reference and confirmed state.',
                   startPrompt: 'Keep the confirmed physical state.',
                   endPrompt: 'Keep the confirmed physical state.',
-                  videoPrompt: 'Confirmed outcome and reaction.',
+                  videoPrompt:
+                    '[Shot 1] Confirmed outcome and reaction with damaged tool when present.',
                 };
                 return {
                   output: [{ content: [{ type: 'output_text', text: JSON.stringify(output) }] }],

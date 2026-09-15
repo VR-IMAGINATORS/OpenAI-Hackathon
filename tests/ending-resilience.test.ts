@@ -81,7 +81,7 @@ async function setup(
     endedAt: 0,
     gameVersion: 1,
     finalMessageId: null,
-    recentActionScenes: [],
+    actionScenes: [],
   };
   const jpeg = await sharp({
     create: { width: 1024, height: 1024, channels: 3, background: '#456' },

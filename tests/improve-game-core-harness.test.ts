@@ -104,8 +104,6 @@ function setup(
               message: 'This could damage the scissors. Continue?',
               reason: 'PRIVATE PHOTO REASON',
             });
-          case 'companion_reply':
-            return response({ reply: 'The rope loosened.' });
           default:
             throw new Error('unexpected schema');
         }
@@ -153,14 +151,26 @@ test('shared consultation returns public text without scene, and evidence charge
     const retry = await f.harness.handleRequest(f.harness.ledger.captureUnconsumedContext());
     assert.equal(retry.publicReply, '');
     assert.equal(f.game.credits.remaining, 980);
-    assert.deepEqual(f.delivered, hooks ? ['I am listening.'] : []);
+    assert.deepEqual(
+      f.delivered.map((text) => JSON.parse(text)),
+      hooks
+        ? [
+            {
+              type: 'consultation',
+              facts: result.publicReply,
+              requiresConfirmation: false,
+              ambience: [],
+            },
+          ]
+        : [],
+    );
     outcomes.push(result);
   }
   assert.deepEqual(outcomes[0], outcomes[1]);
 });
 
-test('recognized photo executes once without prior consultation and settles one photo charge', async () => {
-  const f = setup();
+test('recognized photo executes once without a second dialogue call or acknowledgment and settles one photo charge', async () => {
+  const f = setup({ hooks: true });
   const input = await f.photo();
   const result = await f.harness.handleRecognizedPhoto(input);
   assert.equal(f.judged(), 1);
@@ -168,6 +178,14 @@ test('recognized photo executes once without prior consultation and settles one 
   assert.equal(f.game.actionsUsed, 1);
   assert.equal(result.publicState.creditsRemaining, 900);
   assert.equal(result.committedPublicEvents.length, 1);
+  assert.equal(f.called(), 1, 'photo routing only; Live composes its own result reply');
+  assert.equal(f.delivered.length, 1);
+  const facts = JSON.parse(f.delivered[0]!);
+  assert.equal(facts.type, 'action_result');
+  assert.equal(facts.result, 'public result');
+  assert.match(result.publicReply, /public result/);
+  assert.doesNotMatch(result.publicReply, /action_result|notificationId/);
+  assert.doesNotMatch(f.delivered[0]!, /PRIVATE|shortReason/);
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE|shortReason/);
   const retry = await f.harness.handleRecognizedPhoto(input);
   assert.equal(retry.publicReply, '');

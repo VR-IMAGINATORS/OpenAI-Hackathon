@@ -25,7 +25,7 @@ const catalog = () =>
 test('HTTP difficulty is validated, isolated, retained and part of request identity', async (t) => {
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: 'difficulty-test',
+
     AI_MODE: 'mock',
   });
   const hosted = createHostedApp(config, { log: () => {} });
@@ -46,9 +46,7 @@ test('HTTP difficulty is validated, isolated, retained and part of request ident
       body: JSON.stringify(body),
     });
   for (const [difficulty, seconds, credits] of cases) {
-    const cookie = (await post('/api/auth', { passphrase: 'difficulty-test' })).headers
-      .get('set-cookie')!
-      .split(';')[0];
+    const cookie = (await post('/api/auth', {})).headers.get('set-cookie')!.split(';')[0];
     const body = { requestId: randomUUID(), clientId: randomUUID(), locale: 'en', difficulty };
     for (const invalid of ['hell', '', null, 3, {}])
       assert.equal(

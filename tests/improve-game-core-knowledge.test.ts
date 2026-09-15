@@ -122,11 +122,17 @@ function fixture(
   game.heartbeat('connected');
   game.start();
   const calls: { schema: string; data: any; instructions: string; wire: any }[] = [];
+  const briefings: string[] = [];
   const harness = new GameHarness({
     game,
     snapshot,
     model: 'fixture',
     now: () => 0,
+    hooks: {
+      speak: (text) => {
+        briefings.push(text);
+      },
+    },
     client: {
       respond: async (raw) => {
         const body = raw as any,
@@ -192,7 +198,7 @@ function fixture(
     harness.sync();
     return harness.ledger.captureUnconsumedContext();
   };
-  return { snapshot, game, harness, calls, say };
+  return { snapshot, game, harness, calls, say, briefings };
 }
 
 test('a concrete paraphrased question directly reveals its detail in one finite consultation', async () => {
@@ -205,6 +211,12 @@ test('a concrete paraphrased question directly reveals its detail in one finite 
   assert.match(result.publicReply, /DETAIL_CANARY/);
   assert.doesNotMatch(result.publicReply, /OVERVIEW_CANARY|STAGED_HINT_CANARY|PRIVATE/);
   assert.deepEqual(result.committedPublicEvents, []);
+  assert.equal(f.briefings.length, 1);
+  const briefing = JSON.parse(f.briefings[0]!);
+  assert.equal(briefing.type, 'consultation');
+  assert.equal(briefing.facts, result.publicReply);
+  assert.doesNotMatch(f.briefings[0]!, /OVERVIEW_CANARY|STAGED_HINT_CANARY|PRIVATE/);
+  assert.match(f.calls.at(-1)!.instructions, /public factual briefing/);
   assert.equal(f.game.actionsUsed, 0);
   assert.equal(f.game.credits.remaining, 980);
   const selected = f.calls.find((call) => call.schema === 'knowledge_selection')!;

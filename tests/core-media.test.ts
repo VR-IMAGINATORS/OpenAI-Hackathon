@@ -205,6 +205,85 @@ test('scene only publishes after inspection; rejection regenerates once', async 
   jobs.cancelAll();
 });
 
+for (const investigation of [false, true])
+  for (const persistent of [false, true])
+    test(`scene collage rejection uses the bounded retry and never publishes a rejected image (investigation: ${investigation}, persistent: ${persistent})`, async (t) => {
+      const scene = structuredClone(input());
+      if (investigation)
+        scene.snapshot.scenarioV2.investigation = {
+          initialOverview: { ja: 'The confirmed room.', en: 'The confirmed room.' },
+          knowledgeMetadata: [],
+          ambienceSlots: [],
+          publicVisuals: [],
+          sourceRef: { sourceDigest: 'a'.repeat(64), candidateId: 'single-view', revision: 1 },
+        };
+      let generates = 0,
+        checks = 0,
+        ready = 0,
+        failed = 0;
+      const ai = new AiService(
+        loadAiConfig({ AI_MODE: 'mock' }),
+        fake({
+          createImage: async (body: any) => {
+            generates++;
+            assert.match(body.prompt, /One full-frame camera view of one place at one instant/);
+            assert.match(body.prompt, /No collage, montage, storyboard, split screen/);
+            assert.equal(body.n, 1);
+            return generated;
+          },
+          createResponse: async (body: any) => {
+            checks++;
+            assert.match(
+              body.instructions,
+              /multi-scene or multi-time layout is a major contradiction/,
+            );
+            assert.match(body.instructions, /Natural doors, windows, mirrors and screens/);
+            const data = JSON.parse(body.input[0].content[0].text);
+            assert.ok(data.rules.some((rule: any) => rule.ruleId === 'composition:single_moment'));
+            const result =
+              persistent || checks === 1
+                ? {
+                    verdict: 'reject',
+                    contradictions: [
+                      {
+                        ruleId: 'composition:single_moment',
+                        reason: 'Multiple moments appear in separate panels.',
+                      },
+                    ],
+                  }
+                : { verdict: 'pass', contradictions: [] };
+            return {
+              output: [{ content: [{ type: 'output_text', text: JSON.stringify(result) }] }],
+            };
+          },
+        }),
+      );
+      ai.register('one', performance.now() + 100000);
+      const jobs = new SceneJobs(ai, { retryDelayMs: 1 });
+      t.after(async () => {
+        jobs.cancelAll();
+        await ai.shutdown();
+      });
+      jobs.enqueue(scene, {
+        ready: () => {
+          ready++;
+          assert.equal(checks, 2);
+        },
+        failed: () => {
+          failed++;
+        },
+      });
+      await until(() => ready + failed === 1);
+      assert.equal(ready, persistent ? 0 : 1);
+      assert.equal(failed, persistent ? 1 : 0);
+      assert.equal(generates, 2);
+      assert.equal(
+        checks,
+        2,
+        'layout rejection is handled as a known rule, not an unknown inspection',
+      );
+    });
+
 test('unknown, refusal and undeclared inspection rule never publish', async () => {
   for (const result of [
     { verdict: 'unknown', contradictions: [] },

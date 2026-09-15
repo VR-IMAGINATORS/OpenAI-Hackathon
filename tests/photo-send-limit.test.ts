@@ -18,11 +18,11 @@ async function until(predicate: () => boolean) {
 async function setup(t: TestContext) {
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: 'send-limit-test',
+
     AI_MODE: 'mock',
   });
   let recognitions = 0;
-  let recognitionFailure = false;
+  let recognitionFailures = 0;
   let photoGate: Promise<void> | undefined;
   const hosted = createHostedApp(config, {
     log: () => {},
@@ -58,8 +58,8 @@ async function setup(t: TestContext) {
           };
         else {
           recognitions++;
-          if (recognitionFailure) {
-            recognitionFailure = false;
+          if (recognitionFailures > 0) {
+            recognitionFailures--;
             throw new Error('Synthetic recognition failure');
           }
           result = {
@@ -108,9 +108,7 @@ async function setup(t: TestContext) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   }
-  cookie = (await request('/api/auth', { passphrase: 'send-limit-test' })).headers
-    .get('set-cookie')!
-    .split(';')[0];
+  cookie = (await request('/api/auth', {})).headers.get('set-cookie')!.split(';')[0];
   const created = await (
     await request('/api/plays', {
       requestId: randomUUID(),
@@ -137,7 +135,7 @@ async function setup(t: TestContext) {
     png,
     recognitions: () => recognitions,
     failRecognition() {
-      recognitionFailure = true;
+      recognitionFailures = 2;
     },
     holdPhoto(gate: Promise<void>) {
       photoGate = gate;

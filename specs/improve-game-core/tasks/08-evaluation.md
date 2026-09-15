@@ -24,4 +24,3 @@ Astraは各指摘とその引用play全文を決定的な窓に分けて検証�
 ## 実模擬記録での統合確認
 
 保存済みの実GameHarness模擬25turn×3を再利用し評価のみmock再実行。レビュー役は各15窓＋自身の統合、Astraは未クリアplayごと5窓＋統合。評価66 calls、最大入力65,442 bytes、completeかつ全turn coverageと根拠再検証成功。元保存物は変更しない。CLI全9件・実APIは別工程。
-

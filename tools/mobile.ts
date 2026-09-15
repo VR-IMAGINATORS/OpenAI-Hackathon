@@ -45,11 +45,10 @@ async function main() {
   const values: NodeJS.ProcessEnv = mock
     ? {
         AI_MODE: 'mock',
-        APP_PASSPHRASE: 'local-demo-only',
         CLOUDFLARED_PATH: process.env.CLOUDFLARED_PATH,
       }
     : readEnvironment('.env.local', process.env, process.cwd());
-  if (mock) console.log('画面確認用MOCK — 合言葉: local-demo-only / 音声AIには接続しません');
+  if (mock) console.log('画面確認用MOCK — 音声AIには接続しません');
   const config = loadHostedConfig({
     ...values,
     HOST: '127.0.0.1',
@@ -109,7 +108,7 @@ async function main() {
     );
   console.log(await QRCode.toString(origin, { type: 'terminal', small: true }));
   console.log('スマホ参加URL: ' + origin);
-  console.log('設定した共通の合言葉で参加してください。');
+  console.log('URLを開き、難易度を選んで開始してください。');
   console.log('終了: Ctrl+C。ゲームロジックはこのPCで動作します。');
 }
 main().catch(async (error) => {

@@ -69,6 +69,8 @@ export const executeIntentSchema = z
     kind: z.literal('execute'),
     evidenceSeq: z.array(sequence).max(10000),
     origin: actionOriginSchema.optional(),
+    /** Server-owned link to an uncommitted failed request; never supplied by the model. */
+    retryOf: uuid.optional(),
     mode: z.enum(['tool', 'environment']).optional(),
     environmentTargetIds: z
       .array(z.string().regex(/^[a-z][a-z0-9-]{0,63}$/))
@@ -152,10 +154,11 @@ export const intentDecisionSchema = z.discriminatedUnion('kind', [
       kind: z.literal('consult'),
       evidenceSeq,
       reason,
-      answer: z.string().min(1).max(2000).optional(),
+      // Public briefing for Live, not a spoken script. Empty only for social conversation.
+      answer: z.string().max(2000).optional(),
       riskProposal: riskProposalSchema.nullable().optional(),
       recognitionCorrection: recognitionCorrectionSchema.nullable().optional(),
-      responseKind: z.enum(['answer', 'correction']).optional(),
+      responseKind: z.enum(['answer', 'correction', 'social']).optional(),
     })
     .strict(),
   executeIntentSchema,

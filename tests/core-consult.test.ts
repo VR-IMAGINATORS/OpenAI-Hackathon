@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import {
   classifyCoreIntent,
   coreIntentResponseSchema,
@@ -7,7 +8,7 @@ import {
 import { factCommands, speechCommands, liveInstructions } from '../apps/local-server/live.js';
 import { ConversationLedger } from '../apps/local-server/conversation.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
-import { intentDecisionSchema } from '../packages/shared/conversation.js';
+import { intentDecisionSchema, type ExecuteIntent } from '../packages/shared/conversation.js';
 import type { PublicGameState } from '../packages/shared/game.js';
 
 const snapshot = new ScenarioCatalog({
@@ -53,6 +54,76 @@ const classify = (respond: (body: any) => Promise<unknown>) =>
       inventory: [],
     },
   });
+
+for (const outcome of [
+  'retry',
+  'cancel',
+  'missing',
+  'stale',
+  'extra_usage',
+  'provider_retry_id',
+  'wait',
+  'new_request',
+] as const) {
+  test(`retained request classification: ${outcome}`, async () => {
+    const original: ExecuteIntent = {
+      kind: 'execute',
+      evidenceSeq: [50],
+      usage: 'Use scissors on the rope',
+      itemRefs: [{ photoId: randomUUID() }],
+      reason: 'Original request',
+    };
+    const actionId = randomUUID();
+    let discarded = 0;
+    const promise = classifyCoreIntent({
+      model: 'fake',
+      snapshot,
+      conversation: ledger.captureUnconsumedContext(),
+      photos: [],
+      game: {},
+      retainedRequest: outcome === 'missing' ? null : { actionId, intent: original },
+      onDiscardRetainedRequest: () => {
+        discarded++;
+      },
+      respond: async () =>
+        response(
+          outcome === 'wait'
+            ? { kind: 'wait', reason: 'Acknowledgment only' }
+            : outcome === 'new_request'
+              ? { ...original, evidenceSeq: [1], usage: 'Different use' }
+              : {
+                  kind: outcome === 'cancel' ? 'cancel_request' : 'retry_request',
+                  evidenceSeq: [outcome === 'stale' ? 99 : 1],
+                  reason: 'Current user request',
+                  ...(outcome === 'extra_usage' ? { usage: 'Injected change' } : {}),
+                  ...(outcome === 'provider_retry_id' ? { retryOf: randomUUID() } : {}),
+                },
+        ),
+    });
+    if (['missing', 'stale', 'extra_usage', 'provider_retry_id'].includes(outcome)) {
+      await assert.rejects(promise);
+      assert.equal(discarded, 0);
+    } else {
+      const actual = await promise;
+      if (outcome === 'retry') {
+        assert.deepEqual(actual, {
+          ...original,
+          origin: undefined,
+          evidenceSeq: [1],
+          retryOf: actionId,
+          reason: 'Current user request',
+        });
+        assert.equal(discarded, 0);
+      } else if (outcome === 'wait') {
+        assert.equal(actual.kind, 'wait');
+        assert.equal(discarded, 0);
+      } else {
+        assert.equal(discarded, 1);
+        assert.equal(actual.kind, outcome === 'cancel' ? 'consult' : 'execute');
+      }
+    }
+  });
+}
 
 test('consult requests a real answer and excludes private puzzle data from intent input', async () => {
   const actual = await classify(async (body) => {
@@ -116,7 +187,8 @@ test('core Live instructions delegate game questions and gate action claims on a
   assert.match(prompt, /アプリから受付の相づちは届かない/);
   assert.match(prompt, /実行可否・成否はサーバーが判断する/);
   assert.match(prompt, /委譲しただけでは行動の開始・成功・状態変化は未確定/);
-  assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
+  assert.match(prompt, /確定した結果のcommentary通知を受けて自分の言葉で伝え/);
+  assert.match(prompt, /それが届く前に結果を告げない/);
 });
 
 test('Live omits credit balances at initial connection and reconnect in each locale', () => {
@@ -181,22 +253,64 @@ test('time notice policy is scoped to a deferred aside in each locale and omitte
   }
 });
 
-test('speech chunks preserve text while keeping complete sentences together', () => {
-  const first = 'あ'.repeat(100) + '。';
-  const second = 'い'.repeat(90) + '。';
-  const commands = speechCommands(first + second, 'delegation-speech');
-  assert.deepEqual(
-    commands.map((c) => c.content),
-    [first, second],
-  );
-  assert.ok(
-    commands.every(
-      (c) => c.type === 'session.commentary.append' && c.delegation_id === 'delegation-speech',
+test('long public briefings preserve all text but trigger speech only once, after all parts', () => {
+  for (const content of [
+    'あ'.repeat(100) + '。' + 'い'.repeat(90) + '。',
+    '🪢'.repeat(300) + '。Done!',
+    '\\"\n'.repeat(400),
+  ]) {
+    const commands = speechCommands(content, 'delegation-speech', 'notice-test');
+    const spoken = commands.filter((c) => c.type === 'session.commentary.append');
+    assert.equal(spoken.length, 1);
+    assert.equal(commands.at(-1), spoken[0]);
+    assert.deepEqual(JSON.parse(spoken[0]!.content), {
+      notificationId: 'notice-test',
+      complete: true,
+    });
+    const parts = commands.slice(0, -1).map((c) => JSON.parse(c.content));
+    assert.equal(parts.map((p) => p.facts).join(''), content);
+    assert.deepEqual(
+      parts.map((p) => p.part),
+      parts.map((_, i) => i + 1),
+    );
+    assert.ok(parts.every((p) => p.parts === parts.length && p.notificationId === 'notice-test'));
+    assert.ok(
+      commands.every(
+        (c) => Buffer.byteLength(c.content) <= 480 && c.delegation_id === 'delegation-speech',
+      ),
+    );
+    assert.deepEqual(speechCommands(content, 'delegation-speech', 'notice-test'), commands);
+  }
+  assert.deepEqual(speechCommands(''), []);
+});
+
+test('short facts fit in one complete notification with no preliminary state echo', () => {
+  const commands = speechCommands('縄が切れた。', null, 'short-notice');
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0]!.type, 'session.commentary.append');
+  assert.deepEqual(JSON.parse(commands[0]!.content), {
+    notificationId: 'short-notice',
+    complete: true,
+    facts: '縄が切れた。',
+  });
+});
+
+test('social admission has no backend dialogue and rejects hidden effects or a prepared reply', async () => {
+  const social = { ...decision, responseKind: 'social', answer: '' };
+  const result = await classify(async (body) => {
+    assert.match(body.instructions, /Do not compose a reply to small talk/);
+    assert.match(body.instructions, /It is NOT dialogue/);
+    return response(social);
+  });
+  assert.deepEqual(result, social);
+  await assert.rejects(classify(async () => response({ ...social, answer: '一緒にがんばろう' })));
+  await assert.rejects(classify(async () => response({ ...decision, answer: '' })));
+  await assert.rejects(
+    classify(async () =>
+      response({
+        ...social,
+        recognitionCorrection: { photoId: '12345678-1234-4234-8234-123456789012', name: 'ハサミ' },
+      }),
     ),
   );
-  const long = '🪢'.repeat(300) + '。Done!';
-  const split = speechCommands(long);
-  assert.equal(split.map((c) => c.content).join(''), long);
-  assert.ok(split.every((c) => Buffer.byteLength(c.content) <= 480));
-  assert.deepEqual(speechCommands(''), []);
 });

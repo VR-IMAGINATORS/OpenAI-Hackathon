@@ -6,8 +6,7 @@ export function setApiLocale(locale: 'ja' | 'en') {
 }
 const englishMessages: Record<string, string> = {
   INSUFFICIENT_CREDITS: 'Not enough credits. A conversation costs 20; each photo costs 100.',
-  AUTH_REQUIRED: 'Enter the shared passphrase to join.',
-  AUTH_FAILED: 'Incorrect passphrase. Check the passphrase shared by the host.',
+  AUTH_REQUIRED: 'Please join from the start screen.',
   AUTH_RATE_LIMIT: 'Too many attempts. Wait a moment and try again.',
   SESSION_EXPIRED: 'Your session expired. Please join again.',
   PLAY_EXPIRED: 'This play has ended or expired. Please start again.',
@@ -30,12 +29,11 @@ export function controlHeaders(control: PlayControl | { playId: string }) {
 }
 const publicMessages: Record<string, string> = {
   INSUFFICIENT_CREDITS: 'クレジットが不足しています。会話は20、写真は1枚100必要です。',
-  AUTH_REQUIRED: '合言葉を入力して参加してください。',
-  AUTH_FAILED: '合言葉が違います。運営から共有された内容を確認してください。',
-  AUTH_RATE_LIMIT: '合言葉の確認回数が上限に達しました。しばらく待って再試行してください。',
+  AUTH_REQUIRED: '開始画面から参加してください。',
+  AUTH_RATE_LIMIT: '参加リクエストの回数が上限に達しました。しばらく待って再試行してください。',
   AUTH_CAPACITY: '現在参加を受け付けられません。しばらく待って再試行してください。',
   SESSION_EXPIRED:
-    'セッションが失効しました。期限切れやサーバー更新の可能性があります。合言葉で参加し直してください。',
+    'セッションが失効しました。期限切れやサーバー更新の可能性があります。開始画面から参加し直してください。',
   PLAY_EXPIRED: '体験が終了したか、復帰できる時間を過ぎました。最初から遊び直してください。',
   CONTROL_BUSY: '別の画面で接続中です。「この画面で再接続」で引き継げます。',
   REQUEST_LIMIT:

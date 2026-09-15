@@ -82,6 +82,37 @@ test('legacy image rules remain available without investigation metadata', () =>
   assert.match(scenePrompt(input, ''), /Current facts override/);
 });
 
+test('investigation images retain committed tools and aftermath without revealing hidden action facts', () => {
+  const input = fixture();
+  input.action = {
+    actionId: 'action-1',
+    order: 1,
+    obstacleId: input.facts.obstacleId,
+    usage: 'lever the panel with scissors',
+    items: [
+      { id: 'scissors', name: 'scissors', beforeStatus: 'available', afterStatus: 'damaged' },
+    ],
+    beforeVersion: 0,
+    afterVersion: 1,
+    beforeFacts: { obstacleId: input.facts.obstacleId, values: { secret: 'PRIVATE BEFORE' } },
+    afterFacts: { obstacleId: input.facts.obstacleId, values: { secret: 'PRIVATE AFTER' } },
+    success: false,
+    cleared: false,
+    narrative: 'The panel is still shut. The scissors bent.',
+  };
+  const prompt = scenePrompt(input, 'PRIVATE INSPECTION FEEDBACK');
+  const data = JSON.parse(prompt.slice(prompt.indexOf('{')));
+  assert.deepEqual(data.committedAction, {
+    usage: input.action.usage,
+    tools: [{ name: 'scissors', afterStatus: 'damaged' }],
+    success: false,
+    cleared: false,
+    narrative: input.action.narrative,
+  });
+  assert.match(prompt, /immediate aftermath/);
+  assert.doesNotMatch(prompt, /PRIVATE|beforeValues|afterValues|LATER PUBLIC VISUAL/);
+});
+
 test('consultation advances the real game clock while a frozen evaluation clock ignores API delay', async () => {
   for (const frozen of [false, true]) {
     const { snapshot } = fixture();

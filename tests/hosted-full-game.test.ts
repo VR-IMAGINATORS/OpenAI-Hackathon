@@ -11,7 +11,6 @@ import type { PublicGameState, PlayUpdate } from '../packages/shared/game.js';
 // Only the paid provider boundary is faked. HTTP, ownership,
 // photo decoding, prompts, schemas, clock and game transitions are real.
 test('hosted owner plays all three obstacles through unified HTTP with fake OpenAI', async (t) => {
-  const passphrase = 'integration-only-passphrase';
   const apiKey = 'integration-only-provider-secret';
   let recognitionCalls = 0,
     judgmentCalls = 0,
@@ -19,7 +18,7 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
     liveCreates = 0;
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: passphrase,
+
     AI_MODE: 'mock',
     GAME_MODEL: 'integration-vision',
     SCENARIO_PATH: 'scenarios/mobile-playtest.json',
@@ -123,14 +122,14 @@ test('hosted owner plays all three obstacles through unified HTTP with fake Open
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const raw = await response.text();
-    assert.ok(!raw.includes(passphrase) && !raw.includes(apiKey));
+    assert.ok(!raw.includes(apiKey));
     assert.doesNotMatch(raw, /Bearer |"token"|live_integration|data:image/);
     return { response, data: JSON.parse(raw), raw };
   }
   const bootstrap = await request('/api/bootstrap', undefined, 'GET');
   assert.equal(bootstrap.data.ai.mode, 'mock');
   assert.equal((await request('/api/play/state', undefined, 'GET')).response.status, 401);
-  const claim = await request('/api/auth', { passphrase });
+  const claim = await request('/api/auth', {});
   assert.equal(claim.response.status, 200);
   const cookie = claim.response.headers.get('set-cookie')!;
   assert.match(cookie, /HttpOnly/);

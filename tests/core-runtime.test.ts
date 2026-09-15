@@ -1,3 +1,5 @@
+import { liveBriefings } from './fixtures/live-briefings.js';
+import { LiveOutbox } from '../apps/local-server/live-outbox.js';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -49,6 +51,7 @@ async function setup(
   locale: 'ja' | 'en' = 'ja',
   initialCredits = 1000,
   creativeProbability?: number,
+  recognizeResponse?: (input: any) => unknown,
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0, photo: 0, control: 0, reply: 0 };
@@ -123,6 +126,7 @@ async function setup(
         }
         calls.recognize++;
         await recognizeGate;
+        if (recognizeResponse) return response(recognizeResponse(context));
         return response({
           items: [{ photoId: context.photos[0].id, inventoryId: null, name: 'ハサミ' }],
           usage: '',
@@ -428,6 +432,100 @@ test('credits: missing-delegation consultation and a later real delegation never
   assert.equal(h.runtime.state().lastCreditCharge?.sequence, 1);
 });
 
+test('social admission lets Live compose its reply and charges once, including recovery and retries', async (t) => {
+  const h = await setup(t, (context) => ({
+    kind: 'consult',
+    evidenceSeq: context.conversation.eligibleEvidenceSeq,
+    responseKind: 'social',
+    answer: '',
+    reason: 'INTERNAL_SOCIAL_REASON',
+  }));
+  await h.say('応援して');
+  h.setNow(5000);
+  h.runtime.tick();
+  await until(() => h.runtime.state().creditsRemaining === 980);
+  const before = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.equal(before.length, 1);
+  assert.deepEqual(
+    liveBriefings(before).map((c) => JSON.parse(c.facts)),
+    [{ type: 'social' }],
+  );
+  const id = randomUUID();
+  await h.delegate(id);
+  await h.delegate(id);
+  await tick();
+  assert.deepEqual(h.runtime.pollCommands(h.generation, 0).commands, before);
+  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.calls.reply, 0);
+  assert.equal(h.calls.judge, 0);
+  // A later request is a new conversation, even with identical wording.
+  await h.say('応援して');
+  await h.delegate();
+  await until(() => h.runtime.state().creditsRemaining === 960);
+  const after = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands);
+  assert.equal(after.length, 2);
+  assert.notEqual(after[0]!.notificationId, after[1]!.notificationId);
+});
+
+test('long consultation produces one complete briefing and one speech trigger without a state echo', async (t) => {
+  const facts = 'ロープはまだつながっている。'.repeat(80);
+  const h = await setup(t, (context) => ({
+    kind: 'consult',
+    evidenceSeq: context.conversation.eligibleEvidenceSeq,
+    answer: facts,
+    reason: 'INTERNAL_LONG_REASON',
+  }));
+  await h.say('今の状態を教えて');
+  const id = randomUUID();
+  await h.delegate(id);
+  await until(() => h.runtime.state().creditsRemaining === 980);
+  const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.ok(commands.length > 2);
+  assert.equal(commands.filter((c) => c.type === 'session.commentary.append').length, 1);
+  assert.equal(commands.at(-1)!.type, 'session.commentary.append');
+  const briefings = liveBriefings(commands);
+  assert.equal(briefings.length, 1);
+  assert.deepEqual(JSON.parse(briefings[0]!.facts), {
+    type: 'consultation',
+    facts,
+    requiresConfirmation: false,
+    ambience: [],
+  });
+  assert.ok(
+    commands.every((c) => JSON.parse(c.content).notificationId === briefings[0]!.notificationId),
+  );
+  assert.doesNotMatch(JSON.stringify(commands), /INTERNAL_LONG_REASON/);
+  await h.delegate(id);
+  await tick();
+  assert.deepEqual(h.runtime.pollCommands(h.generation, 0).commands, commands);
+  assert.equal(h.runtime.state().creditsRemaining, 980);
+});
+
+test('partially queued facts never trigger speech or charge the failed consultation', async (t) => {
+  const h = await setup(t, (context) => ({
+    kind: 'consult',
+    evidenceSeq: context.conversation.eligibleEvidenceSeq,
+    answer: '扉が閉まっている。'.repeat(100),
+    reason: 'long facts',
+  }));
+  (h.runtime as unknown as { outbox: LiveOutbox }).outbox = new LiveOutbox(
+    h.generation,
+    h.runtime.game.controllerEpoch,
+    Date.now,
+    { maxCommands: 1, maxBytes: 64 * 1024 },
+  );
+  await h.say('状態を教えて');
+  await h.delegate();
+  await until(() => !!h.runtime.state().error);
+  const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0]!.type, 'session.thinking.append');
+  assert.deepEqual(liveBriefings(commands), []);
+  assert.equal(h.runtime.state().creditsRemaining, 1000);
+  assert.equal(h.runtime.game.credits.remaining, 1000);
+  assert.equal(h.calls.judge, 0);
+});
+
 test('credits: Pro permits fifty short exchanges and keeps its credit notices out of Live', async (t) => {
   const h = await setup(t, (context) => ({
     kind: 'consult',
@@ -444,11 +542,7 @@ test('credits: Pro permits fifty short exchanges and keeps its credit notices ou
       commands.map((c) => c.content).join(''),
       /creditsRemaining|クレジット|credits/i,
     );
-    assert.ok(
-      commands
-        .filter((c) => c.type === 'session.commentary.append')
-        .every((c) => c.content === '聞いているよ。'),
-    );
+    assert.ok(liveBriefings(commands).every((c) => JSON.parse(c.facts).facts === '聞いているよ。'));
   }
   assert.equal(h.runtime.state().status, 'lost');
   assert.equal(h.runtime.state().endReason, 'credits_exhausted');
@@ -502,7 +596,7 @@ test('runtime accepts correction while classification is pending and discards th
   await until(() =>
     h.runtime
       .pollCommands(h.generation, 0)
-      .commands.some((c) => c.content === 'まだ切らずに相談する'),
+      .commands.some((c) => c.content.includes('まだ切らずに相談する')),
   );
   assert.equal(contexts.length, 2);
   assert.equal(h.calls.judge, 0);
@@ -526,7 +620,9 @@ test('runtime consult consumes no action and a subsequent directive executes onc
   await h.say('このハサミで切れるかな？');
   await h.delegate();
   await until(() =>
-    h.runtime.pollCommands(h.generation, 0).commands.some((c) => c.content === '切れるか相談中'),
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.some((c) => c.content.includes('切れるか相談中')),
   );
   assert.equal(h.calls.judge, 0);
   assert.equal(h.runtime.state().creditsRemaining, 880);
@@ -566,28 +662,18 @@ test('execution adds no server acknowledgement while judging and still delivers 
   assert.equal(newCommands().filter((c) => c.type === 'session.commentary.append').length, 0);
   gate.resolve();
   await until(() =>
-    newCommands().some(
-      (c) =>
-        c.type === 'session.commentary.append' &&
-        c.content.startsWith(h.runtime.game.lastResult!.narrative),
-    ),
+    liveBriefings(newCommands()).some((c) => JSON.parse(c.facts).type === 'action_result'),
   );
   await h.delegate(delegationId);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
   assert.equal(h.runtime.state().creditsRemaining, 880);
-  assert.deepEqual(
-    newCommands()
-      .filter((c) => c.type === 'session.commentary.append')
-      .map((c) => c.content),
-    [h.runtime.game.lastResult!.narrative + '\n' + h.runtime.game.situation],
-  );
-  assert.deepEqual(
-    newCommands()
-      .filter((c) => c.type === 'session.thinking.append')
-      .map((c) => JSON.parse(c.content)),
-    [],
-  );
+  const briefings = liveBriefings(newCommands());
+  assert.equal(briefings.length, 1);
+  assert.equal(newCommands().filter((c) => c.type === 'session.commentary.append').length, 1);
+  assert.equal(JSON.parse(briefings[0]!.facts).result, h.runtime.game.lastResult!.narrative);
+  assert.equal(JSON.parse(briefings[0]!.facts).situation, h.runtime.game.situation);
+  assert.equal(h.calls.reply, 0);
 });
 
 test('ambiguous photo use question arrives only after recognition and an upload retry does not repeat it', async (t) => {
@@ -864,7 +950,7 @@ test('final warning supersedes pending normal context and speaks after the bound
   assert.equal(commands.length, 1);
   assert.equal(commands[0]!.type, 'session.commentary.append');
   assert.equal(
-    commands[0]!.content,
+    liveBriefings(commands)[0]!.facts,
     h.snapshot.coreConfig.warnings.milestones[1]!.transitionMessage.ja,
   );
   assert.equal(commands[0]!.noticeKind, 'time-warning');
@@ -894,7 +980,7 @@ test('consult speaks answer rather than classification reason and action speaks 
   await until(() =>
     h.runtime
       .pollCommands(h.generation, 0)
-      .commands.some((c) => c.content === '手首はまだ縄で縛られているよ。'),
+      .commands.some((c) => c.content.includes('手首はまだ縄で縛られているよ。')),
   );
   assert.equal(contexts[0].game.publicState.situation, h.runtime.game.situation);
   assert.equal(contexts[0].game.obstacle, undefined);
@@ -906,12 +992,9 @@ test('consult speaks answer rather than classification reason and action speaks 
   await h.delegate();
   await until(() => h.calls.judge === 1 && h.runtime.state().actionsUsed === 1);
   assert.ok(
-    h.runtime
-      .pollCommands(h.generation, 0)
-      .commands.some(
-        (c) =>
-          c.type === 'session.commentary.append' && c.content.includes(h.runtime.game.situation),
-      ),
+    liveBriefings(h.runtime.pollCommands(h.generation, 0).commands).some((c) =>
+      c.facts.includes(h.runtime.game.situation),
+    ),
   );
   assert.equal(h.scenes.length, 2);
   assert.equal(h.scenes[1].situation, h.runtime.game.situation);
@@ -948,6 +1031,227 @@ const obviousPhoto = (input: any) => ({
   itemRefs: [{ photoId: input.photos[0] }],
   message: 'やってみる。',
   reason: '切る道具を求めているため',
+});
+
+const recoveredJudgment = {
+  success: false,
+  narrative: 'ロープが少し緩んだ。',
+  situation: '結び目が緩んでいる。',
+  shortReason: '結び目を動かした',
+  inventoryChanges: [],
+  factChanges: [{ key: 'wrists', from: 'bound', to: 'loosened' }],
+};
+
+for (const stage of ['recognize', 'photo', 'classify', 'judge'] as const) {
+  test(`a malformed ${stage} response recovers inside the full voice flow without an error notice`, async (t) => {
+    const attempts = { recognize: 0, photo: 0, classify: 0, judge: 0 };
+    const h = await setup(
+      t,
+      (context) => {
+        if (++attempts.classify === 1 && stage === 'classify') return { kind: 'INVALID' };
+        return execute(context);
+      },
+      undefined,
+      false,
+      undefined,
+      () => {
+        if (++attempts.photo === 1 && stage === 'photo') return {};
+        return {
+          decision: 'clarify',
+          usage: '',
+          itemRefs: [],
+          message: '使い方を待っている。',
+          reason: 'No directive yet',
+        };
+      },
+      () => {
+        if (++attempts.judge === 1 && stage === 'judge') return {};
+        return recoveredJudgment;
+      },
+      'ja',
+      1000,
+      undefined,
+      (context) => {
+        if (++attempts.recognize === 1 && stage === 'recognize') return { items: null };
+        return {
+          items: context.photos.map((p: any) => ({
+            photoId: p.id,
+            inventoryId: null,
+            name: 'ハサミ',
+          })),
+          usage: '',
+          summary: 'ハサミ',
+        };
+      },
+    );
+    await h.runtime.photos(randomUUID(), [h.photo]);
+    await until(() => h.calls.photo === (stage === 'photo' ? 2 : 1));
+    await tick();
+    await h.say('そのハサミでロープを切って');
+    await h.delegate();
+    await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+    assert.equal(attempts[stage], 2);
+    assert.equal(h.runtime.game.credits.remaining, 880);
+    assert.equal(h.runtime.game.inventory.length, 1);
+    assert.equal(h.runtime.game.error, null);
+    assert.equal(h.runtime.game.retainedRequest, null);
+    const briefings = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands).map((c) =>
+      JSON.parse(c.facts),
+    );
+    assert.equal(briefings.filter((b) => b.type === 'action_result').length, 1);
+    assert.equal(briefings.filter((b) => b.type === 'request_unavailable').length, 0);
+  });
+}
+
+test('runtime repairs malformed judgment silently, then publishes and charges once', async (t) => {
+  const judgments: any[] = [];
+  const h = await setup(t, execute, undefined, false, undefined, undefined, (context) => {
+    judgments.push(context);
+    return judgments.length === 1 ? { success: 'invalid' } : recoveredJudgment;
+  });
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
+  const lastSeq = h.runtime.pollCommands(h.generation, 0).commands.at(-1)?.seq ?? 0;
+  await h.say('これでロープを切って');
+  const delegation = randomUUID();
+  await h.delegate(delegation);
+  await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+  await h.delegate(delegation);
+  await tick();
+  assert.equal(h.calls.judge, 2);
+  assert.equal(h.runtime.game.credits.remaining, 880);
+  assert.equal(h.runtime.game.retainedRequest, null);
+  assert.equal(h.runtime.game.error, null);
+  assert.deepEqual(judgments[0].proposal, judgments[1].proposal);
+  assert.equal(judgments[1].judgmentRepair, 'AI_OUTPUT_INVALID');
+  const briefings = liveBriefings(
+    h.runtime.pollCommands(h.generation, 0).commands.filter((c) => c.seq > lastSeq),
+  );
+  assert.equal(briefings.length, 1);
+  assert.equal(JSON.parse(briefings[0]!.facts).type, 'action_result');
+});
+
+test('exhausted classification reports once, preserves user evidence and does not repeat the error at expiry', async (t) => {
+  let allow = false;
+  const h = await setup(t, (context) => (allow ? execute(context) : { kind: 'INVALID' }));
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.photo === 1);
+  await tick();
+  await h.say('ハサミでロープを切って');
+  await h.delegate();
+  const unavailable = () =>
+    liveBriefings(h.runtime.pollCommands(h.generation, 0).commands)
+      .map((c) => JSON.parse(c.facts))
+      .filter((c) => c.type === 'request_unavailable');
+  await until(() => unavailable().length === 1);
+  assert.equal(h.calls.classify, 2);
+  h.setNow(24002);
+  h.runtime.tick();
+  await tick();
+  assert.equal(unavailable().length, 1);
+  assert.equal(h.calls.classify, 2);
+  allow = true;
+  await h.delegate();
+  await until(() => h.runtime.game.actionsUsed === 1);
+  assert.equal(h.calls.classify, 3);
+  assert.equal(h.runtime.game.credits.remaining, 880);
+});
+
+for (const origin of ['photo', 'voice'] as const) {
+  test(`failed ${origin} request resumes from new evidence without another explanation or duplicate charge`, async (t) => {
+    let attempt = 0;
+    const contexts: any[] = [];
+    const judgments: any[] = [];
+    const h = await setup(
+      t,
+      (context) => {
+        contexts.push(context);
+        return context.game.retainedRequest
+          ? {
+              kind: 'retry_request',
+              evidenceSeq: context.conversation.eligibleEvidenceSeq,
+              reason: 'Explicit request to resume',
+            }
+          : execute(context);
+      },
+      undefined,
+      false,
+      undefined,
+      origin === 'photo' ? obviousPhoto : undefined,
+      (context) => {
+        judgments.push(context);
+        return ++attempt <= 2 ? { success: 'invalid' } : recoveredJudgment;
+      },
+    );
+    await h.runtime.photos(randomUUID(), [h.photo]);
+    if (origin === 'voice') {
+      await until(() => h.calls.photo === 1);
+      await tick();
+      await h.say('これでロープを切って');
+      await h.delegate();
+    }
+    await until(() => !!h.runtime.game.retainedRequest && !h.runtime.game.credits.pending);
+    await tick();
+    const retained = h.runtime.game.retainedRequest!;
+    assert.equal(h.calls.judge, 2);
+    assert.equal(h.runtime.game.actionsUsed, 0);
+    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 1000 : 900);
+    assert.equal(h.runtime.game.inventory.length, 0);
+    assert.equal(h.runtime.game.photos.length, 1);
+    const notices = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands)
+      .map((c) => JSON.parse(c.facts))
+      .filter((c) => c.type === 'request_unavailable');
+    assert.equal(notices.length, 1);
+    assert.equal(notices[0].requestRetained, true);
+    assert.equal(notices[0].requiresRestatement, false);
+    assert.doesNotMatch(notices[0].facts, /もう一度|教えて|確認でき/);
+    await h.say('もう一度やって');
+    const delegation = randomUUID();
+    await h.delegate(delegation);
+    await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
+    await h.delegate(delegation);
+    await tick();
+    assert.equal(h.calls.judge, 3);
+    assert.equal(h.calls.recognize, 1);
+    assert.equal(h.calls.photo, 1);
+    assert.equal(h.runtime.game.inventory.length, 1);
+    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 900 : 880);
+    assert.equal(h.runtime.game.retainedRequest, null);
+    assert.equal(h.runtime.game.error, null);
+    assert.equal(judgments[2].proposal.usage, judgments[0].proposal.usage);
+    const supplied = contexts.at(-1).game.retainedRequest;
+    assert.deepEqual(supplied.itemRefs, retained.intent.itemRefs);
+    assert.equal(supplied.usage, retained.intent.usage);
+    assert.equal(supplied.actionId, undefined);
+    assert.equal(supplied.origin, undefined);
+    assert.equal(supplied.reason, undefined);
+  });
+}
+
+test('explicit cancellation clears the failed request without an action or charge', async (t) => {
+  const h = await setup(
+    t,
+    (context) => ({
+      kind: 'cancel_request',
+      evidenceSeq: context.conversation.eligibleEvidenceSeq,
+      reason: 'User abandoned the request',
+    }),
+    undefined,
+    false,
+    undefined,
+    obviousPhoto,
+    () => ({ success: 'invalid' }),
+  );
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => !!h.runtime.game.retainedRequest && !h.runtime.game.credits.pending);
+  await h.say('やっぱりその道具は使わないで');
+  await h.delegate();
+  await until(() => h.runtime.game.retainedRequest === null);
+  await tick();
+  assert.equal(h.calls.judge, 2);
+  assert.equal(h.runtime.game.actionsUsed, 0);
+  assert.equal(h.runtime.game.credits.remaining, 1000);
 });
 
 test('obvious photo starts one action without a usage question or fabricated delegation', async (t) => {
@@ -1137,9 +1441,9 @@ test('rejected photo stays rejected under pressure but new physical information 
   await until(() => h.calls.photo === 1);
   await tick();
   const rejects = () =>
-    h.runtime
-      .pollCommands(h.generation, 0)
-      .commands.filter((command) => command.content === rejection).length;
+    liveBriefings(h.runtime.pollCommands(h.generation, 0).commands).filter(
+      (command) => JSON.parse(command.facts).facts === rejection,
+    ).length;
   assert.equal(rejects(), 1);
 
   await h.say('いいからそのまま切って');
@@ -1194,9 +1498,7 @@ for (const origin of ['photo', 'voice'] as const) {
         await h.say('その道具で切って');
         await h.delegate();
       }
-      await until(
-        () => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2 && h.calls.reply === 1,
-      );
+      await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
       await tick();
       assert.equal(h.calls.judge, 1);
       assert.equal(h.runtime.game.obstacleIndex, probability);

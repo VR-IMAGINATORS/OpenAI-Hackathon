@@ -142,11 +142,11 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.no
       if (url.pathname === '/api/bootstrap')
         return respond(route, {
           app: { stage: 'hosted-multiplayer', name: 'Call to Past' },
-          auth: { required: true },
+          auth: { required: false },
           ai: { mode: 'live' },
         });
       if (url.pathname === '/api/auth') {
-        assert.equal(body.passphrase, 'demo');
+        assert.deepEqual(body, {});
         owner = true;
         return respond(route, { ok: true });
       }
@@ -290,7 +290,7 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.no
     });
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5178');
     await page.getByRole('combobox').selectOption('ja');
-    await page.getByLabel('参加の合言葉').fill('demo');
+    assert.equal(await page.locator('input[type=password]').count(), 0);
     await page.getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット' }).click();
     await page.evaluate(() => (window.__denyMic = true));
     await enterCall();
@@ -436,7 +436,7 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.no
       .waitFor();
     assert.deepEqual(pageErrors, []);
     console.log(
-      'PASS: fake Live connect/reconnect/reload, passphrase authentication, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',
+      'PASS: fake Live connect/reconnect/reload, anonymous session creation, control takeover, same-ID photo retry, start, JPEG upload, voice transcript, action retry idempotency, mobile/desktop layout, explicit end. No real API or physical device verification.',
     );
   } finally {
     await browser.close();

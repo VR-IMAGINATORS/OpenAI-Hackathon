@@ -289,8 +289,15 @@ export class IntentCoordinator {
           d.status === 'evaluating' &&
           this.now() < d.deadline &&
           this.contextKey(ledger.captureUnconsumedContext()) === this.contextKey(context)
-        )
+        ) {
+          // The classifier has exhausted its internal repair. Finish this
+          // delegation once; do not announce the same failure again at expiry.
+          // Keep the user's evidence for a later explicit delegation.
+          d.status = 'expired';
+          this.checkedKey = this.contextKey(context);
+          this.recovery = undefined;
           this.report(error);
+        }
         decision = { kind: 'wait', reason: 'classification unavailable' };
       }
       if (this.stopped || !ledger.active || epoch !== this.epoch || d.status !== 'evaluating')

@@ -121,9 +121,6 @@ export function createMockPlayClient(): AIResponsesClient {
             reason: 'mock ambiguous item',
           };
           break;
-        case 'companion_reply':
-          value = { reply: data.result.narrative };
-          break;
         case 'game_result':
           value = {
             success: false,

@@ -177,13 +177,11 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
       if (url.pathname === '/api/bootstrap')
         return respond(route, {
           app: { stage: 'hosted-multiplayer', name: 'Call to Past' },
-          auth: { required: true },
+          auth: { required: false },
           ai: { mode: 'live' },
         });
       if (url.pathname === '/api/auth') {
-        if (body.passphrase !== 'demo')
-          return respond(route, { error: { code: 'AUTH_FAILED' } }, 401);
-        assert.equal(body.passphrase, 'demo');
+        assert.deepEqual(body, {});
         owner = true;
         return respond(route, { ok: true });
       }
@@ -406,32 +404,11 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         path: `${artifactDir}/join-difficulty-${locale}.png`,
         fullPage: true,
       });
-      for (const button of await page.locator('.difficulty-card').all()) {
-        const popup = page.waitForEvent('dialog');
-        const click = button.click();
-        const dialog = await popup;
-        assert.equal(
-          dialog.message(),
-          locale === 'ja' ? '合言葉を入力してください。' : 'Please enter the passphrase.',
-        );
-        await dialog.accept();
-        await click;
-        assert.equal(
-          await page
-            .locator('input[type=password]')
-            .evaluate((input) => input === document.activeElement),
-          true,
-        );
-        assert.equal(owner, false);
-        assert.equal(createIds.length, 0);
-      }
+      assert.equal(await page.locator('input[type=password]').count(), 0);
+      assert.equal(owner, false);
+      assert.equal(createIds.length, 0);
     }
     await page.getByRole('combobox').selectOption('ja');
-    await page.getByLabel('参加の合言葉').fill('wrong');
-    await page.getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット' }).click();
-    await page.getByRole('alert').filter({ hasText: '合言葉が違います' }).waitFor();
-    assert.equal(await page.locator('video').count(), 0);
-    await page.getByLabel('参加の合言葉').fill('demo');
     await page.locator(`.difficulty-card[value="${selectedDifficulty}"]`).click();
     await page.waitForFunction(() => document.querySelector('video')?.readyState >= 1);
     const metadata = await page
@@ -481,7 +458,7 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.screenshot({ path: `${artifactDir}/incoming-call-desktop.png`, fullPage: true });
     console.log(
-      'PASS entry/opening: responsive difficulty selection in Japanese/English, empty-passphrase popup/focus, invalid auth, selected difficulty request, actual MP4 metadata, ended/Skip, ringtone lifecycle, no mic/game/AI before Answer, autoplay fallback. Voice provider and media playback mocked.',
+      'PASS entry/opening: responsive difficulty selection in Japanese/English, no passphrase field, anonymous entry, selected difficulty request, actual MP4 metadata, ended/Skip, ringtone lifecycle, no mic/game/AI before Answer, autoplay fallback. Voice provider and media playback mocked.',
     );
   } finally {
     await browser.close();

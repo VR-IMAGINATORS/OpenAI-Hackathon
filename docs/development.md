@@ -5,10 +5,10 @@ Node.js 22.12以上を用意し、`npm ci` を実行します。統合サーバ�
 ## 音声と写真で試遊
 
 1. `.env.local.example` を `.env.local` にコピーします。
-2. `APP_PASSPHRASE`、`OPENAI_API_KEY`、`AI_MODE=live`、`AI_GLOBAL_LIVE_ATTEMPTS`、`AI_GLOBAL_RESPONSE_ATTEMPTS` を設定します。GPT-Liveを利用できるAPIキーが必要です。
+2. `OPENAI_API_KEY`、`AI_MODE=live`、`AI_GLOBAL_LIVE_ATTEMPTS`、`AI_GLOBAL_RESPONSE_ATTEMPTS` を設定します。GPT-Liveを利用できるAPIキーが必要です。
 3. cloudflaredをインストールし、ターミナルを再起動します。
 4. `npm run play:mobile` を実行します。
-5. 表示された共通HTTPS URLのQRをスマホで読み、合言葉で参加します。マイクを許可するとプレイ枠を確保します。
+5. 表示された共通HTTPS URLのQRをスマホで読み、難易度を選んで開始します。マイクを許可するとプレイ枠を確保します。
 
 PCも同じURLを利用できます。1環境につき5人まで同時に独立してプレイできます。Ctrl+Cで終了すると進行中のゲームは失われます。
 
@@ -16,21 +16,25 @@ PCも同じURLを利用できます。1環境につき5人まで同時に独立�
 
 ## 設定の移行
 
+合言葉機能は廃止しました。`APP_PASSPHRASE` は設定不要で、既存の値が残っていても使いません。
+
 旧 `.env.relay.local` の内容は自動移行しません。必要なキーを開発者自身が `.env.local` に設定してください。`RELAY_URL`、`LOCAL_PORT`、`ADMIN_PORT`、招待QR、管理トークンは廃止しました。ポートは `PORT`、公開URLは `PUBLIC_APP_URL` を使います。
 
 リポジトリルートの `.env` は読み込みません。秘密ファイルはGitに追加しないでください。フロントエンドは環境ファイルを読み込みません。本番は環境変数のみを使用します。
 
 ## UI開発と検証
 
+ゲーム内部の写真認識・指示解釈・判定は、推論を含む出力枠を通常2,048トークン、修復時4,096トークンまで使います。`AI_GAME_MAX_OUTPUT_TOKENS`（既定・最大4,096）で上限を下げられますが、小さすぎると回答の途中切れが増える可能性があります。通常のResponses用 `AI_MAX_OUTPUT_TOKENS`（最大1,000）とは別枠です。内部修復は各処理につき追加1回までで、すべて既存のAPI回数上限に数えます。ゲーム内のクレジット単価は変更しませんが、実APIの出力利用量は増え得ます。
+
 - `npm run dev`：設定済みの統合サーバとViteを起動します。画面は http://127.0.0.1:5173 。
-- `npm run dev:all`：外部AIへ接続しないmockで画面を確認します。合言葉は `local-demo-only`。音声接続はできません。
+- `npm run dev:all`：外部AIへ接続しないmockで画面を確認します。音声接続はできません。
 - `npm run build`：型検査、シナリオ検証、Webとサーバをビルドします。
 - `npm test`：fake providerを使い、外部APIへの課金なしで検証します。
 - `npm run format` / `npm run format:check`：Prettierで人間が読めるソース整形を実行します。
 
 本番配布は [AWS設定手順](hosting.md) を参照してください。
 
-秘密を使わずにQRとtunnelだけ確認する場合は `npm run play:mobile -- --mock` を使えます。合言葉は `local-demo-only` で、音声AIには接続しません。トンネル公開直後はDNS登録・HTTPS接続のため最大120秒待ち、15秒ごとに待機理由を表示します。接続確認は設定済みDNSへ問い合わせ、新規 `*.trycloudflare.com` の名前解決が失敗するとCloudflare DNS（1.1.1.1 / 1.0.0.1）でも確認します。固定URLはこの公開DNSへの再問い合わせの対象外です。OSのDNS設定は変更せず、HTTPS証明書と起動したサーバーの識別子を確認してからQRを表示します。QR表示後にスマホだけURLを開けない場合は、スマホをモバイル回線へ切り替えて確認してください。
+秘密を使わずにQRとtunnelだけ確認する場合は `npm run play:mobile -- --mock` を使えます。音声AIには接続しません。トンネル公開直後はDNS登録・HTTPS接続のため最大120秒待ち、15秒ごとに待機理由を表示します。接続確認は設定済みDNSへ問い合わせ、新規 `*.trycloudflare.com` の名前解決が失敗するとCloudflare DNS（1.1.1.1 / 1.0.0.1）でも確認します。固定URLはこの公開DNSへの再問い合わせの対象外です。OSのDNS設定は変更せず、HTTPS証明書と起動したサーバーの識別子を確認してからQRを表示します。QR表示後にスマホだけURLを開けない場合は、スマホをモバイル回線へ切り替えて確認してください。
 
 ## PRの送り先
 

@@ -11,7 +11,7 @@ process.env.SCENARIO_PATH = fileURLToPath(
 process.env.AI_MODE = 'live';
 process.env.HOST = '127.0.0.1';
 process.env.PORT = process.env.PORT || '4311';
-console.log('暗い倉庫・拡充版 r1（試遊候補） / 合言葉は .env.local の APP_PASSPHRASE');
+console.log('暗い倉庫・拡充版 r1（試遊候補） / 合言葉なしで参加できます');
 if (mobile) {
   await import('./mobile.js');
 } else {

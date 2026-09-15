@@ -1,3 +1,4 @@
+import { liveBriefings } from './fixtures/live-briefings.js';
 import test from 'node:test';
 import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import assert from 'node:assert/strict';
@@ -311,6 +312,35 @@ test('all ten imported gimmicks accept a retained partial state followed by a co
     }
   }
   assert.equal(seen.size, 10);
+});
+
+test('expanded playtest fits the Live contract with every locale and initiative', () => {
+  const scenario = parseScenarioV2(
+    JSON.parse(readFileSync('scenarios/playtest/warehouse-expanded-r1.json', 'utf8')),
+  );
+  for (const locale of ['ja', 'en'] as const)
+    for (const initiative of ['observations', 'hypotheses', 'suggestions'] as const) {
+      const base = snapshot(locale, scenario);
+      const snap = { ...base, coreConfig: { ...base.coreConfig, companionInitiative: initiative } };
+      const game = fixture(snap, []).game;
+      for (const status of ['briefing', 'playing'] as const) {
+        const instructions = liveInstructions({ ...game.state(), status }, snap);
+        assert.ok(
+          instructions.length <= 8000,
+          `${locale}/${initiative}/${status}: ${instructions.length}`,
+        );
+        assert.match(instructions, new RegExp('Initiative: ' + initiative));
+        liveRequest.parse({
+          session: {
+            model: 'gpt-live-1',
+            delegation: { type: 'client' },
+            store: false,
+            instructions,
+          },
+          transport: { type: 'webrtc', sdp: 'offer' },
+        });
+      }
+    }
 });
 
 test('all 18 localized openings fit the Live contract and keep current clues in the silent briefing', () => {
@@ -632,7 +662,6 @@ test('scene generation and inspection retain the committed tool, method and resu
       assert.deepEqual(generated.committedAction.tools, [
         {
           name: 'scissors',
-          beforeStatus: 'available',
           afterStatus: success ? 'consumed' : 'damaged',
         },
       ]);
@@ -640,9 +669,15 @@ test('scene generation and inspection retain the committed tool, method and resu
       assert.deepEqual(generated.committedAction.afterValues, {
         'puzzle-0': success ? 'cleared' : 'partial',
       });
-      assert.deepEqual(generated.committedAction.beforeValues, {
-        'puzzle-0': success ? 'partial' : 'blocked',
-      });
+      assert.equal(generated.committedAction.beforeValues, undefined);
+      assert.deepEqual(action.beforeFacts.values['puzzle-0'], success ? 'partial' : 'blocked');
+      assert.equal(
+        action.items[0].beforeStatus,
+        'available',
+        'full history stays available to video direction',
+      );
+      assert.match(prompt, /One full-frame camera view of one place at one instant/);
+      assert.ok(generated.rules.some((rule: any) => rule.ruleId === 'composition:single_moment'));
       if (success) {
         assert.equal(generated.facts.obstacleId, snap.scenarioV2.obstacles[1].id);
         assert.ok(
@@ -844,9 +879,8 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.equal(scenes[2].action?.usage, '道具を使って', 'scene owns a frozen copy of the method');
   const commands = runtime.pollCommands(live.generation, 0).commands;
   assert.ok(commands.every((queued) => Buffer.byteLength(queued.content) <= 480));
-  const spoken = commands
-    .filter((queued) => queued.type === 'session.commentary.append')
-    .map((queued) => queued.content)
+  const spoken = liveBriefings(commands)
+    .map((queued) => queued.facts)
     .join('');
   assert.ok(spoken.includes('HINT_0_1'));
   assert.ok(spoken.includes('HINT_0_2'));

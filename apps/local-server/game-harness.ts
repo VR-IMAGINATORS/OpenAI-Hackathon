@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { aiFailureCode } from './ai-failure.js';
 import { KnowledgeStore, buildCompanionContext } from './companion-knowledge.js';
-import { composeCompanionReply } from './companion-response.js';
+import { companionResultFacts } from './companion-response.js';
 import { classifyCoreIntent } from './core-intent-ai.js';
 import { classifyPhoto, type PhotoDecision } from './harness-decisions.js';
 import { GameSession, GameError } from './game.js';
@@ -134,9 +135,27 @@ export class GameHarness {
   private words(ja: string, en: string) {
     return this.coreSnapshot.locale === 'en' ? en : ja;
   }
-  private speak(text: string, delegationId: string | null = null, messageId: string | null = null) {
-    if (this.collecting) this.replies.push(text);
+  private speak(
+    text: string,
+    delegationId: string | null = null,
+    messageId: string | null = null,
+    publicText = text,
+  ) {
+    // Text simulation reads public prose; Live receives facts and owns the spoken wording.
+    if (this.collecting && publicText) this.replies.push(publicText);
     this.hooks.speak(text, delegationId, messageId);
+  }
+  private photoReply(decision: PhotoDecision, delegationId: string | null = null) {
+    this.speak(
+      JSON.stringify({
+        type: 'photo_result',
+        facts: decision.message,
+        requiresConfirmation: decision.decision === 'confirm_risk',
+      }),
+      delegationId,
+      null,
+      decision.message,
+    );
   }
   private presentScene(text: string, messageId: string) {
     if (this.collecting)
@@ -304,6 +323,8 @@ export class GameHarness {
       obstacleIndex: this.game.obstacleIndex,
       hintsAlreadyGiven: this.hintsAlreadyGiven(context),
       knowledge: this.knowledge,
+      retainedRequest: this.game.retainedRequest,
+      onDiscardRetainedRequest: () => this.game.discardRetainedRequest(),
       gameState: this.game.state(),
       onRiskProposal: (proposal) => {
         if (this.ledger!.captureUnconsumedContext().contextVersion !== context.contextVersion)
@@ -337,10 +358,17 @@ export class GameHarness {
     context: IntentContext,
     delegationId: string | null,
   ): Promise<void> {
+    const retained = this.game.retainedRequest;
+    const photoCreditAmount =
+      intent.retryOf && retained?.actionId === intent.retryOf ? retained.photoCreditAmount : 0;
+    // A failed automatic photo action refunded its send. Resume that same charge,
+    // without adding a conversation charge for asking to recover the request.
+    const photoCreditId = photoCreditAmount ? `photo-recovery:${randomUUID()}` : null;
+    if (photoCreditId) this.game.reserveCredits(photoCreditId, 'photo', photoCreditAmount);
     const creditId =
       intent.origin?.kind === 'photo'
         ? null
-        : this.reserveConversation(context.generation, intent.evidenceSeq);
+        : (photoCreditId ?? this.reserveConversation(context.generation, intent.evidenceSeq));
     const before = this.game.gameVersion;
     let completed = false;
     try {
@@ -404,7 +432,7 @@ export class GameHarness {
             message: decision.message,
             gameVersion: this.game.gameVersion,
           };
-        this.speak(decision.message, delegationId);
+        this.photoReply(decision, delegationId);
         return;
       }
     }
@@ -432,8 +460,6 @@ export class GameHarness {
     this.ledger!.updateState({ judging: true });
     this.activeUsage = intent.usage;
     this.runtimeActionId = ticket.id;
-    if (intent.origin?.kind === 'photo')
-      this.speak(this.words('これなら使えそう。やってみる。', 'I can use this. Let me try.'));
     this.pendingRisk = undefined;
     this.hooks.diagnostic('judgment_started');
     const judgmentStarted = this.now();
@@ -443,6 +469,9 @@ export class GameHarness {
     try {
       result = await this.game.judgeAction(ticket);
       this.hooks.diagnostic('judgment_committed');
+    } catch (error) {
+      this.hooks.diagnostic('judgment_failed', aiFailureCode(error));
+      throw error;
     } finally {
       if (this.runtimeActionId === ticket.id) {
         this.runtimeActionId = null;
@@ -460,30 +489,31 @@ export class GameHarness {
       durationMs: Math.max(0, Math.round(this.now() - judgmentStarted)),
     });
     // Keep private narration direction out of the speakable payload.
-    const committedVersion = this.game.gameVersion;
     // Freeze the scene now; a later photo or action must not change this result's picture.
     this.presentScene(result.narrative + '\n' + this.currentSituation(), messageId);
-    const spokenResult = this.game.terminal
-      ? result.narrative
-      : await composeCompanionReply(
-          this.modelClient(),
-          this.companionContext(),
-          result,
-          this.knowledge!.prompts,
-        ).catch(() => result.narrative);
-    if (
-      this.hooks.disposed() ||
-      context.controllerEpoch !== this.hooks.epoch() ||
-      this.game.gameVersion !== committedVersion
-    )
-      return;
-    this.speak(spokenResult, delegationId, messageId);
+    this.speak(
+      companionResultFacts(this.companionContext(), result),
+      delegationId,
+      messageId,
+      result.narrative + '\n' + this.currentSituation(),
+    );
   }
 
   modelClient() {
+    const epoch = this.hooks.epoch();
+    const generation = this.game.generation;
+    const version = this.game.gameVersion;
+    const revision = this.game.inputRevision;
     return {
       respond: async (body: unknown) => {
         this.activeSignal?.throwIfAborted();
+        this.hooks.check(epoch);
+        if (
+          generation !== this.game.generation ||
+          version !== this.game.gameVersion ||
+          revision !== this.game.inputRevision
+        )
+          throw new GameError(409, 'ACTION_INVALID');
         const response = await this.client.respond(body, this.activeSignal);
         this.activeSignal?.throwIfAborted();
         return response;
@@ -548,7 +578,7 @@ export class GameHarness {
             message: decision.message,
             gameVersion: version,
           };
-        this.speak(decision.message);
+        this.photoReply(decision);
       }
       return;
     }
@@ -612,8 +642,23 @@ export class GameHarness {
     );
     try {
       this.recordHintDecision(decision);
-      this.hooks.facts(this.currentSituation(), delegationId);
-      this.speak(decision.answer ?? this.currentSituation(), delegationId);
+      const publicText = decision.answer || this.game.situation;
+      this.speak(
+        JSON.stringify(
+          decision.responseKind === 'social'
+            ? { type: 'social' }
+            : {
+                type: 'consultation',
+                facts: publicText,
+                requiresConfirmation: !!decision.riskProposal,
+                ...(decision.riskProposal ? { risk: decision.riskProposal.message } : {}),
+                ambience: this.companionContext().ambience,
+              },
+        ),
+        delegationId,
+        null,
+        decision.responseKind === 'social' ? '' : publicText,
+      );
       if (this.hooks.notificationFailed()) {
         if (id) this.game.credits.cancel(id);
         return;

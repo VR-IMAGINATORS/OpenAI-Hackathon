@@ -107,7 +107,6 @@ export default function PlayScreen({
   const current = useRef(state);
   current.current = state;
   const [voice, setVoice] = useState<VoiceState>('closed');
-  const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
@@ -194,7 +193,7 @@ export default function PlayScreen({
           );
           if (!discard && !connection.send([{ type, event_id, delegation_id, content }])) break;
           commandAck.current.seq = command.seq;
-          if (!discard && command.messageId)
+          if (!discard && command.messageId && command.type === 'session.commentary.append')
             setSentMessageIds((ids) => new Set([...ids, command.messageId!]));
           try {
             sessionStorage.setItem(key, String(command.seq));
@@ -589,21 +588,6 @@ export default function PlayScreen({
       setBusy(false);
     }
   }
-  async function downloadDiagnostics() {
-    try {
-      const trace = await playRequest('/api/play/trace', undefined, 'GET', { playId });
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(trace, null, 2)], { type: 'application/json' }),
-      );
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'game-diagnostics.json';
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      setError(message(error));
-    }
-  }
   async function end() {
     if (locked.current) return;
     locked.current = true;
@@ -734,11 +718,6 @@ export default function PlayScreen({
             locale={locale}
           />
           <div className="messenger-info-body">
-            {state.diagnosticsAvailable && !ended && (
-              <button onClick={() => void downloadDiagnostics()}>
-                {t('診断JSONを保存', 'Save diagnostics JSON')}
-              </button>
-            )}
             <p>{ended ? state.lastResult?.narrative : state.situation}</p>
             <p>
               {t('障害', 'Obstacle')} {state.obstacle.index + 1} / {state.obstacle.count}
@@ -939,7 +918,7 @@ export default function PlayScreen({
                 disabled={!invalid && lifecycle !== 'terminal'}
               >
                 {invalid
-                  ? t('合言葉で参加し直す', 'Join again with passphrase')
+                  ? t('開始画面に戻る', 'Return to start')
                   : t('もう一度プレイ', 'Play again')}
               </button>
             </div>
@@ -1430,7 +1409,7 @@ export default function PlayScreen({
         )}
         {invalid ? (
           <button className="primary-button" onClick={onExit}>
-            {t('合言葉で参加し直す', 'Join again with passphrase')}
+            {t('開始画面に戻る', 'Return to start')}
           </button>
         ) : (
           ended && (

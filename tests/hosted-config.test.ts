@@ -32,13 +32,13 @@ function fixture(t: TestContext) {
   );
   return directory;
 }
-const base = { APP_PASSPHRASE: 'test-only', AI_MODE: 'mock' };
+const base = { AI_MODE: 'mock' };
 test('hosted config reads only .env.local and process settings win; production skips files', (t) => {
   const cwd = fixture(t);
   // These are synthetic files in an isolated fixture, never the repository private env.
   writeFileSync(resolve(cwd, '.env'), 'APP_PASSPHRASE=root-sentinel\nPORT=9999');
   writeFileSync(resolve(cwd, '.env.relay.local'), 'APP_PASSPHRASE=relay-sentinel\nPORT=9998');
-  assert.throws(() => loadHostedConfig({}, cwd), /APP_PASSPHRASE/);
+  assert.equal(loadHostedConfig(base, cwd).port, 4310);
   writeFileSync(resolve(cwd, '.env.local'), 'APP_PASSPHRASE=local-sentinel\nPORT=4320');
   assert.equal(loadHostedConfig({}, cwd).port, 4320);
   assert.equal(loadHostedConfig({ ...base, PORT: '4321' }, cwd).port, 4321);
@@ -53,11 +53,11 @@ test('hosted config reads only .env.local and process settings win; production s
   );
   assert.equal(prod.port, 4310);
   assert.equal(prod.secureCookie, true);
-  assert.equal(prod.passphrase, 'test-only');
+  assert.equal('passphrase' in prod, false);
 });
 test('hosted authentication/limits fail closed and production requires HTTPS and operations key', (t) => {
   const cwd = fixture(t);
-  assert.throws(() => loadHostedConfig({ APP_PASSPHRASE: ' ' }, cwd), /APP_PASSPHRASE/);
+  assert.equal(loadHostedConfig({ ...base, APP_PASSPHRASE: ' ' }, cwd).port, 4310);
   for (const key of [
     'PORT',
     'MAX_PLAYERS',

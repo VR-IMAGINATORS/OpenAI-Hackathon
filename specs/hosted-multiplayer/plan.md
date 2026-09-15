@@ -12,7 +12,7 @@ Node単一プロセス・Lightsail Micro scale1/環境を固定。cluster/複数
 | P2 所有権 | 新規apps/server/session-store.ts、play-registry.ts、control.ts | AuthSession、PlayRuntime、EnvironmentState。認証・枠・操作権・失効・終端結果・予約保持を管理 |
 | P3 ゲーム統合 | 変更apps/local-server/play-router.ts、game-ai.ts、game.ts、live.ts | createPlayRouterをcreatePlayRuntime({scenario,ai,clock,onEnd})と薄いroute handlerへ分離。relayUrl/token/health経由モデル取得を削除。AI設定を直接注入。ゲーム判定・プロンプト文面は維持。所有権/世代確認はゲーム入出力で実施 |
 | P4 HTTP | 新規apps/server/app.ts、config.ts、index.ts、ops.ts、logging.ts | 単一Express、auth/play/ops/static/health、起動・shutdown・watchdog、redacted構造ログ |
-| P5 UI | 変更apps/web/src/App.tsx、JoinScreen.tsx、PlayScreen.tsx、live.ts、play-api.ts、packages/shared/api.ts | 合言葉→開始→枠確保→Live。招待fragmentを除去。再読み込み/操作権移動/満員/再プレイ/失効案内。すべてのplay mutationにIDとepoch |
+| P5 UI | 変更apps/web/src/App.tsx、JoinScreen.tsx、PlayScreen.tsx、live.ts、play-api.ts、packages/shared/api.ts | 難易度選択→匿名セッション発行→応答→枠確保→Live。招待fragmentを除去。再読み込み/操作権移動/満員/再プレイ/失効案内。すべてのplay mutationにIDとepoch |
 | P6 ローカル | 変更tools/mobile.ts、tools/dev.ts、package.json、設定例 | 1アプリ＋tunnel、共通URLのQR、別admin4312なし。Vite HMRはローカル開発専用。実機起動ではビルド済みUIを同じHTTPから配信 |
 | P7 AWS | 新規Dockerfile、.dockerignore、tools/deploy.ts、infra/lightsail/*.json、.github/workflows/deploy-dev.yml、deploy-judging.yml | multi-stage image、Micro、OIDC、環境Secrets、drain→image deploy→health確認、環境単位直列化 |
 | P8 検証/docs | 新規tests/hosted-*.test.ts、docs/hosting.md、変更README.md、AGENTS.md、docs/development.md、既存tests/browser smoke | 下記検証と新構成の起動/運用/廃止手順。旧仕様は履歴として保持し、現在の正本へのリンクを追加 |
@@ -21,7 +21,7 @@ P1/P2の型→P3/P4→P5/P6→P7/P8の順に統合する。P1/P2は独立作業�
 旧apps/relay、apps/local-server/app.ts/index.ts/admin.ts/play-session.ts/config.tsは依存移行完了後に削除。旧mock専用FoundationScreenとapi/connectionも現行入口から除去。mockは新AiServiceへfake transportを注入するモードとして継続。旧dev:relay/start:relay/dev:localは廃止しREADME/テストと同期する。ゲーム機能の削除はしない。
 
 ## 3. セッションと接続の順序
-1. POST /api/authで合言葉をhash+timingSafeEqualで照合、AuthSession発行（有効30分、最大1000、開始枠なし）。CookieはHttpOnly/Path=/、HTTPSではSecure、SameSite=Strict。直接localhost HTTPだけSecureなし。
+1. POST /api/authへ空のJSONオブジェクトを送り、合言葉なしでAuthSession発行（有効30分、最大1000、開始枠なし）。CookieはHttpOnly/Path=/、HTTPSではSecure、SameSite=Strict。直接localhost HTTPだけSecureなし。
 2. 開始ボタンからgetUserMedia→SDP準備。拒否時は枠を取らない。POST /api/plays {requestId,clientId}で認証→admission→既存プレイ→容量→原子的予約→GameSession生成。ここから10分を計測。HTTP再送は同じrequestIdを使う。
 3. /api/play/liveはruntime操作権を照合、旧Live終了確認→予算/同時枠を同期予約→upstream await。失敗は回数を戻さない。応答欠落の再送は同じrequestId/SDPで、同一作成をjoinまたは保存済みanswerを返す。異なるSDPでID再利用は409。
 4. 接続正常heartbeatでactive。音声開始前もGameSession.status=briefing。既存openingCommandを一度送る。別タブ引継ぎ・reloadでは再導入しない（runtime側openingIssuedを追加、既存UI refとsessionStorageだけに依存しない）。
@@ -50,10 +50,10 @@ AI_LIVE_ATTEMPTS_PER_PLAY=3、AI_RESPONSES_PER_PLAY=40、AI_RESPONSE_CONCURRENT_
 
 ## 6. 秘密・認証・ログ
 - ルート.envは読み書きしない。新統合サーバーは.env.localを読む。.env.local.exampleへOPENAI_API_KEY等の空欄例を追加。既存.env.relay.localからの移行方法だけを文書化し、ユーザーの実値を自動コピーしない。AWSはprocess.envのみ。
-- AWSのOPENAI_API_KEY、APP_PASSPHRASE、OPS_TOKENはGitHub Environment Secretsからdeploy時に設定envへ注入。Docker build ARG/ENV、public/VITE_変数、repo、artifactに秘密を含めない。デプロイ閲覧権限でenvが見えるのでIAM閲覧者も限定する。
+- AWSのOPENAI_API_KEY、OPS_TOKENはGitHub Environment Secretsからdeploy時に設定envへ注入。Docker build ARG/ENV、public/VITE_変数、repo、artifactに秘密を含めない。デプロイ閲覧権限でenvが見えるのでIAM閲覧者も限定する。
 - 認証試行はglobal100/分（設定可）。IPを本人性としない、同じ審査ネットワーク5人を拒否しない。Map上限1000で長時間の資源占有を制限。プロキシ越しの任意X-Forwarded-Forを信用しない。
 - PUBLIC_APP_URLの完全一致Origin検証、Host許可は明示設定。全ブラウザmutationはOrigin必須、Cookieだけで第三者サイトから操作不可。CORS wildcardやtrust proxy=trueを導入しない。proxy終端でもSecure cookieは設定URLから決定する。
-- /api/ops/*はブラウザ用認証と別のOPS_TOKEN Bearer、固定長hash比較、body上限。Cookie認証や合言葉で管理操作不可。Originを持つブラウザから拒否する。通常プレイ情報や一覧は返さない。
+- /api/ops/*はブラウザ用認証と別のOPS_TOKEN Bearer、固定長hash比較、body上限。プレイヤーCookieで管理操作不可。Originを持つブラウザから拒否する。通常プレイ情報や一覧は返さない。
 - logging.tsは許可フィールド（event、非秘密の相関ID、version、durationMs、errorCode、attempts/count）だけを構成。request body/headers/URL query/raw error/provider responseを渡さない。写真、transcript、prompt、SDP、cookie、キーはstdout含め禁止。
 
 ## 7. 終了とデプロイ切替
@@ -65,7 +65,7 @@ drainの認証はOPS_TOKEN（deploy environment secret）、requestIdで冪等�
 ## 8. AWS・CI/CD
 - ap-northeast-1を初期設定案とする。service name/account/regionは運営のセットアップで入力、値を推測しない。Micro scale1のdev、必要時judgingを別作成。起動時の許可Originは各標準HTTPS URLから設定。
 - Docker multi-stage: npm ci→check/build→production runtime（Node22.12以上の固定image digest、非root、1プロセス）。Linux sharpの依存をimage内npm ciで取得し、Windows node_modulesをコピーしない。.dockerignoreは.git、.env*、node_modules、artifacts、proposal、specs、runs等を除外。シナリオはruntimeへコピー。
-- built assetsとserver JSを同一imageへ。0.0.0.0:$PORT（既定4310）、public endpoint HTTP4310。/healthzは外部API・合言葉・満員に依存しない200。healthcheck interval10s/timeout5s/healthy2/unhealthy3。/healthzにはversion/bootIdだけ（secretなし）。
+- built assetsとserver JSを同一imageへ。0.0.0.0:$PORT（既定4310）、public endpoint HTTP4310。/healthzは外部API・満員に依存しない200。healthcheck interval10s/timeout5s/healthy2/unhealthy3。/healthzにはversion/bootIdだけ（secretなし）。
 - 開発workflowはpush main（直接pushも含む）→npm ci/format:check/test/build→固定SHA image build/push→drain→deploy。GitHub Environment=development、concurrency環境単位/cancel-in-progress:falseで配信中断を避ける。PR由来の未承認コードへSecretsを渡さない。
 - 審査workflowはworkflow_dispatchで40桁commit SHA入力、main履歴に含まれる既存commitを検証、同一テストを通し固定SHAでbuild。Environment=judging、開発とrole/Secretsを分離。初期作成時のみdrain対象なし。バージョンはSHAで追跡、実image識別子も記録（同SHA再buildは同digest保証でない）。
 - GitHub OIDCでAWS短期credential。audとこのrepo/environmentの実subを制限（現在のGitHub subject形式をセットアップ時確認）。長期AWSキー不要。actionsは検証したcommit SHAで固定、permissions contents:read/id-token:write。
@@ -89,7 +89,7 @@ drainの認証はOPS_TOKEN（deploy environment secret）、requestIdで冪等�
 既存54テストの意図を維持し、relay/招待専用テストは新内部service/認証へ移植。npm run format:check、npm test、npm run buildとbrowser smokeを実行。単なるコード整形テストを追加しない。
 
 ## 10. 公開と廃止の運用
-公開手順はdocs/hosting.mdへ: AWSアカウント/role/OIDC/Secrets/初期service→デプロイ→合言葉確認→試遊→審査別環境。キー値や合言葉をREADME/コマンドログに載せない。
+公開手順はdocs/hosting.mdへ: AWSアカウント/role/OIDC/Secrets/初期service→デプロイ→合言葉なしで開始できることを確認→試遊→審査別環境。キー値をREADME/コマンドログに載せない。
 期間終了: 自動workflowの配信を止める→drain成功確認→対象serviceのaccount/region/nameを確認して削除（dev/judging）→不要なimage/log/service残存確認→不要な専用OpenAIキーとGitHub Secrets/roleを整理。削除は運営の明示手順であり、この計画作成では実行しない。共用の資格は勝手に失効させない。
 Micro基本料金は1環境10USD/月、2環境20USD/月。時間課金・月上限、停止中も課金。API・税・転送超過・CI利用等は別。試遊期間だけ作り、Nano検証は安定動作を優先する。
 

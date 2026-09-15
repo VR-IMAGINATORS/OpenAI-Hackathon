@@ -165,7 +165,11 @@ for (const changes of [
       const snapshot = structuredClone(coreSnapshot);
       snapshot.scenarioV2.obstacles[0].factKeys = ['wrists'];
       const f = await fixture(async () => ({ ...partial, factChanges: changes }), snapshot);
-      await assert.rejects(f.game.judgeAction(f.reserve()), /ACTION_FAILED/);
+      await assert.rejects(f.game.judgeAction(f.reserve()), (error: any) => {
+        assert.equal(error.message, 'ACTION_FAILED');
+        assert.equal(error.code, 'INVALID_FACT_CHANGE');
+        return true;
+      });
       assert.equal(f.game.gameVersion, 0);
       assert.equal(f.game.actionsUsed, 0);
       assert.equal(f.game.facts.values.wrists, 'bound');
@@ -291,4 +295,111 @@ test('core AI sends fact constraints and locale, with correct photo bytes and st
   );
   assert.ok(request.text.format.schema.required.includes('factChanges'));
   assert.ok(request.text.format.schema.required.includes('shortReason'));
+});
+
+for (const failure of ['format', 'completion'] as const)
+  test(
+    'repairs ' + failure + ' internally with the same frozen request and commits once',
+    async () => {
+      let attempt = 0;
+      const seen: any[] = [];
+      const snapshot = structuredClone(coreSnapshot);
+      snapshot.scenarioV2.obstacles[0]!.completionFact = { key: 'wrists', value: 'free' };
+      const f = await fixture(async (context, proposal) => {
+        seen.push({ context: structuredClone(context), proposal: structuredClone(proposal) });
+        if (++attempt === 1) {
+          if (failure === 'format') throw new SyntaxError('PRIVATE_BAD_OUTPUT');
+          return { ...partial, success: true };
+        }
+        return partial;
+      }, snapshot);
+      const ticket = f.reserve();
+      const result = await f.game.judgeAction(ticket);
+      assert.equal(f.calls(), 2);
+      assert.deepEqual(seen[0].proposal, seen[1].proposal);
+      assert.deepEqual(seen[0].context.photos, seen[1].context.photos);
+      assert.deepEqual(seen[0].context.facts, seen[1].context.facts);
+      assert.equal(
+        seen[1].context.judgmentRepair,
+        failure === 'format' ? 'AI_OUTPUT_INVALID' : 'INVALID_COMPLETION_FACT',
+      );
+      assert.equal(f.game.actionsUsed, 1);
+      assert.equal(f.game.inventory.length, 1);
+      assert.equal(f.game.committedActions.length, 1);
+      assert.equal(f.game.error, null);
+      assert.equal(f.game.retainedRequest, null);
+      assert.deepEqual(await f.game.judgeAction(ticket), result);
+      assert.equal(f.calls(), 2);
+    },
+  );
+
+test('normal physical failure is a completed outcome and never triggers an automatic retry', async () => {
+  const f = await fixture(async () => ({ ...partial, factChanges: [] }));
+  const result = await f.game.judgeAction(f.reserve());
+  assert.equal(result.success, false);
+  assert.equal(f.calls(), 1);
+  assert.equal(f.game.actionsUsed, 1);
+  assert.equal(f.game.retainedRequest, null);
+});
+
+test('exhaustion retains the exact request; explicit retry cannot substitute usage or duplicate a result', async () => {
+  let attempt = 0;
+  const f = await fixture(async () => {
+    if (++attempt <= 2) throw new SyntaxError('PRIVATE_BAD_OUTPUT');
+    return partial;
+  });
+  const first = f.reserve();
+  await assert.rejects(f.game.judgeAction(first), /ACTION_FAILED/);
+  assert.equal(f.calls(), 2);
+  assert.equal(f.game.actionsUsed, 0);
+  assert.equal(f.game.photos.length, 1);
+  assert.equal(f.game.retainedRequest!.actionId, first.id);
+  assert.doesNotMatch(f.game.error!, /もう一度|教えて|PRIVATE/);
+  const retry = { ...f.intent(2), retryOf: first.id };
+  assert.throws(() => f.reserve({ ...retry, usage: 'different use' }), /ACTION_INVALID/);
+  const second = f.reserve(retry);
+  await f.game.judgeAction(second);
+  assert.equal(f.calls(), 3);
+  assert.equal(f.game.actionsUsed, 1);
+  assert.equal(f.game.inventory.length, 1);
+  assert.equal(f.game.retainedRequest, null);
+  assert.throws(() => f.reserve({ ...retry, evidenceSeq: [3] }), /ACTION_INVALID/);
+});
+
+for (const change of ['cancel', 'photo', 'controller', 'end'] as const)
+  test('retained request expires after ' + change, async () => {
+    const f = await fixture(async () => {
+      throw new SyntaxError('broken');
+    });
+    const first = f.reserve();
+    await assert.rejects(f.game.judgeAction(first), /ACTION_FAILED/);
+    if (change === 'cancel') f.game.discardRetainedRequest();
+    if (change === 'photo') f.game.beginPhotos();
+    if (change === 'controller') f.game.changeController();
+    if (change === 'end') f.game.end('expired');
+    assert.equal(f.game.retainedRequest, null);
+    assert.throws(() => f.reserve({ ...f.intent(2), retryOf: first.id }));
+    assert.equal(f.calls(), 2);
+  });
+
+test('a held correction blocks the retry and cancellation prevents another model call', async () => {
+  let reject!: (error: Error) => void;
+  const f = await fixture(
+    async () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  const ticket = f.reserve();
+  const running = f.game.judgeAction(ticket);
+  const rejected = assert.rejects(running, /ACTION_INVALID/);
+  assert.equal(f.game.holdPendingAction(ticket.id, 'correction'), true);
+  reject(new SyntaxError('broken'));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(f.calls(), 1);
+  f.game.cancelPendingAction(ticket.id);
+  await rejected;
+  assert.equal(f.calls(), 1);
+  assert.equal(f.game.actionsUsed, 0);
+  assert.equal(f.game.retainedRequest, null);
 });

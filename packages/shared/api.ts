@@ -15,7 +15,7 @@ export interface HostedBootstrap {
   scenarios?: { ja: PublicScenario; en: PublicScenario };
   app: { name: string; stage: 'hosted-multiplayer' };
   scenario: PublicScenario;
-  auth: { required: true };
+  auth: { required: false };
   ai: { mode: 'mock' | 'live' };
 }
 export interface HostedSession {

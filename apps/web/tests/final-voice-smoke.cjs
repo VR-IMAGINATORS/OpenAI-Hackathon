@@ -96,7 +96,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         data = {
           app: { stage: 'hosted-multiplayer' },
           ai: { mode: 'mock' },
-          auth: { required: true },
+          auth: { required: false },
         };
       else if (path === '/api/session') data = { authenticated: true, playId: state.id };
       else if (['/api/play/state', '/api/play/control', '/api/play/heartbeat'].includes(path))

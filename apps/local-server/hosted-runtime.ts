@@ -1,4 +1,5 @@
 import { GameHarness } from './game-harness.js';
+import { aiFailureCode } from './ai-failure.js';
 import { VoiceNotificationScheduler } from './voice-notifications.js';
 import { OpeningBriefingDelivery } from './opening-briefing.js';
 import { FinalVoicePlayback } from './final-voice-playback.js';
@@ -145,7 +146,7 @@ export class GameRuntime {
     this.game = new GameSession(
       scenario,
       createGameAI(
-        { respond: (body, signal) => ai.respond(id, body, signal) },
+        { respond: (body, signal) => ai.respondGame(id, body, signal) },
         () => models.gameModel,
         coreSnapshot,
       ),
@@ -215,7 +216,7 @@ export class GameRuntime {
         game: this.game,
         snapshot: coreSnapshot,
         ledger: this.ledger,
-        client: { respond: (body, signal) => ai.respond(id, body, signal) },
+        client: { respond: (body, signal) => ai.respondGame(id, body, signal) },
         model: models.gameModel,
         now,
         hooks: {
@@ -288,8 +289,8 @@ export class GameRuntime {
         onMissingDelegation: (decision) => {
           this.recordDiagnostic('delegation_missing', decision.kind);
           if (!this.valid() || this.game.status !== 'playing') return;
-          this.sendFacts(this.currentSituation());
           if (decision.kind === 'execute') {
+            this.sendFacts(this.currentSituation());
             this.enqueue({
               ...factCommand(
                 this.words(
@@ -308,17 +309,26 @@ export class GameRuntime {
         },
         onRecoveryExpired: () => this.recoveryNotice('recovery_expired'),
         onError: (error) => {
-          const code =
-            error instanceof Error && /^[A-Z_]{1,80}$/.test(error.message)
-              ? error.message
-              : 'PROCESSING_ERROR';
+          const code = aiFailureCode(error);
           this.recordDiagnostic('error', code);
           if (this.valid() && code !== 'ACTION_INVALID') {
-            this.game.error = this.words(
-              'ごめん、うまく確認できなかった。もう一度教えて。',
-              'Sorry, I could not confirm that. Please tell me again.',
+            // Safe operational evidence, including production where detailed game trace is disabled.
+            console.warn('game_processing_failed', { code });
+            this.game.error =
+              error instanceof GameError && error.message === 'ACTION_FAILED'
+                ? this.game.error
+                : this.words(
+                    '今は返事を返せなくなっている。言ってくれた内容はこちらに残っているよ。',
+                    'I cannot respond right now. I still have what you told me.',
+                  );
+            this.speak(
+              JSON.stringify({
+                type: 'request_unavailable',
+                facts: this.game.error,
+                requestRetained: !!this.game.retainedRequest,
+                requiresRestatement: false,
+              }),
             );
-            this.speak(this.game.error);
           }
           this.syncCore();
         },
@@ -479,6 +489,7 @@ export class GameRuntime {
     let first: ReturnType<GameRuntime['enqueue']>;
     for (const command of speechCommands(text, delegationId)) {
       const queued = this.enqueue(command, messageId);
+      if (!queued) break;
       first ??= queued;
     }
     return first;
@@ -487,10 +498,19 @@ export class GameRuntime {
     if (!this.valid() || this.game.status !== 'playing' || this.game.state().busy) return;
     this.recordDiagnostic(stage);
     const text =
-      this.coreSnapshot?.coreConfig.recovery.failed[this.coreSnapshot.locale] ??
-      'ごめん、もう一度教えて。';
+      this.game.retainedRequest && this.game.error
+        ? this.game.error
+        : (this.coreSnapshot?.coreConfig.recovery.failed[this.coreSnapshot.locale] ??
+          '今は先に進められなくなっている。');
     this.game.error = text;
-    this.speak(text);
+    this.speak(
+      JSON.stringify({
+        type: 'request_unavailable',
+        facts: text,
+        requestRetained: !!this.game.retainedRequest,
+        requiresRestatement: false,
+      }),
+    );
     this.presentNotice(text);
   }
   /** Server-owned maintenance; also callable with the injected clock in tests. */
@@ -554,9 +574,11 @@ export class GameRuntime {
       const commands =
         notice.kind === 'normal-warning'
           ? factCommands(JSON.stringify({ type: 'time_warning', message: notice.payload.text }))
-          : speechCommands(notice.payload.text, notice.payload.delegationId);
+          : speechCommands(notice.payload.text, notice.payload.delegationId, notice.id);
       for (const command of commands) {
         const queued = this.enqueue(command, notice.payload.messageId, warning);
+        // Incomplete facts must never be followed by their speech trigger.
+        if (!queued) break;
         first ??= queued;
       }
       if (warning || notice.includesTimeWarning) {
@@ -688,7 +710,7 @@ export class GameRuntime {
       endedAt,
       gameVersion: this.game.gameVersion,
       finalMessageId: reference(this.game.gameVersion)?.messageId ?? null,
-      recentActionScenes: this.game.committedActions.slice(-2).map((action) => ({
+      actionScenes: this.game.committedActions.map((action) => ({
         actionId: action.actionId,
         before: reference(action.beforeVersion),
         after: reference(action.afterVersion),

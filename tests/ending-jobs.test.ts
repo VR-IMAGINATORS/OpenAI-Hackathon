@@ -55,7 +55,7 @@ function packet(playId: string): EndingPacket {
     endedAt: 0,
     gameVersion: 2,
     finalMessageId: null,
-    recentActionScenes: [],
+    actionScenes: [],
   };
 }
 function deferred<T>() {

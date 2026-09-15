@@ -12,7 +12,7 @@ import { openingHandoff } from '../apps/local-server/story.js';
 async function setup(t: TestContext, reject = false) {
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: 'scene-http-test-only',
+
     AI_MODE: 'mock',
   });
   const jpeg = await sharp({ create: { width: 24, height: 24, channels: 3, background: 'navy' } })
@@ -79,7 +79,7 @@ async function setup(t: TestContext, reject = false) {
   const auth = await fetch(origin + '/api/auth', {
     method: 'POST',
     headers: { Origin: origin, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ passphrase: 'scene-http-test-only' }),
+    body: JSON.stringify({}),
   });
   const cookie = auth.headers.get('set-cookie')!.split(';')[0]!;
   async function request(

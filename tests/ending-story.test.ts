@@ -234,8 +234,10 @@ for (const core of [true, false])
     assert.equal(f.scenes[3].gameVersion, 3);
     assert.ok(f.events.indexOf('ending') < f.events.indexOf('ended'));
     assert.ok(f.events.indexOf('ended') < f.events.indexOf(`scene:${f.ending.finalMessageId}`));
-    assert.equal(f.ending.recentActionScenes[1].before?.messageId, f.scenes[2].messageId);
-    assert.equal(f.ending.recentActionScenes[1].after?.messageId, f.scenes[3].messageId);
+    assert.equal(f.ending.actionScenes.length, 3);
+    assert.equal(f.ending.actionScenes[0].before?.messageId, f.scenes[0].messageId);
+    assert.equal(f.ending.actionScenes[2].before?.messageId, f.scenes[2].messageId);
+    assert.equal(f.ending.actionScenes[2].after?.messageId, f.scenes[3].messageId);
     assert.ok(
       f.ending.evidence.records.some((r) => r.text.includes(f.ending.actions[2].narrative)),
     );

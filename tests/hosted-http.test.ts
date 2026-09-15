@@ -7,7 +7,6 @@ import sharp from 'sharp';
 import { createHostedApp } from '../apps/server/app.js';
 import { loadHostedConfig } from '../apps/server/config.js';
 
-const passphrase = 'http-test-passphrase';
 const opsToken = 'http-test-ops-secret-00000000000000000000';
 const version = 'a'.repeat(40);
 interface Client {
@@ -26,7 +25,7 @@ async function fixture(t: TestContext, failClose = false, core = false) {
   const logs: unknown[] = [];
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: passphrase,
+
     OPS_TOKEN: opsToken,
     AI_MODE: 'mock',
     APP_VERSION: version,
@@ -113,12 +112,12 @@ async function fixture(t: TestContext, failClose = false, core = false) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const raw = await response.text();
-    assert.ok(!raw.includes(passphrase) && !raw.includes(opsToken));
+    assert.ok(!raw.includes(opsToken));
     assert.doesNotMatch(raw, /live_private_|private-provider-failure|data:image/);
     return { response, data: raw ? JSON.parse(raw) : null, raw };
   }
   async function auth(): Promise<Client> {
-    const r = await request('/api/auth', { passphrase });
+    const r = await request('/api/auth', {});
     assert.equal(r.response.status, 200, r.raw);
     const cookie = r.response.headers.get('set-cookie')!;
     assert.match(cookie, /HttpOnly/i);
@@ -169,12 +168,14 @@ async function fixture(t: TestContext, failClose = false, core = false) {
   };
 }
 
-test('HTTP authentication/Origin, independent five plays, sixth refusal, replay and cross-owner denial', async (t) => {
+test('HTTP anonymous entry/Origin, independent five plays, sixth refusal, replay and cross-owner denial', async (t) => {
   const f = await fixture(t);
+  const bootstrap = await f.request('/api/bootstrap', undefined, undefined, 'GET');
+  assert.equal(bootstrap.data.auth.required, false);
   assert.equal((await f.request('/api/session', undefined, undefined, 'GET')).response.status, 401);
   assert.equal(
     (
-      await f.request('/api/auth', { passphrase }, undefined, 'POST', {
+      await f.request('/api/auth', {}, undefined, 'POST', {
         Origin: 'https://other.invalid',
       })
     ).response.status,
@@ -186,6 +187,11 @@ test('HTTP authentication/Origin, independent five plays, sixth refusal, replay 
   const requestId = randomUUID();
   const first = await f.create(clients[0], requestId);
   assert.equal(first.response.status, 201, first.raw);
+  const renewed = await f.request('/api/auth', {}, clients[0]);
+  assert.equal(renewed.response.status, 200);
+  assert.equal(renewed.response.headers.get('set-cookie')!.split(';')[0], clients[0].cookie);
+  const restored = await f.request('/api/session', undefined, clients[0], 'GET');
+  assert.equal(restored.data.playId, first.data.playId);
   const duplicate = await f.create(clients[0], requestId);
   assert.equal(duplicate.response.status, 200, duplicate.raw);
   assert.equal(duplicate.data.playId, first.data.playId);
@@ -337,7 +343,6 @@ test('HTTP ops require Bearer, reject browser Origin, drain closes audio and per
   assert.equal((await f.create(await f.auth())).response.status, 201);
   const text = JSON.stringify(f.logs);
   assert.ok(!text.includes(opsToken));
-  assert.ok(!text.includes(passphrase));
 });
 
 test('HTTP restart invalidates cookies and unknown Live close keeps player reservation', async (t) => {

@@ -18,7 +18,6 @@ import {
 export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }) {
   const [locale, setLocale] = useState<'ja' | 'en'>('en');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
-  const passphraseInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     setApiLocale(locale);
     document.documentElement.lang = locale;
@@ -27,8 +26,6 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
   }, [locale]);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
   const [showOpening, setShowOpening] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [passphrase, setPassphrase] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [play, setPlay] = useState<{
@@ -39,10 +36,9 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
   } | null>(null);
   const locked = useRef(false);
   const createId = useRef<string | null>(null);
-  async function restore() {
+  async function restore(includeResult = true) {
     const session = await playRequest<HostedSession>('/api/session');
-    setAuthenticated(true);
-    if (session.playId) {
+    if (session.playId && (includeResult || session.lifecycle !== 'terminal')) {
       const envelope = await playRequest<HostedPlayState>('/api/play/state', undefined, 'GET', {
         playId: session.playId,
       });
@@ -61,22 +57,14 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
   }, []);
   async function begin(selectedDifficulty: Difficulty) {
     if (locked.current) return;
-    if (!authenticated && !passphrase.trim()) {
-      window.alert(t('合言葉を入力してください。', 'Please enter the passphrase.'));
-      passphraseInput.current?.focus();
-      return;
-    }
     locked.current = true;
     setDifficulty(selectedDifficulty);
     createId.current = null;
     setLoading(true);
     setError('');
     try {
-      if (!authenticated) {
-        await playRequest('/api/auth', { passphrase });
-        setPassphrase('');
-        await restore();
-      }
+      await playRequest('/api/auth', {});
+      await restore(false);
       setShowOpening(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('参加できませんでした。', 'Unable to join.'));
@@ -134,7 +122,6 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           setShowOpening(false);
           setPlay(null);
           setError('');
-          void restore().catch(() => setAuthenticated(false));
         }}
         onReplay={() => {
           setShowOpening(false);
@@ -194,20 +181,6 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           if (selected.success) void begin(selected.data);
         }}
       >
-        {!authenticated && (
-          <label className="play-field">
-            {t('参加の合言葉', 'Passphrase')}
-            <input
-              ref={passphraseInput}
-              type="password"
-              autoComplete="off"
-              value={passphrase}
-              maxLength={256}
-              disabled={loading}
-              onChange={(e) => setPassphrase(e.target.value)}
-            />
-          </label>
-        )}
         <fieldset className="difficulty-choice" disabled={loading}>
           <legend>{t('難易度を選んで開始', 'Choose a difficulty to start')}</legend>
           <div className="difficulty-options">
