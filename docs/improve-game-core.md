@@ -62,3 +62,7 @@ liveの9プレイと必要評価が完了し、確認済み不備がなく、指
 `specs/improve-game-core/manual-playtest.md` にPC Chrome・スマホの手順を記載。実音声、実機写真、時間設定、人間の面白さはテキスト模擬では保証しない。実行実績は `specs/improve-game-core/verification.md` に記録する。
 
 評価入力枠は原文と実拡張案の容量に合わせて128 KiB、生成・各プレイは64 KiB。評価は引き続き全ターンを分割して扱い、入力バイト数に基づく費用予約と全体上限を適用する。
+
+## 拡充候補を共有して遊ぶ
+
+今回の候補はリポジトリに同梱。手順は [拡充版の試遊](expanded-playtest.md) を参照。起動コマンドは npm run play:expanded。
