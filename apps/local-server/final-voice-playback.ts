@@ -73,7 +73,9 @@ export class FinalVoicePlayback {
       this.activity &&
       now - this.activity.at < 2000
     )
-      return now;
+      // The watchdog reads its clock before this getter. Returning a new `now`
+      // would keep moving the deadline just beyond that comparison forever.
+      return Math.max(this.quietSince + 2000, this.lastTranscriptAt + 2000);
     // Missing/suspended playback cannot prove completion. Release abandoned
     // calls after 60s without output progress; active speech renews this wait.
     return this.lastProgressAt + 60_000;

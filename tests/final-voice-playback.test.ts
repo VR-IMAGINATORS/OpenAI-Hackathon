@@ -44,6 +44,29 @@ test('speech longer than 12 seconds drains after a continuous quiet gap, ignorin
   assert.equal(h.playback.closingAt, 24000);
 });
 
+test('a continuously advancing clock can reach the quiet completion deadline', () => {
+  let time = 1000;
+  const now = () => (time += 0.01);
+  const playback = new FinalVoicePlayback(now);
+  playback.start(1, 0);
+  for (let sequence = 1; sequence <= 3; sequence++) {
+    time = sequence * 1000;
+    playback.report({
+      generation: 1,
+      sequence,
+      input: 'unknown',
+      inputStopped: true,
+      output: 'quiet',
+      playbackReady: true,
+    });
+  }
+  // Match the production watchdog's evaluation order: read now before closingAt.
+  assert.ok(now() >= playback.closingAt, 'quiet completion must be reachable by the watchdog');
+  const closingAt = playback.closingAt;
+  time += 250;
+  assert.equal(playback.closingAt, closingAt, 'reading the deadline must not advance it');
+});
+
 test('final commentary waits for command acknowledgment and actual output to start', () => {
   const h = setup();
   h.playback.expectSpeech(2);

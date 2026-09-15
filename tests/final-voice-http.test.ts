@@ -8,7 +8,8 @@ import { loadHostedConfig } from '../apps/server/config.js';
 
 test('HTTP keeps final playback alive with input rejected, then hangs up once after silence', async (t) => {
   let now = 1000,
-    hangups = 0;
+    hangups = 0,
+    clockReads = 0;
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
     AI_MODE: 'mock',
@@ -16,7 +17,8 @@ test('HTTP keeps final playback alive with input rejected, then hangs up once af
     SCENARIO_PATH: 'scenarios/mobile-playtest.json',
   });
   const hosted = createHostedApp(config, {
-    now: () => now,
+    // Real monotonic time advances between the watchdog's two clock reads.
+    now: () => now + ++clockReads / 1000,
     transport: {
       async createLiveSession() {
         return {
