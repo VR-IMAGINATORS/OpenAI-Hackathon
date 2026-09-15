@@ -7,16 +7,19 @@ export const difficultyPresets = {
   normal: {
     totalTimeSeconds: 300,
     initialCredits: 1000,
-    label: { ja: 'スタンダードProプラン', en: 'Standard Pro Plan' },
+    label: { ja: 'スタンダード', en: 'Standard' },
+    planLabel: { ja: 'Proプラン', en: 'Pro Plan' },
   },
   hard: {
     totalTimeSeconds: 240,
     initialCredits: 700,
-    label: { ja: 'ハードPlusプラン', en: 'Hard Plus Plan' },
+    label: { ja: 'ハード', en: 'Hard' },
+    planLabel: { ja: 'Plusプラン', en: 'Plus Plan' },
   },
   nightmare: {
     totalTimeSeconds: 180,
     initialCredits: 400,
-    label: { ja: 'ヘル無料プラン', en: 'HELL Free Plan' },
+    label: { ja: 'ヘル', en: 'HELL' },
+    planLabel: { ja: '無料プラン', en: 'Free Plan' },
   },
 } as const satisfies Record<Difficulty, unknown>;

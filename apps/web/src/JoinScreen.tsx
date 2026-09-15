@@ -213,6 +213,10 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           <div className="difficulty-options">
             {difficultySchema.options.map((value) => {
               const preset = difficultyPresets[value];
+              const name = [preset.label[locale], preset.planLabel[locale]].join(
+                locale === 'ja' ? '' : ' ',
+              );
+              const limits = `${preset.totalTimeSeconds / 60}${t('分', ' min')} · ${preset.initialCredits.toLocaleString(locale)}${t('クレジット', ' credits')}`;
               return (
                 <button
                   className="difficulty-card"
@@ -220,13 +224,11 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
                   type="submit"
                   name="difficulty"
                   value={value}
+                  aria-label={`${name} ${limits}`}
                 >
                   <strong>{preset.label[locale]}</strong>
-                  <small>
-                    {preset.totalTimeSeconds / 60}
-                    {t('分', ' min')} · {preset.initialCredits.toLocaleString(locale)}
-                    {t('クレジット', ' credits')}
-                  </small>
+                  <span className="difficulty-card-plan">{preset.planLabel[locale]}</span>
+                  <small>{limits}</small>
                 </button>
               );
             })}
