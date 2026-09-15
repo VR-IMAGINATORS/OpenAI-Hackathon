@@ -1892,16 +1892,6 @@ h1 span {
   font-size: 11px;
   line-height: 1.5;
 }
-.game-credit-rates {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  column-gap: 12px;
-  color: #91a6ae;
-}
-.game-credit-charge {
-  color: #c4ebdf;
-}
 .game-credit-warning {
   margin: 4px 0 0;
   color: #ffc578;

@@ -789,7 +789,6 @@ export default function PlayScreen({
             <GameCreditNotice
               creditsRemaining={state.creditsRemaining}
               initialCredits={state.initialCredits}
-              lastCreditCharge={state.lastCreditCharge}
               locale={locale}
             />
           )}
@@ -984,7 +983,6 @@ export default function PlayScreen({
         <GameCreditNotice
           creditsRemaining={state.creditsRemaining}
           initialCredits={state.initialCredits}
-          lastCreditCharge={state.lastCreditCharge}
           locale={locale}
         />
       )}

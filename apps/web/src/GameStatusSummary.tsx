@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { creditCosts, type CreditCharge } from '../../../packages/shared/credits.js';
 
 export default function GameStatusSummary({
   title,
@@ -98,55 +97,22 @@ export function GameResourceCounters({
 export function GameCreditNotice({
   creditsRemaining,
   initialCredits,
-  lastCreditCharge,
   locale,
 }: {
   creditsRemaining: number;
   initialCredits: number;
-  lastCreditCharge: CreditCharge | null;
   locale: 'ja' | 'en';
 }) {
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
-  // Restoring a play should not replay an old charge notification.
-  const previousSequence = useRef(lastCreditCharge?.sequence ?? 0);
-  const [charge, setCharge] = useState<CreditCharge | null>(null);
-  useEffect(() => {
-    if (!lastCreditCharge || lastCreditCharge.sequence <= previousSequence.current) return;
-    previousSequence.current = lastCreditCharge.sequence;
-    setCharge(lastCreditCharge);
-  }, [lastCreditCharge]);
-  useEffect(() => {
-    if (!charge) return;
-    const timeout = window.setTimeout(() => setCharge(null), 3500);
-    return () => window.clearTimeout(timeout);
-  }, [charge]);
+  if (creditsRemaining > initialCredits * 0.2) return null;
+
   return (
     <div className="game-credit-notice">
-      <div className="game-credit-rates">
-        <span>
-          {t('会話', 'Conversation')} {creditCosts.conversation} · {t('写真', 'Photo')}{' '}
-          {creditCosts.photo}
-          {t('/枚', ' each')}
-        </span>
-        <span className="game-credit-charge" role="status" aria-atomic="true">
-          {charge && (
-            <>
-              {charge.kind === 'photo'
-                ? t('画像認識', 'Image recognition')
-                : t('音声会話', 'Voice conversation')}
-              {' −'}
-              {charge.amount}
-            </>
-          )}
-        </span>
-      </div>
-      {creditsRemaining <= initialCredits * 0.2 && (
-        <p className="game-credit-warning" role="status">
-          {creditsRemaining <= 0
-            ? t('クレジットを使い切りました。', 'You have used all your credits.')
-            : t('ご利用可能クレジットが残りわずかです', 'Your available credits are running low.')}
-        </p>
-      )}
+      <p className="game-credit-warning" role="status">
+        {creditsRemaining <= 0
+          ? t('クレジットを使い切りました。', 'You have used all your credits.')
+          : t('ご利用可能クレジットが残りわずかです', 'Your available credits are running low.')}
+      </p>
     </div>
   );
 }

@@ -436,7 +436,8 @@ const scenario = {
     await page.getByText('現在の目標', { exact: true }).waitFor();
     await page.getByText('残り時間', { exact: true }).waitFor();
     await page.getByText('残りクレジット', { exact: true }).waitFor();
-    await page.getByText('会話 20 · 写真 100/枚', { exact: true }).waitFor();
+    assert.equal(await page.getByText('会話 20 · 写真 100/枚', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.game-credit-notice').count(), 0);
     assert.equal(await page.locator('.messenger-credit-count strong').innerText(), '1,000');
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '05:00');
     await page.screenshot({ path: `${artifactDir}/messenger-active-mobile.png`, fullPage: true });
@@ -506,7 +507,12 @@ const scenario = {
     await page.waitForTimeout(500);
     assert.equal(photoIds.length, 2);
     assert.equal(state.creditsRemaining, 900, 'a retried photo consumes credits once');
-    await page.getByText('画像認識 −100', { exact: true }).waitFor();
+    await page
+      .locator('.messenger-credit-count strong')
+      .getByText('900', { exact: true })
+      .waitFor();
+    assert.equal(await page.getByText('画像認識 −100', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.game-credit-notice').count(), 0);
     // The existing photo is included in the next submission, so adding a second costs 200.
     state.creditsRemaining = 100;
     await page
@@ -694,11 +700,14 @@ const scenario = {
     await page.getByText('Current objective', { exact: true }).waitFor();
     await page.getByText('Time left', { exact: true }).waitFor();
     await page.getByText('Credits left', { exact: true }).waitFor();
-    await page.getByText('Conversation 20 · Photo 100 each', { exact: true }).waitFor();
     assert.equal(
-      await page.locator('.game-credit-charge').innerText(),
-      '',
-      'restore does not replay an old charge',
+      await page.getByText('Conversation 20 · Photo 100 each', { exact: true }).count(),
+      0,
+    );
+    assert.equal(
+      await page.locator('.game-credit-notice').count(),
+      0,
+      'restore shows no credit notice when the balance is sufficient',
     );
     const objective = page.locator('.messenger-objective strong');
     assert.equal(await objective.innerText(), scenario.obstacles[0].title.en);
@@ -758,7 +767,8 @@ const scenario = {
     await page.locator('.messenger-clock.is-urgent').waitFor();
     await page.locator('.messenger-credit-count.is-caution').waitFor();
     await page.getByText('Your available credits are running low.', { exact: true }).waitFor();
-    await page.getByText('Voice conversation −20', { exact: true }).waitFor();
+    assert.equal(await page.getByText('Voice conversation −20', { exact: true }).count(), 0);
+    assert.equal(await page.locator('.game-credit-charge').count(), 0);
     await page.waitForFunction(() => window.__clockWarnings === 1);
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '01:00');
     assert.equal(await page.locator('.messenger-warning-icon').count(), 2);
@@ -852,7 +862,7 @@ const scenario = {
     );
     assert.deepEqual(pageErrors, []);
     console.log(
-      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, bilingual credits/rates/charges, combined photo affordability, refunds, warning thresholds, last-action settling, unchanged result UI, single animation, restore and reduced motion. Fake API/media only.',
+      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, bilingual credit balances without rates or charge notices, combined photo affordability, refunds, warning thresholds, last-action settling, unchanged result UI, single animation, restore and reduced motion. Fake API/media only.',
     );
   } finally {
     await browser.close();
