@@ -32,6 +32,8 @@ type GameEndReason = 'escaped' | 'time_limit' | 'action_limit' | 'interrupted';
 
 画像素材は終了callbackで別途固定する。内部ジョブが、その時点で完成・検査済みの最新の場面画像1枚と、全行動に対応する完成済み行動前画像をversionごとに重複なく保持する。演出要求の添付は最新の完成画像と最も早い行動前画像の最大2枚、開始画像の編集には実際に選択した最初の行動前画像を使う。`finalMessageId`の画像が未完成でも、同じプレイのより前の完成画像を使う。後着画像は追加せず、画像のgameVersionと終了時の確定gameVersionを制作入力で区別する。画像素材の選定は文字起こし猶予や動画の待機列に影響されない。
 
+静止画へ渡す行動データは対象時点の状態に限定する。ゲーム中は行動後のfacts・道具状態を使い、beforeValues/beforeStatusを含めない。エンディング開始は用途と行動前の道具状態、終了は最後の選択行動の成否と終了時の道具状態を使う。道具状態は単一のstatusとして渡し、動画用のitemCoverage・ショット一覧は画像編集入力へ複写しない。元のCommittedEndingActionの前後履歴は変更しない。複数の画像参照も人物・場所の識別用であり、出力のコマ割りを意味しない。
+
 ## 生成内容
 
 文章用AIは`title / story / evaluation`、主役tag（固定ID・根拠行動ID・理由、またはnull）、伏線sourceIdを生成する。storyは最大240文字。検証後すぐ保存し、動画の処理枠・脚本生成を待たず公開する。映像用AIは公開済み文章と証拠を任意の入力にし、伏線sourceId・行動ID、候補比較、画像・動画promptだけを生成する。`EndingDesign`は映像フィールドのみ。itemCoverageは全履歴とinventoryの和集合に対して1アイテム1行。itemId、根拠actionIdまたはnull、shotまたはnull、depiction（use / trace / presence / omitted）、短いreasonを持つ。useは選択行動に属する実使用、traceは確定した結果・残骸、presenceは未使用品だけに許す。omittedはshot=nullと具体的な理由を必要とする。未知・重複・欠落ID、道具に無関係な行動、未選択行動の使用、逆順の使用、存在しないショットを拒否する。この照合は脚本の整合性検証であり、実動画の登場確認ではない。文章失敗時はestablishedEnding=nullとして確定状態・行動から動画を作り、文章を捏造・再生成しない。storyErrorCodeは動画用errorCodeと分けて保持する。表示文は選択言語、画像・動画promptは英語を使う。

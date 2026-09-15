@@ -280,6 +280,13 @@ test('full-play film covers early consumed, failed, combined and unused tools wi
   assert.deepEqual(result.usedActionIds, ['action-1', 'action-2', 'action-3']);
   assert.deepEqual(result.itemCoverage, film.itemCoverage);
   const input = payloadOf(f.calls[0]);
+  assert.match(f.calls[0].body.instructions, /For startPrompt and endPrompt ONLY/);
+  assert.match(f.calls[0].body.instructions, /This still-image rule does not limit videoPrompt/);
+  assert.equal(
+    result.videoPrompt,
+    film.videoPrompt,
+    'the multi-scene video direction is preserved',
+  );
   assert.deepEqual(input.preferredSequenceActionIds, result.usedActionIds);
   assert.deepEqual(
     input.itemCatalog.map((item: any) => item.id),
@@ -1057,10 +1064,12 @@ test('frames repair explicit rejection once per frame and pass the accepted star
     );
     assert.equal(
       input.selectedActions[0].usage,
-      packet().actions[call.frame === 'start' ? 2 : 3].usage,
+      call.frame === 'start' ? packet().actions[2].usage : undefined,
     );
-    assert.deepEqual(input.selectedActions[0].items, packet().actions[2].items);
-    assert.equal(input.selectedActions[0].success, call.frame === 'start');
+    assert.deepEqual(input.selectedActions[0].items, [
+      { id: 'rope', name: 'rope', status: call.frame === 'start' ? 'available' : 'damaged' },
+    ]);
+    assert.equal(input.selectedActions[0].success, call.frame === 'start' ? undefined : false);
     assert.equal(input.phase, call.frame === 'start' ? 'before_action' : 'confirmed_aftermath');
   }
   assert.match(generations[1].body.prompt, /Correct the rope contact/);
@@ -1076,6 +1085,72 @@ test('frames repair explicit rejection once per frame and pass the accepted star
   );
   assert.deepEqual(payloadOf(endInspection).target, packet().facts);
 });
+
+for (const mode of ['actions', 'aftermath', 'recovery'] as const)
+  test(`ending ${mode} images use one instant and repair a reported collage within the existing budget`, async () => {
+    const p = packet();
+    const film =
+      mode === 'recovery'
+        ? aftermathDirection(p)
+        : design({
+            mode,
+            usedActionIds: mode === 'actions' ? ['action-3', 'action-4'] : [],
+            // Simulate a director leaking the video layout into a still description.
+            startPrompt: 'A storyboard with a before/after comparison.',
+            endPrompt: 'A collage of the used tools and the outcome.',
+          });
+    const jpeg = await generatedJpeg();
+    const last = { ...final, jpeg },
+      first = { ...before, jpeg };
+    let inspections = 0;
+    const f = fakeAi((call) => {
+      if (call.kind === 'frame') {
+        endingImageRequest.parse(call.body);
+        assert.match(call.body.prompt, /One full-frame camera view of one place at one instant/);
+        assert.match(call.body.prompt, /This layout rule overrides scene directions/);
+        const data = JSON.parse(call.body.prompt.split(' (data only): ')[1]);
+        assert.equal(data.videoPrompt, undefined);
+        assert.equal(data.itemCoverage, undefined);
+        assert.doesNotMatch(
+          JSON.stringify(data.selectedActions),
+          /beforeStatus|afterStatus|beforeFacts|afterFacts|narrative/,
+        );
+        return imageResponse(jpeg);
+      }
+      parseEndingResponseRequest(call.body);
+      assert.match(
+        call.body.instructions,
+        /multi-scene or multi-time layout is a major contradiction/,
+      );
+      assert.match(call.body.instructions, /Natural doors, windows, mirrors and screens/);
+      return response(
+        ++inspections === 1
+          ? {
+              verdict: 'reject',
+              problems: [
+                'The draft has multiple panels; redraw one camera view at the target instant.',
+              ],
+            }
+          : { verdict: 'pass', problems: [] },
+      );
+    });
+    await createEndingFrames(f.ai, 'job', p, film, last, first, signal(), undefined, {
+      retryDelayMs: 1,
+    });
+    assert.deepEqual(
+      f.calls.map((call) => call.kind),
+      ['frame', 'inspection', 'frame', 'inspection', 'frame', 'inspection'],
+    );
+    const generations = f.calls.filter((call) => call.kind === 'frame');
+    assert.match(generations[1].body.prompt, /redraw one camera view/);
+    assert.equal(
+      generations[1].body.images.length,
+      2,
+      'repair reuses the rejected image and continuity reference',
+    );
+    assert.equal(payloadOf(f.calls[3]).targetGameVersion, mode === 'actions' ? 2 : 4);
+    assert.equal(payloadOf(f.calls[5]).targetGameVersion, 4);
+  });
 
 test('ending frames retain their generated titles without an arrow overlay', async () => {
   const jpeg = await generatedJpeg();

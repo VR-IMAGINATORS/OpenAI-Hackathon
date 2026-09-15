@@ -662,7 +662,6 @@ test('scene generation and inspection retain the committed tool, method and resu
       assert.deepEqual(generated.committedAction.tools, [
         {
           name: 'scissors',
-          beforeStatus: 'available',
           afterStatus: success ? 'consumed' : 'damaged',
         },
       ]);
@@ -670,9 +669,15 @@ test('scene generation and inspection retain the committed tool, method and resu
       assert.deepEqual(generated.committedAction.afterValues, {
         'puzzle-0': success ? 'cleared' : 'partial',
       });
-      assert.deepEqual(generated.committedAction.beforeValues, {
-        'puzzle-0': success ? 'partial' : 'blocked',
-      });
+      assert.equal(generated.committedAction.beforeValues, undefined);
+      assert.deepEqual(action.beforeFacts.values['puzzle-0'], success ? 'partial' : 'blocked');
+      assert.equal(
+        action.items[0].beforeStatus,
+        'available',
+        'full history stays available to video direction',
+      );
+      assert.match(prompt, /One full-frame camera view of one place at one instant/);
+      assert.ok(generated.rules.some((rule: any) => rule.ruleId === 'composition:single_moment'));
       if (success) {
         assert.equal(generated.facts.obstacleId, snap.scenarioV2.obstacles[1].id);
         assert.ok(
