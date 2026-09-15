@@ -134,9 +134,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const downloadLink = page.getByRole('link', { name: '動画をダウンロード', exact: true });
     await downloadLink.waitFor();
     const downloadBounds = await downloadLink.boundingBox();
+    const videoBounds = await video.boundingBox();
     assert(
-      downloadBounds.height >= 44 && downloadBounds.width <= 390,
-      'download fits a touch screen',
+      downloadBounds.height === 44 && downloadBounds.width === 44,
+      'icon-only download keeps a compact touch target',
+    );
+    assert.equal((await downloadLink.innerText()).trim(), '', 'download has no visible text label');
+    assert(downloadBounds.y >= videoBounds.y + videoBounds.height, 'download sits below the video');
+    assert(
+      Math.abs(downloadBounds.x + downloadBounds.width - videoBounds.x - videoBounds.width) < 1,
+      'download aligns with the video right edge',
     );
     const previousUrl = page.url();
     const [download] = await Promise.all([page.waitForEvent('download'), downloadLink.click()]);

@@ -2176,20 +2176,17 @@ h1 span {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  margin-block: 12px;
-  padding: 10px 16px;
-  border: 1px solid var(--ending-border);
-  border-radius: 10px;
-  background: var(--ending-band);
-  color: var(--ending-accent);
-  font-weight: 700;
+  width: 44px;
+  height: 44px;
+  margin: 4px 0 0 auto;
+  padding: 12px;
+  border-radius: 8px;
+  color: #99afb7;
   text-decoration: none;
 }
 .ending-download svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   fill: none;
   stroke: currentColor;
@@ -2198,7 +2195,8 @@ h1 span {
   stroke-linejoin: round;
 }
 .ending-download:hover {
-  border-color: var(--ending-accent);
+  background: var(--ending-band);
+  color: var(--ending-accent);
 }
 .ending-download:focus-visible {
   outline: 2px solid var(--ending-accent);
