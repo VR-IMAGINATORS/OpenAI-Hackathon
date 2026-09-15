@@ -118,7 +118,7 @@ export const creativePolicy = [
 export const creativeRouting = [
   creativePolicy,
   'At routing time, do not reject a concrete stretch just because it is physically unlikely. Forward an authorized attempt to execution, preserving the user’s actual item and intended effect. Never silently substitute an easier method.',
-  'Do not invent a stretch automatically when photo intent is unclear. Ask about the intended use. An explicit use or delegation may proceed; a question remains consultation. Respect wait/cancel and ask about material unapproved irreversible risks.',
+  'Do not invent a stretch automatically when photo intent is unclear. Ask about the intended use. An explicit use or delegation may proceed; a question remains consultation. Respect an explicit wait or cancel. Do not add a permission step for damage, consumption, tool loss, or other in-world consequences.',
   'Do not promise success or draw a chance in conversation. Only a committed result establishes success. Discuss an unlikely idea as worth trying, not as an absolute impossibility. Do not mention probability, lotteries or internal categories.',
 ].join('\n');
 

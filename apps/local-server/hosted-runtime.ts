@@ -10,7 +10,6 @@ import { ConversationLedger } from './conversation.js';
 import { IntentCoordinator } from './intent-coordinator.js';
 import { LiveOutbox } from './live-outbox.js';
 
-import { classifyActionControl } from './harness-decisions.js';
 import type { TranscriptFragment } from '../../packages/shared/conversation.js';
 import { GameSession, GameError } from './game.js';
 import { createGameAI } from './game-ai.js';
@@ -84,13 +83,12 @@ export class GameRuntime {
   private lowCreditsNotified = false;
   private photoWorker?: Promise<unknown>;
   private photoDeciding = false;
-  private control?: {
+  private pendingStop?: {
     actionId: string;
-    usage: string;
-    epoch: number;
-    fragments: TranscriptFragment[];
-    controller: AbortController;
-    delegation?: { id: string; generation: number; offsetMs: number };
+    generation: number;
+    throughSeq: number;
+    lastEndMs: number;
+    text: string;
   };
   private actionInFlight = false;
   private pendingScene: { messageId: string; beforeVersion: number } | null = null;
@@ -257,15 +255,10 @@ export class GameRuntime {
       this.intents = new IntentCoordinator({
         ledger: this.ledger,
         consumeOnReservation: true,
+        canClassify: () =>
+          !this.game.state().busy && !this.photoDeciding && !this.notificationFailed,
         now,
         classify: async (context) => {
-          if (this.game.state().busy || this.notificationFailed || this.photoDeciding) {
-            this.recordDiagnostic(
-              'classification_skipped',
-              this.notificationFailed ? 'notification_failed' : 'busy',
-            );
-            return { kind: 'wait', reason: '処理中です。完了してからもう一度話してください。' };
-          }
           this.recordDiagnostic('classification_started');
           return this.harness!.classifyRequest(context);
         },
@@ -275,14 +268,6 @@ export class GameRuntime {
           this.recordDiagnostic('decision_accepted', decision.kind);
           if (decision.kind === 'consult') {
             this.harness!.answerConsult(decision, delegation.id);
-          } else if (decision.kind === 'wait') {
-            this.sendFacts(
-              this.words(
-                'まだ行動は予約されていません。未完の指示や訂正を待ってください。',
-                'No action is reserved. Wait for the user to finish or correct the request.',
-              ),
-              delegation.id,
-            );
           }
         },
         onExpired: () => this.recoveryNotice('delegation_expired'),
@@ -338,120 +323,68 @@ export class GameRuntime {
     }
   }
 
-  private receiveControl(fragment: TranscriptFragment): void {
+  private receiveExplicitStop(fragment: TranscriptFragment): void {
     const actionId = this.game.pendingActionId;
-    if (!actionId || !this.game.holdPendingAction(actionId, fragment.eventId)) return;
-    if (this.control?.actionId === actionId) {
-      this.control.fragments.push(fragment);
+    if (!actionId) {
+      this.pendingStop = undefined;
       return;
     }
-    this.control?.controller.abort();
-    const control = {
-      actionId,
-      usage: this.harness!.activeUsage,
-      epoch: this.epoch,
-      fragments: [fragment],
-      controller: new AbortController(),
-    };
-    this.control = control;
-    const deadline = setTimeout(() => {
-      control.controller.abort();
-      this.harness!.cancelPending(actionId);
-      this.syncCore();
-    }, 5_000);
-    deadline.unref();
-    void this.processControls(control)
-      .catch(() => {
-        const cancelled = this.harness!.cancelPending(actionId);
-        this.syncCore();
-        if (
-          this.valid(control.epoch) &&
-          this.control === control &&
-          (cancelled || this.game.gameVersion === fragment.receivedGameVersion)
-        ) {
-          this.speak(
-            this.words(
-              'いったん止めたよ。どうしたらいい？',
-              'I stopped for now. What should I do?',
-            ),
-            null,
-            null,
-            'correction',
-          );
-        }
-      })
-      .finally(() => {
-        clearTimeout(deadline);
-        if (this.control === control) this.control = undefined;
-      });
+    if (
+      !this.pendingStop ||
+      this.pendingStop.actionId !== actionId ||
+      this.pendingStop.generation !== fragment.generation
+    )
+      this.pendingStop = {
+        actionId,
+        generation: fragment.generation,
+        throughSeq: 0,
+        lastEndMs: fragment.startMs,
+        text: '',
+      };
+    const stop = this.pendingStop;
+    if (
+      fragment.generation !== this.game.generation ||
+      fragment.receivedGameVersion !== this.game.gameVersion ||
+      fragment.serverSeq <= stop.throughSeq
+    )
+      return;
+    stop.throughSeq = fragment.serverSeq;
+    if (fragment.startMs - stop.lastEndMs > 500) stop.text = '';
+    stop.lastEndMs = fragment.endMs;
+    stop.text = (stop.text + fragment.delta).replace(/\s+/g, ' ').slice(-80);
+    const text = stop.text
+      .trim()
+      .replace(/[。！？!?、,]+$/u, '')
+      .split(/[。！？!?、,]/u)
+      .at(-1)!
+      .trim();
+    if (
+      /止めないで|やめないで|待たずに|待たないで|中止しないで|do not (?:stop|wait)|don't (?:stop|wait)|keep going/i.test(
+        text,
+      )
+    )
+      return;
+    if (
+      !/^(?:(?:ちょっと|もう|一旦|いったん|今(?:の|すぐ))\s*)?(?:待って|止めて|やめて|中止して)(?:ください)?$/u.test(
+        text,
+      ) &&
+      !/^(?:please )?(?:stop|wait|cancel)(?: (?:it|that|this|for now))?(?: please)?$/i.test(text)
+    )
+      return;
+    if (!this.game.cancelPendingAction(actionId)) return;
+    this.pendingStop = undefined;
+    this.syncCore();
+    this.speak(
+      JSON.stringify({
+        type: 'action_cancelled',
+        facts: this.coreSnapshot!.coreConfig.recovery.cancelled[this.coreSnapshot!.locale],
+      }),
+      null,
+      null,
+      'correction',
+    );
   }
 
-  private async processControls(control: NonNullable<GameRuntime['control']>): Promise<void> {
-    let handled = 0;
-    const { actionId } = control;
-    while (this.game.pendingActionId === actionId && handled < control.fragments.length) {
-      const batch = control.fragments.slice();
-      const decision = await classifyActionControl(
-        {
-          ...this.harness!.modelClient(),
-          respond: (body) => this.ai.respondControl(this.id, body, control.controller.signal),
-        },
-        { pendingUsage: control.usage, userSpeech: batch.map((f) => f.delta).join('') },
-      );
-      if (!this.valid(control.epoch) || this.control !== control) return;
-      if (this.game.pendingActionId !== actionId) {
-        if (this.game.gameVersion === batch[0]?.receivedGameVersion)
-          this.speak(
-            this.words(
-              'いったん止めたよ。どうしたらいい？',
-              'I stopped for now. What should I do?',
-            ),
-            null,
-            null,
-            'correction',
-          );
-        return;
-      }
-      if (decision.decision === 'keep') {
-        for (const fragment of batch.slice(handled))
-          this.game.resolvePendingActionControl(actionId, fragment.eventId, 'keep');
-        handled = batch.length;
-        continue;
-      }
-      this.harness!.cancelPending(actionId);
-      this.syncCore();
-      this.harness!.pendingRisk = undefined;
-      if (decision.decision === 'replace') {
-        this.harness!.correctedEvidence.add(
-          `${this.game.generation}:${Math.max(...batch.map((f) => f.serverSeq))}`,
-        );
-        this.ledger!.promoteControlEvidence(batch.map((f) => f.serverSeq));
-        if (control.delegation) this.intents!.acceptDelegation(control.delegation);
-        else
-          this.enqueue({
-            ...factCommand(
-              this.words(
-                '訂正を受け付け、前の行動を止めました。最新のユーザーの訂正をclientへ委譲してください。成功したとは言わないでください。',
-                'The previous action is stopped. Delegate the latest user correction to the client. Do not claim success.',
-              ),
-            ),
-            type: 'session.instructions.append',
-          });
-      } else
-        this.speak(
-          decision.decision === 'unknown'
-            ? this.words(
-                'いったん止めたよ。どう変えたい？',
-                'I stopped for now. What would you like to change?',
-              )
-            : this.coreSnapshot!.coreConfig.recovery.cancelled[this.coreSnapshot!.locale],
-          null,
-          null,
-          'correction',
-        );
-      return;
-    }
-  }
   private presentCreditWarning() {
     if (this.game.terminal) return;
     // Credit warnings are display-only; sending balances to Live can prompt spoken warnings.
@@ -929,14 +862,7 @@ export class GameRuntime {
       if (event.type === 'session.delegation.created') {
         this.openingMessageId = undefined;
         this.recordDiagnostic('delegation_received');
-        if (this.game.pendingActionId) {
-          if (this.control)
-            this.control.delegation = {
-              id: event.delegation.id,
-              generation,
-              offsetMs: event.offset_ms,
-            };
-        } else if (!this.game.terminal)
+        if (!this.game.pendingActionId && !this.game.terminal)
           this.intents!.acceptDelegation({
             id: event.delegation.id,
             generation,
@@ -969,7 +895,8 @@ export class GameRuntime {
           this.story.transcript(fragment, this.now());
           if (fragment.speaker === 'user' && fragment.delta.trim())
             this.openingMessageId = undefined;
-          if (fragment.speaker === 'user' && fragment.delta.trim()) this.receiveControl(fragment);
+          if (fragment.speaker === 'user' && fragment.delta.trim())
+            this.receiveExplicitStop(fragment);
           this.presentation?.transcript(
             fragment,
             fragment.speaker === 'assistant' ? this.openingMessageId : undefined,
@@ -1130,7 +1057,6 @@ export class GameRuntime {
   dispose() {
     this.disposed = true;
     this.harness?.processedPhotos.clear();
-    this.control?.controller.abort();
     this.notifications?.clear();
     clearInterval(this.maintenanceTimer);
     this.traceEntries = [];

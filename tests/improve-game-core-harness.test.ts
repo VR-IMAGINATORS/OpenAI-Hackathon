@@ -29,7 +29,6 @@ function setup(
   options: {
     respond?: (body: any) => Promise<unknown>;
     judge?: () => Promise<CoreJudgment>;
-    risk?: boolean;
     hooks?: boolean;
   } = {},
 ) {
@@ -98,7 +97,7 @@ function setup(
             return response({ ids: [] });
           case 'harness_photo':
             return response({
-              decision: options.risk ? 'confirm_risk' : 'execute',
+              decision: 'execute',
               itemRefs: [{ photoId: input.photos[0] }],
               usage: 'cut rope',
               message: 'This could damage the scissors. Continue?',
@@ -192,16 +191,6 @@ test('recognized photo executes once without a second dialogue call or acknowled
   assert.deepEqual(retry.committedPublicEvents, []);
   assert.equal(f.judged(), 1);
   assert.equal(f.game.credits.remaining, 900);
-});
-
-test('recognized risk waits for confirmation and still charges the photo', async () => {
-  const f = setup({ risk: true });
-  const result = await f.harness.handleRecognizedPhoto(await f.photo());
-  assert.equal(result.publicState.creditsRemaining, 900);
-  assert.equal(f.judged(), 0);
-  assert.match(result.publicReply, /damage/);
-  assert.equal(f.harness.pendingRisk?.usage, 'cut rope');
-  assert.deepEqual(result.committedPublicEvents, []);
 });
 
 test('stale context is rejected before AI and stale async classification cannot settle credits', async () => {

@@ -62,8 +62,6 @@ export class GameSession {
       attempts: number;
       photoCreditAmount: number;
       controller: AbortController;
-      controls: Map<string, ReturnType<typeof setTimeout>>;
-      controlWaiters: Set<() => void>;
       result?: ActionResult;
     }
   >();
@@ -408,41 +406,10 @@ export class GameSession {
       context.photos = [];
       context.creativity = undefined;
     }
-    for (const record of this.coreActions.values()) this.releaseActionControls(record);
   }
 
   get pendingActionId(): string | null {
     return this.pending;
-  }
-
-  /** Register received speech before asynchronous classification can race the commit. */
-  holdPendingAction(actionId: string, controlId: string): boolean {
-    const record = this.coreActions.get(actionId);
-    if (!record || record.ticket.status !== 'pending' || this.pending !== actionId) return false;
-    if (record.controls.has(controlId)) return true;
-    if (!controlId || controlId.length > 200 || record.controls.size >= 100) {
-      this.cancelPendingAction(actionId);
-      return false;
-    }
-    const timeout = setTimeout(() => this.cancelPendingAction(actionId), 5_000);
-    timeout.unref();
-    record.controls.set(controlId, timeout);
-    return true;
-  }
-
-  resolvePendingActionControl(
-    actionId: string,
-    controlId: string,
-    decision: 'keep' | 'cancel',
-  ): boolean {
-    const record = this.coreActions.get(actionId);
-    if (!record || record.ticket.status !== 'pending' || !record.controls.has(controlId))
-      return false;
-    if (decision === 'cancel') return this.cancelPendingAction(actionId);
-    clearTimeout(record.controls.get(controlId)!);
-    record.controls.delete(controlId);
-    if (!record.controls.size) this.releaseActionControls(record);
-    return true;
   }
 
   /** Cancellation is final for this ticket; a replacement must reserve a new one. */
@@ -453,21 +420,10 @@ export class GameSession {
     record.controller.abort();
     this.actionEpoch++;
     record.context.photos = [];
-    this.releaseActionControls(record);
     this.pending = null;
     if (!this.terminal) this.status = 'playing';
     this.clock.resume('judgment');
     return true;
-  }
-
-  private releaseActionControls(record: {
-    controls: Map<string, ReturnType<typeof setTimeout>>;
-    controlWaiters: Set<() => void>;
-  }) {
-    for (const timer of record.controls.values()) clearTimeout(timer);
-    record.controls.clear();
-    for (const resolve of record.controlWaiters) resolve();
-    record.controlWaiters.clear();
   }
 
   private recordCommittedAction(
@@ -636,8 +592,6 @@ export class GameSession {
             ? retained!.photoCreditAmount
             : 0,
       controller: new AbortController(),
-      controls: new Map(),
-      controlWaiters: new Set(),
     });
     intent.evidenceSeq.forEach((seq) => this.reservedEvidence.add(seq));
     this.discardRetainedRequest();
@@ -677,8 +631,6 @@ export class GameSession {
       let judgment: CoreJudgment;
       let repairCode: string | undefined;
       for (;;) {
-        while (record.controls.size && ticket.status === 'pending')
-          await new Promise<void>((resolve) => record.controlWaiters.add(resolve));
         this.assertPendingAction(ticket);
         record.attempts++;
         try {
@@ -715,9 +667,6 @@ export class GameSession {
           repairCode = aiFailureCode(error);
         }
       }
-      while (record.controls.size && ticket.status === 'pending') {
-        await new Promise<void>((resolve) => record.controlWaiters.add(resolve));
-      }
       return this.commitActionResult(ticket, judgment);
     } catch (error) {
       if (record.ticket.status === 'invalid') throw new GameError(410, 'ACTION_INVALID');
@@ -733,7 +682,6 @@ export class GameSession {
       throw new GameError(502, 'ACTION_FAILED', aiFailureCode(error));
     } finally {
       context.photos = [];
-      this.releaseActionControls(record);
       if (this.pending === ticket.id) {
         this.pending = null;
         if (!this.terminal) this.status = 'playing';
@@ -759,7 +707,6 @@ export class GameSession {
   private commitActionResult(ticket: ActionTicket, judgment: CoreJudgment): ActionResult {
     this.assertPendingAction(ticket);
     const record = this.coreActions.get(ticket.id)!;
-    if (record.controls.size) throw new GameError(409, 'ACTION_CONTROL_PENDING');
     const { context, proposal } = record;
     // Validate the hypothetical candidate before drawing or changing any state.
     // Failed/stale/cancelled requests never consume a draw.

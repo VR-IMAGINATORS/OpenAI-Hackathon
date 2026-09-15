@@ -121,26 +121,6 @@ export const executeIntentSchema = z
     if (new Set(intent.evidenceSeq).size !== intent.evidenceSeq.length)
       ctx.addIssue({ code: 'custom', message: 'Duplicate evidence' });
   });
-export const riskProposalSchema = z
-  .object({
-    usage: z.string().min(1).max(1000),
-    itemRefs: executeIntentSchema.shape.itemRefs,
-    mode: executeIntentSchema.shape.mode,
-    environmentTargetIds: executeIntentSchema.shape.environmentTargetIds,
-    message: z.string().min(1).max(2000),
-  })
-  .strict()
-  .superRefine((proposal, ctx) => {
-    const mode = proposal.mode ?? 'tool';
-    const targets = proposal.environmentTargetIds ?? [];
-    if (
-      (mode === 'tool' && (!proposal.itemRefs.length || targets.length)) ||
-      (mode === 'environment' &&
-        (proposal.itemRefs.length || !targets.length || new Set(targets).size !== targets.length))
-    )
-      ctx.addIssue({ code: 'custom', message: 'Invalid risk action references' });
-  });
-export type RiskProposal = z.infer<typeof riskProposalSchema>;
 export const recognitionCorrectionSchema = z
   .object({ photoId: uuid, name: z.string().trim().min(1).max(120) })
   .strict();
@@ -156,7 +136,6 @@ export const intentDecisionSchema = z.discriminatedUnion('kind', [
       reason,
       // Public briefing for Live, not a spoken script. Empty only for social conversation.
       answer: z.string().max(2000).optional(),
-      riskProposal: riskProposalSchema.nullable().optional(),
       recognitionCorrection: recognitionCorrectionSchema.nullable().optional(),
       responseKind: z.enum(['answer', 'correction', 'social']).optional(),
     })

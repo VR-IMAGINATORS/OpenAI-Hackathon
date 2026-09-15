@@ -397,7 +397,7 @@ test('cancellation and stale controller prevent both a draw and a committed resu
   }
 });
 
-test('photo routing shares the stretch boundary while preserving wait, risk and committed outcomes', async () => {
+test('photo routing preserves explicit wait and sends concrete risks to judgment', async () => {
   let instructions = '';
   await classifyPhoto(
     {
@@ -418,8 +418,11 @@ test('photo routing shares the stretch boundary while preserving wait, risk and 
     true,
   );
   assert.match(instructions, /do not reject a concrete stretch/);
-  assert.match(instructions, /Respect wait\/cancel/);
-  assert.match(instructions, /material unapproved irreversible risks/);
+  assert.match(instructions, /Respect an explicit wait or cancel/);
+  assert.match(instructions, /Do not add a permission step/);
+  assert.match(instructions, /じゃあハサミで/);
+  assert.match(instructions, /is not by itself wait or cancel/);
+  assert.doesNotMatch(instructions, /confirm_risk|requiring consent/);
   assert.match(instructions, /Only a committed result establishes success/);
   assert.equal(
     creativeAssessmentSchema.safeParse({ ...stretch, effect: privateText }).success,

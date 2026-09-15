@@ -54,7 +54,14 @@ async function setup(
   recognizeResponse?: (input: any) => unknown,
 ) {
   let now = 1000;
-  const calls = { classify: 0, judge: 0, recognize: 0, photo: 0, control: 0, reply: 0 };
+  const calls = {
+    classify: 0,
+    judge: 0,
+    recognize: 0,
+    photo: 0,
+    reply: 0,
+    schemas: [] as string[],
+  };
   const config = loadAiConfig({ AI_MODE: 'mock' });
   const ai = new AiService(
     config,
@@ -72,6 +79,7 @@ async function setup(
         const parts = (body as any).input[0].content;
         const context = JSON.parse(parts.find((part: any) => part.type === 'input_text').text);
         const schemaName = (body as any).text.format.name;
+        calls.schemas.push(schemaName);
         if (schemaName === 'harness_photo') {
           calls.photo++;
           return response(
@@ -85,17 +93,6 @@ async function setup(
                   reason: 'Mock photo has ambiguous intended use',
                 },
           );
-        }
-        if (schemaName === 'harness_control') {
-          calls.control++;
-          return response({
-            decision: /切る場所を変えて/.test(context.userSpeech)
-              ? 'replace'
-              : /待って|止めて/.test(context.userSpeech)
-                ? 'cancel'
-                : 'keep',
-            replacement: /切る場所を変えて/.test(context.userSpeech) ? context.userSpeech : '',
-          });
         }
         if (schemaName === 'companion_reply') {
           calls.reply++;
@@ -1273,47 +1270,16 @@ test('obvious photo starts one action without a usage question or fabricated del
   assert.ok(spoken.every((c) => !c.content.includes('これをどう使う')));
 });
 
-for (const decision of ['confirm_risk', 'reject'] as const) {
-  test(`photo ${decision} reports its reason without executing or refunding the send`, async (t) => {
-    const h = await setup(t, execute, undefined, false, undefined, (input) => ({
-      ...obviousPhoto(input),
-      decision,
-      message:
-        decision === 'reject'
-          ? 'こちらでは道具にできそうにない。'
-          : '刃が折れるかもしれない。それでも試す？',
-    }));
-    await h.runtime.photos(randomUUID(), [h.photo]);
-    await until(() => h.calls.photo === 1);
-    await tick();
-    assert.equal(h.calls.judge, 0);
-    assert.equal(h.runtime.state().actionsUsed, 0);
-    assert.equal(h.runtime.state().creditsRemaining, 900);
-    assert.ok(
-      h.runtime
-        .pollCommands(h.generation, 0)
-        .commands.some((c) =>
-          c.content.includes(decision === 'reject' ? '道具にできそうにない' : '刃が折れる'),
-        ),
-    );
-    if (decision === 'reject') {
-      await h.say('それで切って');
-      await h.delegate();
-      await until(() => h.calls.classify === 1);
-      await tick();
-      assert.equal(h.calls.judge, 0);
-    }
-  });
-}
-
-test('speech cancels an automatic photo action before result and image commit', async (t) => {
+test('split explicit stop cancels an automatic photo action without a control model call', async (t) => {
   const gate = deferred<void>();
   const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto);
   t.after(() => gate.resolve());
   await h.runtime.photos(randomUUID(), [h.photo]);
   await until(() => h.calls.judge === 1);
-  await h.say('待って、止めて');
-  await until(() => h.calls.control === 1 && h.runtime.game.pendingActionId === null);
+  await h.say('ちょっと');
+  assert.ok(h.runtime.game.pendingActionId);
+  await h.say('待って');
+  await until(() => h.runtime.game.pendingActionId === null);
   gate.resolve();
   await tick();
   await tick();
@@ -1321,9 +1287,47 @@ test('speech cancels an automatic photo action before result and image commit', 
   assert.equal(h.runtime.game.gameVersion, 0);
   assert.equal(h.scenes.length, 1);
   assert.equal(h.runtime.state().creditsRemaining, 900);
+  assert.equal(h.calls.schemas.includes('harness_control'), false);
+  assert.ok(
+    h.runtime
+      .pollCommands(h.generation, 0)
+      .commands.some((command) => command.content.includes('止める')),
+  );
 });
 
-test('same spoken instruction during automatic action remains one operation', async (t) => {
+for (const phrase of ['ちょっと待って。', 'もうやめて！', '一旦止めて。']) {
+  test(`a common explicit stop phrase cancels in one subtitle: ${phrase}`, async (t) => {
+    const gate = deferred<void>();
+    const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto);
+    t.after(() => gate.resolve());
+    await h.runtime.photos(randomUUID(), [h.photo]);
+    await until(() => h.calls.judge === 1);
+    await h.say(phrase);
+    await until(() => h.runtime.game.pendingActionId === null);
+    gate.resolve();
+    await tick();
+    assert.equal(h.runtime.game.actionsUsed, 0);
+    assert.equal(h.calls.judge, 1);
+  });
+}
+
+test('an explicit English stop cancels the current action once', async (t) => {
+  const gate = deferred<void>();
+  const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto, undefined, 'en');
+  t.after(() => gate.resolve());
+  await h.runtime.photos(randomUUID(), [h.photo]);
+  await until(() => h.calls.judge === 1);
+  await h.say('please stop!');
+  await until(() => h.runtime.game.pendingActionId === null);
+  await h.say('stop');
+  gate.resolve();
+  await tick();
+  assert.equal(h.runtime.game.actionsUsed, 0);
+  assert.equal(h.calls.judge, 1);
+  assert.equal(h.calls.schemas.includes('harness_control'), false);
+});
+
+test('repeated and corrected instructions do not interrupt an automatic action', async (t) => {
   const gate = deferred<void>();
   const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto);
   t.after(() => gate.resolve());
@@ -1331,136 +1335,40 @@ test('same spoken instruction during automatic action remains one operation', as
   await until(() => h.calls.judge === 1);
   await h.say('ハサミでロープを切って');
   await h.delegate();
-  await until(() => h.calls.control === 1);
+  await h.say('じゃあハサミで');
+  await h.delegate();
+  await h.say('いや、ドライバーで外そう');
+  await h.delegate();
+  await h.say('止めないで、続けて');
+  await h.delegate();
+  assert.ok(h.runtime.game.pendingActionId);
   gate.resolve();
   await until(() => h.runtime.state().actionsUsed === 1 && h.scenes.length === 2);
   await h.delegate();
   await tick();
   assert.equal(h.calls.judge, 1);
+  assert.equal(h.calls.schemas.includes('harness_control'), false);
   assert.equal(h.runtime.game.gameVersion, 1);
 });
 
-test('cooperative judgment abort releases normal lane for actual corrected speech delegation', async (t) => {
-  const contexts: any[] = [];
-  const usages: string[] = [];
-  let firstAborted = false;
+test('a correction during judgment does not abort or replace the reserved action', async (t) => {
+  const gate = deferred<void>();
   const correction = '切る場所を変えて。手首から離れたロープの端を切って';
-  const h = await setup(
-    t,
-    (context) => {
-      contexts.push(context);
-      return { ...execute(context), usage: correction };
-    },
-    undefined,
-    false,
-    undefined,
-    obviousPhoto,
-    async (context, signal) => {
-      usages.push(context.proposal.usage);
-      if (usages.length === 1) {
-        assert.ok(signal, 'runtime must forward GameSession cancellation signal');
-        return new Promise((_, reject) => {
-          signal!.addEventListener(
-            'abort',
-            () => {
-              firstAborted = true;
-              reject(new Error('cooperative abort'));
-            },
-            { once: true },
-          );
-        });
-      }
-      assert.equal(firstAborted, true);
-      return {
-        success: false,
-        narrative: 'PRIVATE_RESULT',
-        situation: 'PRIVATE_RESULT',
-        shortReason: 'test',
-        inventoryChanges: [],
-        factChanges: [],
-      };
-    },
-  );
+  const h = await setup(t, execute, undefined, false, gate.promise, obviousPhoto);
+  t.after(() => gate.resolve());
   await h.runtime.photos(randomUUID(), [h.photo]);
   await until(() => h.calls.judge === 1);
   await h.say(correction);
-  await until(() => firstAborted && h.runtime.game.pendingActionId === null);
-  assert.equal(h.runtime.game.gameVersion, 0);
-  assert.equal(h.scenes.length, 1);
-  // Live now delegates the real user's correction; no synthetic delegation is inserted.
-  const delegationId = randomUUID();
-  await h.delegate(delegationId);
+  await h.delegate();
+  assert.ok(h.runtime.game.pendingActionId);
+  gate.resolve();
   await until(() => h.runtime.game.gameVersion === 1 && h.scenes.length === 2);
-  assert.equal(h.calls.judge, 2);
+  assert.equal(h.calls.judge, 1);
+  assert.equal(h.calls.schemas.includes('harness_control'), false);
   assert.equal(h.runtime.game.actionsUsed, 1);
   assert.equal(h.runtime.game.committedActions.length, 1);
-  assert.equal(h.runtime.game.committedActions[0]!.usage, correction);
-  const captured = contexts.at(-1)!;
-  const evidence = new Set(captured.conversation.eligibleEvidenceSeq);
-  assert.ok(
-    captured.conversation.fragments.some(
-      (fragment: any) =>
-        evidence.has(fragment.serverSeq) &&
-        fragment.speaker === 'user' &&
-        fragment.delta === correction,
-    ),
-  );
-  const resultCommands = h.runtime
-    .pollCommands(h.generation, 0)
-    .commands.filter(
-      (command) =>
-        command.messageId === h.scenes[1].messageId && command.type === 'session.commentary.append',
-    );
-  assert.equal(resultCommands.length, 1);
-  assert.equal(resultCommands[0]!.delegation_id, delegationId);
+  assert.equal(h.runtime.game.committedActions[0]!.usage, 'ハサミでロープを切って');
   assert.equal(h.runtime.game.credits.remaining, 900);
-});
-
-test('rejected photo stays rejected under pressure but new physical information permits reassessment without another send', async (t) => {
-  const inputs: any[] = [];
-  const rejection = '高温のままではこちらで扱えそうにない。';
-  const newInformation = '中身は常温の水です';
-  const h = await setup(t, execute, undefined, false, undefined, (input) => {
-    inputs.push(input);
-    if (inputs.length > 1) {
-      assert.equal(input.priorDecision.decision, 'reject');
-      assert.equal(input.priorDecision.message, rejection);
-      assert.equal(typeof input.userSpeech, 'string');
-      assert.ok(input.publicState.situation);
-    }
-    return input.userSpeech?.includes(newInformation)
-      ? obviousPhoto(input)
-      : {
-          ...obviousPhoto(input),
-          decision: 'reject',
-          message: rejection,
-          reason: '既知の物性のままでは扱えない',
-        };
-  });
-  await h.runtime.photos(randomUUID(), [h.photo]);
-  await until(() => h.calls.photo === 1);
-  await tick();
-  const rejects = () =>
-    liveBriefings(h.runtime.pollCommands(h.generation, 0).commands).filter(
-      (command) => JSON.parse(command.facts).facts === rejection,
-    ).length;
-  assert.equal(rejects(), 1);
-
-  await h.say('いいからそのまま切って');
-  await h.delegate();
-  await until(() => h.calls.photo === 2 && rejects() === 2);
-  assert.equal(h.runtime.game.actionsUsed, 0);
-  assert.equal(h.calls.judge, 0);
-  assert.match(inputs[1].userSpeech, /いいからそのまま切って/);
-
-  await h.say(newInformation + '。赤く見えるだけで熱くないので、それを使って');
-  await h.delegate();
-  await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
-  assert.equal(inputs.length, 3);
-  assert.match(inputs[2].userSpeech, /中身は常温の水です/);
-  assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.game.credits.remaining, 860);
-  assert.equal(h.calls.recognize, 1);
 });
 
 for (const origin of ['photo', 'voice'] as const) {
