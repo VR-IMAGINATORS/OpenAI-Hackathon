@@ -116,7 +116,7 @@ test('one ending permit bounds extraction/story/start/end/inspection independent
     await f.call('frame', frameBody, frame);
     await assert.rejects(f.call('frame', frameBody, frame), { code: 'REQUEST_LIMIT' });
   }
-  for (let i = 0; i < 4; i++) await f.call('inspection', responseBody('gpt-5.6-luna'));
+  for (let i = 0; i < 8; i++) await f.call('inspection', responseBody('gpt-5.6-luna'));
   await assert.rejects(f.call('inspection', responseBody('gpt-5.6-luna')), {
     code: 'REQUEST_LIMIT',
   });
@@ -126,12 +126,12 @@ test('one ending permit bounds extraction/story/start/end/inspection independent
     direction: 1,
     start: 2,
     end: 2,
-    inspection: 4,
+    inspection: 8,
   });
   assert.equal(f.ai.snapshot().responseAttempts, 9);
   assert.equal(f.ai.snapshot().imageAttempts, 4);
-  assert.equal(f.ai.snapshot().inspectionAttempts, 4);
-  assert.equal(f.seen.responses.length, 13);
+  assert.equal(f.ai.snapshot().inspectionAttempts, 8);
+  assert.equal(f.seen.responses.length, 17);
   assert.equal(f.seen.edits.length, 4);
   assert.equal(f.seen.images.length, 0);
 });

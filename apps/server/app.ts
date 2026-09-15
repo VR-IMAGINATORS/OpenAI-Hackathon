@@ -101,6 +101,8 @@ export function createHostedApp(
     now,
     onFailure: (playId, stage, errorCode) =>
       log({ event: 'scene_failed', correlationId: playId, stage, errorCode }),
+    onRecovery: (playId, stage, errorCode) =>
+      log({ event: 'scene_recovery', correlationId: playId, stage, errorCode }),
   });
   let endingJobs: EndingJobs;
   const results = new ResultStore({

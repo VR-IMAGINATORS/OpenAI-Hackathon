@@ -186,9 +186,10 @@ export function responseObject<T>(value: unknown, schema: z.ZodType<T>): T {
     })
     .passthrough()
     .parse(value);
-  if (response.status === 'incomplete') throw new Error('ENDING_RESPONSE_INCOMPLETE');
   if (response.output.flatMap((o) => o.content ?? []).some((c) => c.type === 'refusal'))
     throw new Error('ENDING_RESPONSE_REFUSED');
+  if (response.status !== undefined && response.status !== 'completed')
+    throw new Error('ENDING_RESPONSE_INCOMPLETE');
   const texts = response.output
     .flatMap((o) => o.content ?? [])
     .filter((c) => c.type === 'output_text');

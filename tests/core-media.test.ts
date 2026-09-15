@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import sharp from 'sharp';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
-import { createOpenAITransport, type OpenAITransport } from '../packages/server/openai.js';
+import { createOpenAITransport, UpstreamError, type OpenAITransport } from '../packages/server/openai.js';
 import { normalizeGeneratedImage, type SceneInput } from '../packages/server/image-service.js';
 import { SceneJobs } from '../apps/server/scene-jobs.js';
 import { parseScenarioV2 } from '../packages/shared/scenario.js';
@@ -231,8 +231,8 @@ test('unknown, refusal and undeclared inspection rule never publish', async () =
     jobs.enqueue(input(), { ready: () => ready++, failed: () => failed++ });
     await until(() => failed === 1);
     assert.equal(ready, 0);
-    assert.equal(ai.snapshot().imageAttempts, 2);
-    assert.equal(ai.snapshot().inspectionAttempts, 2);
+    assert.equal(ai.snapshot().imageAttempts, result === null ? 1 : 2);
+    assert.equal(ai.snapshot().inspectionAttempts, result === null ? 1 : 4);
     jobs.cancelAll();
   }
 });
@@ -420,7 +420,7 @@ test('inspection global ceiling is independent and schema errors stay private', 
   jobs.enqueue(input(), { ready: () => ready++, failed: () => failed++ });
   await until(() => failed === 1);
   assert.equal(ready, 0);
-  assert.equal(ai.snapshot().imageAttempts, 2);
+  assert.equal(ai.snapshot().imageAttempts, 1);
   assert.equal(ai.snapshot().inspectionAttempts, 1);
   assert.equal(ai.snapshot().responseAttempts, 0);
   jobs.cancelAll();
@@ -465,4 +465,52 @@ test('scene failures retain a safe cause and cancellation remains distinct from 
   });
   jobs.cancelAll();
   assert.equal(cancelled, 'cancelled');
+});
+
+test('scene inspection outage rechecks the same image, including after the last generation attempt', async () => {
+  let generates = 0, inspections = 0, ready = false;
+  const inspectedImages: string[] = [];
+  const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), fake({
+    createImage: async () => {
+      if (++generates === 1) throw new UpstreamError(502, 503);
+      return generated;
+    },
+    createResponse: async (body) => {
+      inspectedImages.push((body as any).input[0].content[1].image_url);
+      if (++inspections === 1) throw new UpstreamError(502, 503);
+      return { output: [{ content: [{ type: 'output_text', text: '{"verdict":"pass","contradictions":[]}' }] }] };
+    },
+  }));
+  ai.register('one', performance.now() + 100000);
+  const jobs = new SceneJobs(ai, { retryDelayMs: 1 });
+  jobs.enqueue(input(), { ready: () => { ready = true; }, failed: () => assert.fail('image should recover') });
+  await until(() => ready);
+  assert.equal(generates, 2);
+  assert.equal(inspections, 2);
+  assert.equal(inspectedImages[0], inspectedImages[1]);
+  assert.equal(ai.snapshot().imageAttempts, 2);
+  jobs.cancelAll();
+});
+
+test('scene auth failures stop immediately, and incomplete pass responses cannot publish an image', async () => {
+  for (const failure of ['auth', 'incomplete']) {
+    let failed = false, ready = false;
+    const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), fake({
+      createImage: async () => {
+        if (failure === 'auth') throw new UpstreamError(502, 401);
+        return generated;
+      },
+      createResponse: async () => ({ status: 'incomplete', output: [{ content: [
+        { type: 'output_text', text: '{"verdict":"pass","contradictions":[]}' },
+      ] }] }),
+    }));
+    ai.register('one', performance.now() + 100000);
+    const jobs = new SceneJobs(ai, { retryDelayMs: 1 });
+    jobs.enqueue(input(), { ready: () => { ready = true; }, failed: () => { failed = true; } });
+    await until(() => failed);
+    assert.equal(ready, false);
+    assert.equal(ai.snapshot().imageAttempts, failure === 'auth' ? 1 : 2);
+    assert.equal(ai.snapshot().inspectionAttempts, failure === 'auth' ? 0 : 4);
+    jobs.cancelAll();
+  }
 });

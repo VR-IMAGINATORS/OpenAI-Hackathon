@@ -3,9 +3,11 @@ import sharp from 'sharp';
 import type { AiService } from './ai-service.js';
 import { normalizeGeneratedImage } from './image-service.js';
 import { endingVisualState } from './ending-visual-state.js';
+import { recoverableAiError } from './ai-recovery.js';
 import type { EndingPacket } from '../../apps/local-server/ending.js';
 import {
   endingCall,
+  abortableDelay,
   endingTitle,
   responseBody,
   responseObject,
@@ -60,7 +62,17 @@ export async function createEndingFrames(
   before: EndingReference | undefined,
   signal: AbortSignal,
   onStage?: (stage: 'start_frame' | 'start_inspection' | 'end_frame' | 'end_inspection') => void,
+  options: { retryDelayMs?: number; onRecovery?: (error: unknown) => void } = {},
 ) {
+  const recover = async (error: unknown) => {
+    signal.throwIfAborted();
+    try {
+      options.onRecovery?.(error);
+    } catch {
+      /* Logging cannot prevent recovery. */
+    }
+    await abortableDelay(options.retryDelayMs ?? 250, signal);
+  };
   const title = endingTitle(packet);
   const firstAction = packet.actions.find((a) => a.actionId === design.usedActionIds[0]);
   const startFacts =
@@ -110,6 +122,7 @@ export async function createEndingFrames(
     const stateRules = endingFrameStateRules(design.mode, !!beforeAction);
     const updateEarlierReference = source.gameVersion < targetGameVersion;
     for (let attempt = 0; attempt < 2; attempt++) {
+      signal.throwIfAborted();
       const prompt =
         'Render the supplied scene direction, subject to the following confirmed-state constraints. ' +
         'Maintain the reference character, tools, physical constraints and room. Confirmed facts take priority over visual embellishment. ' +
@@ -136,54 +149,83 @@ export async function createEndingFrames(
         : slot === 'start' || design.mode === 'aftermath'
           ? [source.jpeg]
           : [final.jpeg, start!];
-      // A transport failure is ambiguous: only a completed explicit inspection rejection can retry.
       onStage?.(slot === 'start' ? 'start_frame' : 'end_frame');
-      const normalized = await normalizeGeneratedImage(
-        await endingCall(
-          ai,
-          jobId,
-          'frame',
-          {
-            model: ai.config.imageModel,
-            n: 1,
-            size: '1024x1024',
-            quality: 'low',
-            output_format: 'jpeg',
-            prompt,
-            images: refs,
-          },
-          signal,
-          slot,
-        ),
-      );
-      const meta = await sharp(normalized.inspection).metadata();
-      if (meta.width !== 1024 || meta.height !== 1024) throw new Error('ENDING_FRAME_DIMENSIONS');
-      onStage?.(slot === 'start' ? 'start_inspection' : 'end_inspection');
-      const check = responseObject(
-        await endingCall(
-          ai,
-          jobId,
-          'inspection',
-          responseBody(
-            ai.config.inspectionModel,
-            'ending_frame_inspection',
-            inspection,
-            endingFrameInspectionInstructions(design.mode, !!beforeAction),
+      let normalized: Awaited<ReturnType<typeof normalizeGeneratedImage>>;
+      try {
+        normalized = await normalizeGeneratedImage(
+          await endingCall(
+            ai,
+            jobId,
+            'frame',
             {
-              ...context,
-              referenceGameVersion: continuityVersion,
+              model: ai.config.imageModel,
+              n: 1,
+              size: '1024x1024',
+              quality: 'low',
+              output_format: 'jpeg',
+              prompt,
+              images: refs,
             },
-            1000,
-            [normalized.inspection, continuity],
+            signal,
+            slot,
           ),
-          signal,
-        ),
-        inspection,
-      );
+        );
+        const meta = await sharp(normalized.inspection).metadata();
+        if (meta.width !== 1024 || meta.height !== 1024) throw new Error('ENDING_FRAME_DIMENSIONS');
+      } catch (error) {
+        signal.throwIfAborted();
+        if (attempt === 1 || !recoverableAiError(error)) throw error;
+        await recover(error);
+        continue;
+      }
+      onStage?.(slot === 'start' ? 'start_inspection' : 'end_inspection');
+      let check: z.infer<typeof inspection> | undefined;
+      for (let inspectionAttempt = 0; inspectionAttempt < 2; inspectionAttempt++) {
+        try {
+          const checked = responseObject(
+            await endingCall(
+              ai,
+              jobId,
+              'inspection',
+              responseBody(
+                ai.config.inspectionModel,
+                'ending_frame_inspection',
+                inspection,
+                endingFrameInspectionInstructions(design.mode, !!beforeAction),
+                { ...context, referenceGameVersion: continuityVersion },
+                1000,
+                [normalized.inspection, continuity],
+              ),
+              signal,
+            ),
+            inspection,
+          );
+          if (
+            checked.verdict === 'unknown' ||
+            (checked.verdict === 'pass' && checked.problems.length)
+          )
+            throw new Error('ENDING_INSPECTION_UNKNOWN');
+          check = checked;
+          break;
+        } catch (error) {
+          signal.throwIfAborted();
+          if (!recoverableAiError(error) || (inspectionAttempt === 1 && attempt === 1)) throw error;
+          await recover(error);
+          // Keep the generated image for a second inspection. Only after both fail
+          // may the remaining generation attempt make a clearer, fully checked frame.
+          if (inspectionAttempt === 1)
+            feedback = 'The previous image could not be assessed. Make the confirmed physical state and required title clearly visible.';
+        }
+      }
+      if (!check) {
+        rejectedDraft = normalized.inspection;
+        continue;
+      }
       if (check.verdict === 'pass' && check.problems.length === 0) return normalized.inspection;
-      if (check.verdict !== 'reject') throw new Error('ENDING_INSPECTION_UNKNOWN');
+      if (attempt === 1) throw new Error('ENDING_FRAME_REJECTED');
       feedback = JSON.stringify(check.problems);
       rejectedDraft = normalized.inspection;
+      await recover(new Error('ENDING_FRAME_REJECTED'));
     }
     throw new Error('ENDING_FRAME_REJECTED');
   };

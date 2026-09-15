@@ -359,6 +359,7 @@ for (const variant of [
       {
         now: () => 0,
         graceMs: 0,
+        referenceWaitMs: 50,
         onFailure: (_id, _stage, code, context) => failures.push({ code, context }),
         fal: {
           async submit() {

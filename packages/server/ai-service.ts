@@ -210,8 +210,9 @@ export class AiService {
       )
         throw new AiServiceError(400, 'INVALID_REQUEST', 'Invalid ending response request');
       if (inspection) {
+        // Two frames, two generation attempts each, two inspections per generated image.
         if (
-          attempts.inspection >= 4 ||
+          attempts.inspection >= 8 ||
           this.inspectionAttempts >= this.config.globalInspectionAttempts
         )
           this.limit();
@@ -362,7 +363,7 @@ export class AiService {
       )
         throw new AiServiceError(400, 'INVALID_REQUEST', 'Invalid inspection request');
       if (
-        permit.inspectionAttempts >= 2 ||
+        permit.inspectionAttempts >= 4 ||
         this.inspectionAttempts >= this.config.globalInspectionAttempts
       )
         this.limit();
@@ -402,6 +403,13 @@ export class AiService {
       )
         throw new AiServiceError(410, 'MEDIA_EXPIRED', 'Image request expired');
       return value;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        if (!permit.cancelled && permit.cancellationEpoch === epoch && this.now() < permit.expiresAt)
+          throw new AiServiceError(504, 'MEDIA_CALL_TIMEOUT', 'Image call timed out');
+        throw new AiServiceError(410, 'MEDIA_EXPIRED', 'Image request expired');
+      }
+      throw error;
     } finally {
       clearTimeout(timer);
       permit.controllers.delete(controller);

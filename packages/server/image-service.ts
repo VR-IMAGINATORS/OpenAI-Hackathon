@@ -191,6 +191,7 @@ export async function inspectScene(
   const response = await ai.mediaCall(jobId, epoch, 'inspection', body, 15000);
   const parsed = z
     .object({
+      status: z.string().optional(),
       output: z.array(
         z
           .object({
@@ -203,6 +204,10 @@ export async function inspectScene(
     })
     .passthrough()
     .parse(response);
+  if (parsed.output.flatMap((o) => o.content ?? []).some((c) => c.type === 'refusal'))
+    throw new Error('INSPECTION_REFUSED');
+  if (parsed.status !== undefined && parsed.status !== 'completed')
+    throw new Error('INSPECTION_UNKNOWN');
   const texts = parsed.output
     .flatMap((o) => o.content ?? [])
     .filter((c) => c.type === 'output_text');

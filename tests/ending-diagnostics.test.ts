@@ -220,7 +220,14 @@ for (const variant of [
   { name: 'cancelled final scene at time limit', ready: [0, 1], finalStatus: 'cancelled' },
   { name: 'only opening image at time limit', ready: [0], finalStatus: 'queued' },
   { name: 'images completing after cutoff', ready: [0], finalStatus: 'queued', late: true },
-  { name: 'no completed scene at time limit', ready: [], finalStatus: 'queued', late: true },
+  { name: 'no completed scene at time limit recovers a late image', ready: [], finalStatus: 'queued', late: true },
+  { name: 'no completed image before the bounded wait expires', ready: [], finalStatus: 'queued' },
+  {
+    name: 'direction timeout after text',
+    ready: [0, 1, 2],
+    finalStatus: 'ready',
+    directionFailure: 'timeout',
+  },
   {
     name: 'direction API fails after text',
     ready: [0, 1, 2],
@@ -242,8 +249,8 @@ for (const variant of [
 ] as const)
   test('default ending producer: ' + variant.name, async (t) => {
     const readyVersions: readonly number[] = variant.ready;
-    const latestVersion = readyVersions.at(-1);
-    const hasLastActionReference = readyVersions.includes(1);
+    const latestVersion = readyVersions.at(-1) ?? ('late' in variant ? 2 : undefined);
+    const hasLastActionReference = readyVersions.includes(1) && !('directionFailure' in variant);
     const config = loadAiConfig({ AI_MODE: 'mock' });
     config.mode = 'live';
     const source = await sharp({
@@ -254,6 +261,7 @@ for (const variant of [
     const edits: ImageEditRequest[] = [];
     let inspectedStart: Buffer | undefined;
     const failures: string[] = [];
+    const recoveries: string[] = [];
     let submits = 0;
     const design: EndingDesign & Omit<EndingNarrative, 'presentedEvidence'> = {
       title: 'The last mark',
@@ -313,6 +321,8 @@ for (const variant of [
             assert.equal(input.outcome, 'normal');
             if (latestVersion! < 2) assert.match(input.references[0].role, /earlier/);
             if ('directionFailure' in variant) {
+              if (variant.directionFailure === 'timeout')
+                throw new AiServiceError(504, 'ENDING_CALL_TIMEOUT', 'timed out');
               if (variant.directionFailure === 'network')
                 throw new Error('simulated connection failure');
               if (variant.directionFailure === 'incomplete')
@@ -441,7 +451,9 @@ for (const variant of [
       {
         now: () => 0,
         graceMs: 20,
+        referenceWaitMs: 100,
         onFailure: (_id, _stage, code) => failures.push(code),
+        onRecovery: (_id, _stage, code) => recoveries.push(code),
         fal: {
           async submit() {
             submits++;
@@ -470,7 +482,7 @@ for (const variant of [
     jobs.enqueue(packet, () => packet);
     results.end(playId, { status: 'lost' });
     if ('late' in variant && variant.late) {
-      // These arrive during transcript grace, before preparation runs. They must stay excluded.
+      // Late images stay excluded if a completed reference existed at the cutoff.
       for (const version of [1, 2])
         results.updateMessage(playId, sceneIds[version], {
           imageSlot: {
@@ -489,14 +501,14 @@ for (const variant of [
       await new Promise((r) => setTimeout(r, 5));
     if ('directionFailure' in variant) {
       const view = results.ending('owner', playId);
-      assert.equal(view.status, 'failed');
+      assert.equal(view.status, 'ready');
       assert.equal(view.storyStatus, 'ready');
       assert.equal(view.story!.tagId, 'bare_hands');
       assert.equal(view.story!.text, design.story);
-      assert.match(view.errorCode!, /^ENDING_DIRECTION_/);
-      assert.equal(submits, 0);
-      assert.equal(edits.length, 0);
-      return;
+      assert.equal(view.errorCode, null);
+      assert.match(recoveries[0], /^ENDING_DIRECTION_/);
+      assert.match(edits[0].prompt, /"mode":"aftermath"/);
+      assert.match(edits[0].prompt, /"targetGameVersion":2/);
     }
     if (latestVersion === undefined) {
       assert.equal(results.ending('owner', playId).status, 'failed');

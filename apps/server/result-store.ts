@@ -351,6 +351,17 @@ export class ResultStore {
     if (!asset || asset.kind !== 'scene') throw new ResultStoreError(404, 'ASSET_NOT_FOUND');
     return { messageId, gameVersion, jpeg: asset.bytes };
   }
+  /** Includes inspection/storage in flight; failed and cancelled scenes cannot satisfy a wait. */
+  hasPendingScene(playId: string, maxGameVersion: number): boolean {
+    const e = this.entry(playId);
+    return [...e.messages.values()].some((message) => {
+      const version = e.sceneVersions.get(message.id);
+      return version !== undefined && version <= maxGameVersion &&
+        !!message.imageSlot &&
+        ['queued', 'generating', 'checking', 'retrying'].includes(message.imageSlot.status);
+    });
+  }
+
   /** Capture completed scenes now; completion order never determines the newest game state. */
   readySceneReferences(playId: string, maxGameVersion: number): EndingReference[] {
     const e = this.entry(playId);

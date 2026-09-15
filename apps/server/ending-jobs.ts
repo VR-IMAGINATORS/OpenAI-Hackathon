@@ -13,6 +13,8 @@ import {
   validateEndingMp4,
 } from '../../packages/server/ending-video-media.js';
 import { createEndingFrames } from '../../packages/server/ending-image-service.js';
+import { canUseAftermathDirection } from '../../packages/server/ai-recovery.js';
+import { aftermathDirection } from '../local-server/ending-fallback.js';
 import {
   abortableDelay,
   createEndingDesign,
@@ -65,6 +67,7 @@ interface Job {
   inputHash?: string;
   stage: EndingStage;
   scene: EndingReference | null;
+  referenceWait?: Promise<EndingReference | null>;
   before: EndingReference[];
   video: boolean;
   storyReady: boolean;
@@ -85,6 +88,7 @@ export interface EndingJobsOptions {
   storyTimeoutMs?: number;
   evidenceTimeoutMs?: number;
   retryDelayMs?: number;
+  referenceWaitMs?: number;
   onRecovery?: (playId: string, stage: EndingStage, errorCode: string) => void;
   prepare?: (
     jobId: string,
@@ -243,7 +247,7 @@ export class EndingJobs {
       return reference ? [reference] : [];
     });
     if (video) this.reserved++;
-    this.jobs.set(packet.playId, {
+    const job: Job = {
       id,
       playId: packet.playId,
       packet,
@@ -259,7 +263,12 @@ export class EndingJobs {
       video,
       storyReady: false,
       phase: 'text',
-    });
+    };
+    this.jobs.set(packet.playId, job);
+    if (video && !job.scene && !this.options.prepare) {
+      // Wait alongside the story, starting at game end; queueing must not restart this window.
+      job.referenceWait = this.waitForReference(job).catch(() => null);
+    }
     // Defer until runtime has emitted its final scene and stored the ended result.
     queueMicrotask(() => this.pump());
   }
@@ -292,6 +301,29 @@ export class EndingJobs {
     this.results.updateEnding(job.playId, { story, storyStatus: 'ready' });
     job.storyReady = true;
   }
+  private async waitForReference(job: Job): Promise<EndingReference | null> {
+    const deadline = new AbortController();
+    const waitMs = this.options.referenceWaitMs ?? 30_000;
+    const duration = Math.max(
+      0,
+      Math.min(job.packet.endedAt + waitMs - this.now(), job.deadline - this.now()),
+    );
+    const timer = setTimeout(() => deadline.abort(), duration);
+    const signal = AbortSignal.any([job.controller.signal, deadline.signal]);
+    try {
+      // The last committed action emits its scene just after the terminal callback.
+      await abortableDelay(1, signal);
+      for (;;) {
+        this.assertCurrent(job);
+        const scene = this.results.readySceneReferences(job.playId, job.packet.gameVersion)[0];
+        if (scene) return scene;
+        if (!this.results.hasPendingScene(job.playId, job.packet.gameVersion)) return null;
+        await abortableDelay(Math.min(100, Math.max(1, duration / 10)), signal);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   private async prepare(job: Job, packet: EndingPacket): Promise<PreparedEnding> {
     const signal = job.controller.signal;
     const narrative = job.narrative;
@@ -303,23 +335,34 @@ export class EndingJobs {
         signal,
         narrative ? publicEndingStory(narrative) : null,
       );
-    const scene = job.scene;
+    job.stage = 'reference';
+    const scene = job.scene ?? (await job.referenceWait);
+    this.assertCurrent(job);
+    if (scene) job.scene = scene;
     if (!scene) {
       job.stage = 'reference';
       throw new Error('ENDING_REFERENCE_MISSING');
     }
     const availableBefore = job.before;
     job.stage = 'direction';
-    const design = await createEndingDesign(
-      this.ai,
-      job.id,
-      packet,
-      scene,
-      availableBefore[0],
-      signal,
-      narrative,
-      availableBefore,
-    );
+    let design;
+    try {
+      design = await createEndingDesign(
+        this.ai,
+        job.id,
+        packet,
+        scene,
+        availableBefore[0],
+        signal,
+        narrative,
+        availableBefore,
+      );
+    } catch (error) {
+      this.assertCurrent(job);
+      if (!canUseAftermathDirection(error)) throw error;
+      this.reportRecovery(job, error);
+      design = aftermathDirection(packet);
+    }
     const selected = packet.actions.find((action) => action.actionId === design.usedActionIds[0]);
     const before = availableBefore.find(
       (reference) => reference.gameVersion === selected?.beforeVersion,
@@ -334,6 +377,10 @@ export class EndingJobs {
       signal,
       (stage) => {
         job.stage = stage;
+      },
+      {
+        retryDelayMs: this.options.retryDelayMs,
+        onRecovery: (error) => this.reportRecovery(job, error),
       },
     );
     return {
@@ -517,6 +564,7 @@ export class EndingJobs {
   }
   private finish(job: Job): void {
     clearTimeout(job.timer);
+    job.controller.abort('ENDING_CANCELLED');
     this.ai.releaseMedia(job.id);
     this.results.releaseVideoReservation(job.playId);
     if (job.video && !job.submitted) this.reserved--;

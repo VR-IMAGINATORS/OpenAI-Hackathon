@@ -604,7 +604,7 @@ function imageResponse(bytes: Buffer) {
   return { data: [{ b64_json: bytes.toString('base64') }] };
 }
 
-test('frames retry only an explicit rejection once per frame and pass the accepted start to the end inspection', async () => {
+test('frames repair explicit rejection once per frame and pass the accepted start to the end inspection', async () => {
   const jpeg = await generatedJpeg();
   const checks = ['reject', 'pass', 'reject', 'pass'];
   const f = fakeAi((call) =>
@@ -687,7 +687,7 @@ test('persistent frame rejection stops after two submissions without generating 
   );
 });
 
-test('unknown inspection, inconsistent pass and network failure never trigger frame regeneration', async () => {
+test('persistent unknown inspection, inconsistent pass and network failure exhaust bounded recovery without publishing', async () => {
   const jpeg = await generatedJpeg();
   for (const failure of ['unknown', 'pass-with-problem', 'inspection-network', 'frame-network']) {
     const f = fakeAi((call) => {
@@ -702,12 +702,12 @@ test('unknown inspection, inconsistent pass and network failure never trigger fr
       });
     });
     await assert.rejects(
-      createEndingFrames(f.ai, 'job', packet(), design(), final, before, signal()),
+      createEndingFrames(f.ai, 'job', packet(), design(), final, before, signal(), undefined, { retryDelayMs: 1 }),
     );
-    assert.equal(f.calls.filter((call) => call.kind === 'frame').length, 1);
+    assert.equal(f.calls.filter((call) => call.kind === 'frame').length, 2);
     assert.equal(
       f.calls.filter((call) => call.kind === 'inspection').length,
-      failure === 'frame-network' ? 0 : 1,
+      failure === 'frame-network' ? 0 : 4,
     );
   }
 });
@@ -721,5 +721,5 @@ test('frame validation rejects undersized square output before inspection or fal
     createEndingFrames(f.ai, 'job', packet(), design(), final, before, signal()),
     /ENDING_FRAME_DIMENSIONS/,
   );
-  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls.length, 2);
 });

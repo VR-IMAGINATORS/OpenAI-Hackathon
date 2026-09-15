@@ -2,6 +2,8 @@
 
 2026-09-15の `ENDING_STORY_INVALID_EVIDENCE` 再発については [原因別の調査・修正・検証結果](../specs/ending-tags/ending-recovery-investigation.md) を参照。更新後の `ending_failed_extraction` は文章の回復開始を示し、最終失敗とは区別する。
 
+途中画像受信失敗・`ENDING_DIRECTION_TIMEOUT`については[画像・動画の回復経路](../specs/ending-video/recovery-investigation.md)を参照。`ending_recovery`は代替演出・画像再試行・動画回収の継続、`scene_recovery`は途中画像の回復を示す。`ending_failed_*`には経過時間と残り時間、`request_failed`には所有者確認済みプレイIDとAPI経路、`scene_failed`には画像の失敗段階を追加した。画像・会話・認証値は記録しない。
+
 解除0個はエラー条件ではない。全試行が失敗しても結末文を生成でき、根拠のある試行にはタグを付けられる。0行動や適合するタグがなければtag=null。画面の「タグ・結末文を作る段階で失敗」は段階の説明であり、解除数が原因だとは判断できない。
 
 ## 今回のプレイで確認する情報
