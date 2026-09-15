@@ -63,13 +63,36 @@ function PrivateImage({
     };
   }, [playId, assetId]);
   return url ? (
-    <a href={url} target="_blank" rel="noreferrer">
-      <img
-        className="chat-image"
-        src={url}
-        alt={locale === 'ja' ? '会話に添付された写真' : 'Photo attached to the conversation'}
-      />
-    </a>
+    <div className="chat-image-attachment">
+      <a href={url} target="_blank" rel="noreferrer">
+        <img
+          className="chat-image"
+          src={url}
+          alt={
+            scene
+              ? locale === 'ja'
+                ? '生成された状況画像'
+                : 'Generated scene image'
+              : locale === 'ja'
+                ? '会話に添付された写真'
+                : 'Photo attached to the conversation'
+          }
+        />
+      </a>
+      {scene && (
+        <a
+          className="chat-image-download"
+          href={url}
+          download={`call-to-the-past-${assetId}.jpg`}
+          aria-label={locale === 'ja' ? '画像をダウンロード' : 'Download image'}
+          title={locale === 'ja' ? '画像をダウンロード' : 'Download image'}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" />
+          </svg>
+        </a>
+      )}
+    </div>
   ) : (
     <p className="chat-media-status">
       {failed

@@ -1383,6 +1383,9 @@ h1 span {
   font-size: 10px;
   color: #acbebd;
 }
+.chat-image-attachment {
+  max-width: 320px;
+}
 .chat-image {
   display: block;
   width: 100%;
@@ -2172,7 +2175,8 @@ h1 span {
   border-radius: 10px;
   box-shadow: 0 0 16px #9eead624;
 }
-.ending-download {
+.ending-download,
+.chat-image-download {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2184,7 +2188,8 @@ h1 span {
   color: #99afb7;
   text-decoration: none;
 }
-.ending-download svg {
+.ending-download svg,
+.chat-image-download svg {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
@@ -2194,12 +2199,14 @@ h1 span {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.ending-download:hover {
-  background: var(--ending-band);
-  color: var(--ending-accent);
+.ending-download:hover,
+.chat-image-download:hover {
+  background: var(--ending-band, #244941);
+  color: var(--ending-accent, #9eead6);
 }
-.ending-download:focus-visible {
-  outline: 2px solid var(--ending-accent);
+.ending-download:focus-visible,
+.chat-image-download:focus-visible {
+  outline: 2px solid var(--ending-accent, #9eead6);
   outline-offset: 3px;
 }
 .ending-ready-notice {

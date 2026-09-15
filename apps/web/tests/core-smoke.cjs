@@ -21,6 +21,7 @@ const scenario = {
       isMobile: true,
       hasTouch: true,
       locale: 'ja-JP',
+      acceptDownloads: true,
     });
     async function enterCall(english = false) {
       const begin = page.getByRole('button', {
@@ -473,11 +474,13 @@ const scenario = {
     );
     await page.locator('.chat-user').getByText('これで扉を開けて', { exact: true }).waitFor();
     await page.getByText('未来から画像を受信中…', { exact: true }).waitFor();
+    assert.equal(await page.locator('.chat-image-download').count(), 0);
     assert.equal(await page.locator('.proposal-panel').count(), 0);
     feedMessages[0].imageSlot.status = 'failed';
     feedMessages[0].imageSlot.errorCode = 'SCENE_RECEIVE_FAILED';
     feedMessages[0].updatedVersion = ++feedVersion;
     await page.getByText('未来から画像の受信に失敗しました', { exact: true }).waitFor();
+    assert.equal(await page.locator('.chat-image-download').count(), 0);
     removed = ['user-1'];
     feedMessages = feedMessages.filter((m) => m.id !== 'user-1');
     feedVersion++;
@@ -570,6 +573,40 @@ const scenario = {
     await page.locator('.chat-image').waitFor();
     assert.equal(assetReads, 1, 'private asset fetched with owner header');
     assert.ok((await page.locator('.chat-image').getAttribute('src')).startsWith('blob:'));
+    const imageDownload = page.getByRole('link', { name: '画像をダウンロード', exact: true });
+    await imageDownload.waitFor();
+    assert.equal(await imageDownload.innerText(), '', 'download has only an icon');
+    assert.equal(await imageDownload.getAttribute('title'), '画像をダウンロード');
+    const downloadBounds = await imageDownload.boundingBox();
+    const imageBounds = await page.locator('.chat-image').boundingBox();
+    const iconBounds = await imageDownload.locator('svg').boundingBox();
+    assert.equal(downloadBounds.width, 44);
+    assert.equal(downloadBounds.height, 44);
+    assert.equal(iconBounds.width, 20);
+    assert.equal(iconBounds.height, 20);
+    assert.ok(
+      Math.abs(downloadBounds.x + downloadBounds.width - imageBounds.x - imageBounds.width) < 1,
+      'download is aligned with the right edge of the image',
+    );
+    assert.ok(
+      downloadBounds.y >= imageBounds.y + imageBounds.height,
+      'download sits below the image',
+    );
+    const readsBeforeDownload = assetReads;
+    const [imageFile] = await Promise.all([page.waitForEvent('download'), imageDownload.click()]);
+    assert.equal(imageFile.suggestedFilename(), 'call-to-the-past-scene-1.jpg');
+    assert.equal(await imageFile.failure(), null);
+    const downloadedChunks = [];
+    for await (const chunk of await imageFile.createReadStream()) downloadedChunks.push(chunk);
+    assert.deepEqual(
+      Buffer.concat(downloadedChunks),
+      assetBytes,
+      'download saves the displayed JPEG',
+    );
+    assert.equal(assetReads, readsBeforeDownload, 'download reuses the loaded image');
+    await page.locator('[data-message-id="message-1"]').screenshot({
+      path: `${artifactDir}/scene-image-download-mobile.png`,
+    });
     feedMessages.push({
       id: 'result-without-voice',
       createdOrder: 3,
@@ -601,6 +638,11 @@ const scenario = {
         liveGeneration: 1,
       });
     await page.locator('[data-message-id="scroll-6"] img').waitFor();
+    assert.equal(
+      await page.locator('[data-message-id="scroll-6"] .chat-image-download').count(),
+      0,
+      'uploaded attachments do not get the generated image action',
+    );
     await page.waitForTimeout(450);
     const bottomGap = () =>
       page.locator('.chat-messages').evaluate((e) => e.scrollHeight - e.scrollTop - e.clientHeight);
@@ -636,6 +678,11 @@ const scenario = {
     assert.ok(
       (await page.locator('.chat-image').count()) >= 1,
       'images remain readable after call end',
+    );
+    assert.equal(
+      await page.locator('.chat-image-download').count(),
+      1,
+      'generated image can still be saved after call end',
     );
     assert.deepEqual(pageErrors, []);
     assert.equal(
@@ -679,6 +726,7 @@ const scenario = {
       'en',
       'locale restored from state',
     );
+    await page.getByRole('link', { name: 'Download image', exact: true }).waitFor();
     assert.deepEqual(pageErrors, []);
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
@@ -862,7 +910,7 @@ const scenario = {
     );
     assert.deepEqual(pageErrors, []);
     console.log(
-      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, bilingual credit balances without rates or charge notices, combined photo affordability, refunds, warning thresholds, last-action settling, unchanged result UI, single animation, restore and reduced motion. Fake API/media only.',
+      'PASS: core automatic action UI, 202 events, ordered poll deduplication, provider payload, mobile layout, compact generated-image JPEG downloads, bilingual credit balances without rates or charge notices, combined photo affordability, refunds, warning thresholds, last-action settling, unchanged result UI, single animation, restore and reduced motion. Fake API/media only.',
     );
   } finally {
     await browser.close();
