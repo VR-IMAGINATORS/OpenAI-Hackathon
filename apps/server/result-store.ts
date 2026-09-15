@@ -9,6 +9,10 @@ import {
   type TranscriptFragment,
 } from '../../packages/shared/conversation.js';
 
+// Includes maximum-length story text with JSON escaping, error codes and paths.
+// Feed/images must not consume the space needed to finish an ending's state.
+const ENDING_VIEW_RESERVE_BYTES = 16 * 1024;
+
 export interface FeedResponse {
   playId: string;
   locale: 'ja' | 'en';
@@ -52,6 +56,7 @@ interface Entry {
   retainUntil: number | null;
   result: unknown;
   ending: EndingView | null;
+  endingReserveBytes: number;
   video: Buffer | null;
   videoReservation: number;
   sceneVersions: Map<string, number>;
@@ -77,10 +82,11 @@ export class ResultStore {
     ownerDigest: string;
     locale: 'ja' | 'en';
     groupingGapMs?: number;
+    reserveEnding?: boolean;
   }): void {
     this.sweep();
     if (this.entries.has(input.playId)) throw new ResultStoreError(409, 'RESULT_EXISTS');
-    this.entries.set(input.playId, {
+    const entry: Entry = {
       ...input,
       gap: input.groupingGapMs ?? 1200,
       version: 0,
@@ -95,10 +101,20 @@ export class ResultStore {
       retainUntil: null,
       result: null,
       ending: null,
+      endingReserveBytes: input.reserveEnding ? ENDING_VIEW_RESERVE_BYTES : 0,
       video: null,
       videoReservation: 0,
       sceneVersions: new Map(),
-    });
+    };
+    this.entries.set(input.playId, entry);
+    if (input.reserveEnding) {
+      try {
+        this.makeRoom(entry, 0);
+      } catch (error) {
+        this.entries.delete(input.playId);
+        throw error;
+      }
+    }
   }
   private entry(id: string): Entry {
     this.sweep();
@@ -393,7 +409,12 @@ export class ResultStore {
   initializeEnding(playId: string, view: EndingView): boolean {
     const e = this.entry(playId);
     if (e.ending) return false;
-    this.makeRoom(e, Buffer.byteLength(JSON.stringify(view)));
+    this.makeRoom(
+      e,
+      Math.max(ENDING_VIEW_RESERVE_BYTES, Buffer.byteLength(JSON.stringify(view))) -
+        this.endingBytes(e),
+    );
+    e.endingReserveBytes = ENDING_VIEW_RESERVE_BYTES;
     e.ending = structuredClone(view);
     return true;
   }
@@ -413,7 +434,8 @@ export class ResultStore {
       e,
       Math.max(
         0,
-        Buffer.byteLength(JSON.stringify(next)) - Buffer.byteLength(JSON.stringify(e.ending)),
+        Math.max(e.endingReserveBytes, Buffer.byteLength(JSON.stringify(next))) -
+          this.endingBytes(e),
       ),
     );
     e.ending = next;
@@ -453,11 +475,14 @@ export class ResultStore {
     return (
       Buffer.byteLength(JSON.stringify([...e.messages.values()])) +
       Buffer.byteLength(JSON.stringify(e.result) ?? '') +
-      Buffer.byteLength(JSON.stringify(e.ending)) +
+      this.endingBytes(e) +
       (e.video?.length ?? 0) +
       e.videoReservation +
       [...e.assets.values()].reduce((n, a) => n + a.bytes.length, 0)
     );
+  }
+  private endingBytes(e: Entry): number {
+    return Math.max(e.endingReserveBytes, Buffer.byteLength(JSON.stringify(e.ending)));
   }
   private makeRoom(e: Entry, extra: number): void {
     if (this.bytes(e) + extra > (this.options.maxEntryBytes ?? 8 * 1024 * 1024))
@@ -472,13 +497,19 @@ export class ResultStore {
   end(playId: string, result: unknown): void {
     const e = this.entry(playId);
     if (e.endedAt !== null) return;
-    const copy = structuredClone(result);
-    this.makeRoom(e, Buffer.byteLength(JSON.stringify(copy) ?? ''));
-    e.result = copy;
-    e.endedAt = this.now();
-    e.retainUntil = e.endedAt + (this.options.ttlMs ?? 300_000);
-    e.version++;
-    while (this.ended().length > (this.options.maxEnded ?? 10)) this.evict(this.ended()[0]!.playId);
+    try {
+      const copy = structuredClone(result);
+      this.makeRoom(e, Buffer.byteLength(JSON.stringify(copy) ?? ''));
+      e.result = copy;
+    } finally {
+      // A failed snapshot still belongs to an ended play. Keep its ending view
+      // available for the normal retention period, and eligible for eviction.
+      e.endedAt = this.now();
+      e.retainUntil = e.endedAt + (this.options.ttlMs ?? 300_000);
+      e.version++;
+      while (this.ended().length > (this.options.maxEnded ?? 10))
+        this.evict(this.ended()[0]!.playId);
+    }
   }
   result(owner: string, playId: string): unknown {
     return structuredClone(this.owned(owner, playId).result);

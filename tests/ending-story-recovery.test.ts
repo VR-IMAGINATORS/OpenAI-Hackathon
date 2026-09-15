@@ -320,3 +320,228 @@ test('a single oversized evidence record cannot prevent writing from the remaini
   assert.equal(result.story, story.story);
   assert.equal(f.calls[0].input.evidenceIncomplete, true);
 });
+
+test('unique long action prose cannot exhaust the writer input after fact compaction', async () => {
+  const p = packet();
+  p.evidence.records = [];
+  p.actions = Array.from({ length: 40 }, (_, i) => ({
+    ...p.actions[0],
+    actionId: `attempt-${i}`,
+    order: i,
+    usage: `試行${i}。` + '引く方法を説明。'.repeat(100),
+    narrative: `結果${i}。` + 'まだ扉は閉じている。'.repeat(150),
+  }));
+  const f = setup((_name, input) => {
+    assert.equal(input.actions.length, 40);
+    assert(input.actionDetailsIncomplete);
+    assert.deepEqual(input.tagCatalog, []);
+    assert.deepEqual(input.facts, p.facts);
+    assert(input.actions.some((a: any) => a.narrative === null));
+    for (const a of input.actions) {
+      const original = p.actions.find((r) => r.actionId === a.actionId)!;
+      assert.equal(a.success, original.success);
+      assert.deepEqual(a.items, original.items);
+      if (a.narrative !== null) assert.equal(a.narrative, original.narrative);
+      if (a.usage !== null) assert.equal(a.usage, original.usage);
+    }
+    return response(story);
+  });
+  const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
+  assert.equal(result.story, story.story);
+  assert.equal(f.calls.length, 1);
+});
+
+test('a bad source and a bad tag in the same response cannot conceal the tag repair requirement', async () => {
+  const p = packet();
+  p.evidence.records = [];
+  const f = setup((_name, input, body) => {
+    if (input.correction) {
+      assert.equal(body.text.format.schema.properties.tag.type, 'null');
+      return response(story);
+    }
+    return response({
+      ...story,
+      usedEvidenceIds: ['missing'],
+      tag: { id: 'learning', evidenceActionIds: ['attempt'], reason: 'not enough actions' },
+    });
+  });
+  const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
+  assert.equal(result.story, story.story);
+  assert.equal(f.calls.length, 2);
+});
+
+test('a malformed outer response body still reaches the single output-repair path', async () => {
+  const p = packet();
+  p.evidence.records = [];
+  let calls = 0;
+  const f = setup(() => {
+    if (++calls === 1) throw new SyntaxError('PRIVATE_BROKEN_RESPONSE_BODY');
+    return response(story);
+  });
+  const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
+  assert.equal(result.story, story.story);
+  assert.equal(calls, 2);
+  assert.doesNotMatch(JSON.stringify(f.calls[1].input), /PRIVATE_BROKEN/);
+});
+
+test('invalid text length cannot conceal an invalid tag that also needs repair', async () => {
+  const p = packet();
+  p.evidence.records = [];
+  const f = setup((_name, input, body) => {
+    if (input.correction) {
+      assert.equal(body.text.format.schema.properties.tag.type, 'null');
+      return response(story);
+    }
+    return response({
+      ...story,
+      story: 'あ'.repeat(241),
+      tag: { id: 'learning', evidenceActionIds: ['attempt'], reason: 'not enough actions' },
+    });
+  });
+  const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
+  assert.equal(result.story, story.story);
+  assert.equal(f.calls.length, 2);
+});
+
+test('explicit refusal with another malformed content block is never repaired', async () => {
+  const p = packet();
+  p.evidence.records = [];
+  const f = setup(() => ({
+    output: [
+      {
+        content: [
+          { type: 'refusal', refusal: 'PRIVATE_REFUSAL' },
+          { type: 'output_text', text: null },
+        ],
+      },
+    ],
+  }));
+  await assert.rejects(
+    createEndingText(f.ai, 'ending-job', p, new AbortController().signal),
+    /ENDING_RESPONSE_REFUSED/,
+  );
+  assert.equal(f.calls.length, 1);
+});
+
+test('the last response budget is used for the story instead of optional extraction', async () => {
+  const f = setup((name) => {
+    assert.equal(name, 'ending_text');
+    return response(story);
+  });
+  f.ai.config.globalResponseAttempts = 1;
+  const result = await createEndingText(f.ai, 'ending-job', packet(), new AbortController().signal);
+  assert.equal(result.story, story.story);
+  assert.equal(result.evidenceIncomplete, true);
+  assert.equal(f.ai.snapshot().responseAttempts, 1);
+});
+
+test('two waiting stories retain their budgets when both would otherwise extract clues', async () => {
+  const f = setup((name) => {
+    assert.equal(name, 'ending_text');
+    return response(story);
+  });
+  f.ai.config.globalResponseAttempts = 2;
+  f.ai.register('second-play', 100_000);
+  f.ai.registerEnding('second-play', 'second-ending', 100_000);
+  const first = packet();
+  const second = { ...packet(), playId: 'second-play' };
+  const generated = await Promise.all([
+    createEndingText(f.ai, 'ending-job', first, new AbortController().signal),
+    createEndingText(f.ai, 'second-ending', second, new AbortController().signal),
+  ]);
+  assert(generated.every((result) => result.story === story.story));
+  assert.equal(f.ai.snapshot().responseAttempts, 2);
+  assert.equal(f.ai.snapshot().responseBusy, 0);
+});
+
+for (const blank of ['   ', '\n\t', '\u3000'])
+  test(`blank display text is repaired instead of published: ${JSON.stringify(blank)}`, async () => {
+    const p = packet();
+    p.evidence.records = [];
+    const f = setup((_name, input) =>
+      response(input.correction ? story : { ...story, story: blank }),
+    );
+    const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
+    assert.equal(result.story, story.story);
+    assert.equal(f.calls.length, 2);
+  });
+
+// Exercise combinations, including short/no-action games that bypass extraction
+// and long transcripts that must pass the real request preflight on every call.
+for (const locale of ['ja', 'en'] as const)
+  for (const ending of ['no-action', 'failed', 'partial', 'escaped'] as const)
+    for (const evidenceSize of ['empty', 'small', 'large'] as const)
+      for (const fault of ['none', 'json', 'incomplete', 'sources-and-tag', 'length'] as const)
+        test(`ending matrix: ${locale}/${ending}/${evidenceSize}/${fault}`, async () => {
+          const p = packet();
+          p.locale = locale;
+          const count = ending === 'no-action' ? 0 : ending === 'failed' ? 1 : 3;
+          p.actions = Array.from({ length: count }, (_, i) => ({
+            ...p.actions[0],
+            actionId: `action-${i}`,
+            order: i + 1,
+            success: ending === 'escaped' || (ending === 'partial' && i < 2),
+            cleared: ending === 'escaped' || (ending === 'partial' && i < 2),
+          }));
+          p.outcome = ending === 'escaped' ? 'happy' : ending === 'partial' ? 'normal' : 'bad';
+          p.endReason = ending === 'escaped' ? 'escaped' : 'time_limit';
+          p.clearedIds = p.actions.filter((a) => a.cleared).map((a) => a.actionId);
+          p.facts.values.door = ending === 'escaped' ? 'open' : 'closed';
+          if (ending === 'escaped') p.remainingObstacles = [];
+          if (evidenceSize !== 'large')
+            p.evidence.records = p.evidence.records.slice(0, evidenceSize === 'empty' ? 0 : 2);
+          const expected = {
+            ...story,
+            story:
+              locale === 'ja'
+                ? ending === 'escaped'
+                  ? '最後の扉を開け、脱出できた。'
+                  : '最後の扉は閉じたまま、通話が終わった。'
+                : ending === 'escaped'
+                  ? 'The final door opened. You escaped.'
+                  : 'The call ended with the last door closed.',
+          };
+          const original = structuredClone(p);
+          let writes = 0;
+          const f = setup((name, input) => {
+            if (name === 'ending_clues')
+              return response({
+                clues: [{ sourceId: input[0].sourceId, quote: input[0].text.slice(0, 10) }],
+              });
+            writes++;
+            assert.equal(input.locale, locale);
+            assert.equal(input.outcome, p.outcome);
+            assert.equal(input.actions.length, count);
+            assert.equal(input.clearedIds.length, p.clearedIds.length);
+            assert.deepEqual(input.facts, p.facts);
+            assert.doesNotMatch(JSON.stringify(input), /UNPRESENTED_SECRET|PRIVATE_REJECTED/);
+            if (writes === 1) {
+              if (fault === 'json')
+                return { output: [{ content: [{ type: 'output_text', text: '{' }] }] };
+              if (fault === 'incomplete') return { status: 'incomplete', output: [] };
+              if (fault === 'length') return response({ ...expected, story: 'あ'.repeat(241) });
+              if (fault === 'sources-and-tag')
+                return response({
+                  ...expected,
+                  usedEvidenceIds: ['PRIVATE_REJECTED_SOURCE'],
+                  tag: {
+                    id: 'learning',
+                    evidenceActionIds: [p.actions.at(-1)?.actionId ?? 'missing'],
+                    reason: 'PRIVATE_REJECTED_REASON',
+                  },
+                });
+            }
+            return response(expected);
+          });
+          const result = await createEndingText(
+            f.ai,
+            'ending-job',
+            p,
+            new AbortController().signal,
+          );
+          assert.equal(result.story, expected.story);
+          assert.equal(result.tag, null);
+          assert.equal(writes, fault === 'none' ? 1 : 2);
+          assert.equal(f.ai.snapshot().responseBusy, 0);
+          assert.deepEqual(p, original);
+        });

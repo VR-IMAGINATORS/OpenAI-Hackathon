@@ -95,4 +95,6 @@ liveでは動画無効時にも文章生成分のAPI利用が追加される。�
 
 ## INVALID_EVIDENCEの再発（2026-09-15）
 
+追加依頼による再検証は [ending-second-pass.md](ending-second-pass.md)。さらに8種類の不具合を修正し、全742件・build・format確認が成功。実API・実機・稼働環境への反映は未実施。
+
 [調査・修正・検証結果](ending-recovery-investigation.md)。修正前の回帰テスト6件が失敗し、修正後の全584件が成功。型・標準JSON・UI・サーバービルドも成功。抽出失敗からの文章回復、時間配分、入力サイズ、タグ再生成、動画連携を模擬APIで検証。実API・実機・稼働環境への反映は未実施。

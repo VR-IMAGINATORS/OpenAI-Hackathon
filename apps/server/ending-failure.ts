@@ -83,6 +83,7 @@ export function endingFailureCode(error: unknown, stage: EndingStage): string {
   if (error instanceof AiServiceError) {
     if (error.code === 'INVALID_REQUEST') return prefix + 'INVALID_REQUEST';
     if (error.code === 'REQUEST_LIMIT') return 'ENDING_AI_BUDGET_EXHAUSTED';
+    if (error.code === 'ENDING_EVIDENCE_BUDGET') return prefix + 'BUDGET_RESERVED';
     if (error.code === 'ENDING_EXPIRED' || error.code === 'ENDING_CALL_TIMEOUT')
       return prefix + 'TIMEOUT';
   }

@@ -161,6 +161,7 @@ export function createHostedApp(
         ownerDigest: auth.digest,
         locale: snapshot.locale,
         groupingGapMs: snapshot.coreConfig.chatGroupingGapMs,
+        reserveEnding: true,
       });
       let openingSceneId: string | undefined;
       try {
