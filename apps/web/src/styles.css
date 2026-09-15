@@ -1199,7 +1199,7 @@ h1 span {
   --difficulty-hover: #522b31;
 }
 .difficulty-card strong {
-  font-size: clamp(13px, 4vw, 16px);
+  font-size: clamp(15px, calc(4vw + 2px), 18px);
   font-weight: 700;
   line-height: 1.25;
   white-space: nowrap;
