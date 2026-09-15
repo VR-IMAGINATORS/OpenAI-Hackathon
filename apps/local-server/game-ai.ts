@@ -116,6 +116,7 @@ export function createGameAI(
   client: AIResponsesClient,
   model: () => string,
   snapshot?: ScenarioSnapshot,
+  options: { photoInput?: 'images' | 'recognized-text' } = {},
 ): GameAI {
   async function request<T>(
     context: AIContext,
@@ -169,10 +170,12 @@ export function createGameAI(
           photos: photos.map((p) => ({ id: p.id })),
         }),
       },
-      ...photos.map((photo) => ({
-        type: 'input_image',
-        image_url: 'data:image/jpeg;base64,' + photo.jpeg.toString('base64'),
-      })),
+      ...(options.photoInput === 'recognized-text'
+        ? []
+        : photos.map((photo) => ({
+            type: 'input_image',
+            image_url: 'data:image/jpeg;base64,' + photo.jpeg.toString('base64'),
+          }))),
     ];
     if ('text' in input[0]! && input[0].text.length > 16000)
       throw new Error('JUDGMENT_CONTEXT_LIMIT');

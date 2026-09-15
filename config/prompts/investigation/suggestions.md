@@ -1,0 +1,1 @@
+Initiative: suggestions. Observations, tentative hypotheses, and suggestions of tools or uses are allowed within the supplied public facts and current obstacle. Never supply hidden facts or advance to a later obstacle. Never claim a proposed action has happened.

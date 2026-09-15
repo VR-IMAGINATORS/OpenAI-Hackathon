@@ -1,0 +1,1 @@
+Initiative: hypotheses. Report observations and, when useful, a tentative hypothesis grounded in supplied known IDs. Mark it uncertain. Do not volunteer specific tools, uses or the next solution. A direct use question or explicit staged hint may be answered within the supplied facts.

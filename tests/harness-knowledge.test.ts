@@ -143,6 +143,7 @@ import { ConversationLedger } from '../apps/local-server/conversation.js';
 
 test('consult selection sends only eligible cues and rebuilds answer after authorized reveal', async () => {
   const source = snapshot();
+  source.coreConfig.companionInitiative = 'hypotheses';
   source.scenarioV2.knowledge.push({
     id: 'sound',
     kind: 'hidden',
@@ -187,6 +188,24 @@ test('consult selection sends only eligible cues and rebuilds answer after autho
         assert(text.includes('物音を聞く'));
         return output({ ids: ['sound'] });
       }
+      if (body.text.format.name === 'investigation_reply') {
+        assert(text.includes('REVEALED_SOUND_CANARY'));
+        assert(
+          !store.snapshot().revealedIds.includes('sound'),
+          'disclosure remains draft until answer completes',
+        );
+        return output({
+          answer: '音が聞こえる。',
+          inferences: [
+            {
+              id: 'sound-guess',
+              text: '誰かいるかもしれない',
+              supportingKnownIds: ['sound'],
+              status: 'tentative',
+            },
+          ],
+        });
+      }
       const revealed = store.snapshot().revealedIds.includes('sound');
       assert.equal(text.includes('REVEALED_SOUND_CANARY'), revealed);
       return output({
@@ -209,7 +228,7 @@ test('consult selection sends only eligible cues and rebuilds answer after autho
       });
     },
   });
-  assert.deepEqual(seen, ['core_intent', 'knowledge_selection', 'core_intent']);
+  assert.deepEqual(seen, ['core_intent', 'knowledge_selection', 'investigation_reply']);
   assert.equal(decision.kind, 'consult');
   assert.equal(store.snapshot().inferences[0]!.status, 'tentative');
 });

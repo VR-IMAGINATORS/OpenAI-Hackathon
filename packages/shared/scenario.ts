@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { storyContextSchema } from './story-schema.js';
-import { scenarioKnowledgeEntrySchema, observationTargetSchema } from './harness.js';
+import {
+  scenarioKnowledgeEntrySchema,
+  observationTargetSchema,
+  investigationProfileSchema,
+} from './harness.js';
 
 const text = z.string().trim().min(1).max(2000);
 const id = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -108,6 +112,7 @@ const visualChangeSchema = z.object({ key: id, from: id, to: id }).strict();
 export const scenarioV2Schema = z
   .object({
     version: z.literal(2),
+    investigation: investigationProfileSchema.optional(),
     knowledge: z.array(scenarioKnowledgeEntrySchema).max(100).default([]),
     observationTargets: z.array(observationTargetSchema).max(100).default([]),
     id,
@@ -214,6 +219,57 @@ export const scenarioV2Schema = z
           issue(['knowledge', i, 'prerequisites', j], 'Unknown knowledge fact condition');
       });
     });
+    const profile = scenario.investigation;
+    if (profile) {
+      const knowledge = new Map(scenario.knowledge.map((entry) => [entry.id, entry]));
+      unique(
+        profile.knowledgeMetadata.map((entry) => entry.knowledgeId),
+        ['investigation', 'knowledgeMetadata'],
+      );
+      unique(
+        profile.ambienceSlots.map((entry) => entry.id),
+        ['investigation', 'ambienceSlots'],
+      );
+      unique(
+        profile.ambienceSlots.map((entry) => entry.targetId + ':' + entry.attribute),
+        ['investigation', 'ambienceSlots'],
+      );
+      unique(
+        profile.publicVisuals.map((entry) => entry.id),
+        ['investigation', 'publicVisuals'],
+      );
+      profile.knowledgeMetadata.forEach((meta, i) => {
+        const entry = knowledge.get(meta.knowledgeId);
+        const path = ['investigation', 'knowledgeMetadata', i];
+        if (!entry) issue(path, 'Unknown knowledge ID');
+        if (
+          !targets.has(meta.targetId) ||
+          (entry?.observationTargetId && entry.observationTargetId !== meta.targetId)
+        )
+          issue(path, 'Unknown or mismatched target');
+        if (
+          meta.layer === 'background' &&
+          entry?.kind !== 'known' &&
+          entry?.revealMode === 'automatic'
+        )
+          issue(path, 'Noninitial background cannot reveal automatically');
+        if (meta.layer === 'hint' && entry?.revealMode !== 'on_request')
+          issue(path, 'Hints require an explicit request');
+      });
+      profile.ambienceSlots.forEach((slot, i) => {
+        if (!targets.has(slot.targetId))
+          issue(['investigation', 'ambienceSlots', i], 'Unknown target');
+      });
+      profile.publicVisuals.forEach((visual, i) =>
+        visual.prerequisites.forEach((condition, j) => {
+          if (!facts.get(condition.factKey)?.values.includes(condition.value))
+            issue(
+              ['investigation', 'publicVisuals', i, 'prerequisites', j],
+              'Unknown visual fact condition',
+            );
+        }),
+      );
+    }
     const completionOwners = new Set<string>();
     scenario.obstacles.forEach((obstacle, i) => {
       const path = ['obstacles', i];

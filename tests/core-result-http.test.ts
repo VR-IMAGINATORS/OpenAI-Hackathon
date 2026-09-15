@@ -212,12 +212,10 @@ for (const locale of ['ja', 'en'] as const)
         delivered.upserts.slice(0, 3).every((m: { imageSlot: unknown }) => m.imageSlot === null),
       );
       assert.match(briefing.text, locale === 'ja' ? /特殊な通信/ : /special connection/);
-      assert.ok(
-        briefing.text.endsWith(
-          locale === 'ja'
-            ? '身近なものの写真を撮って、私に送ってください。そして、それをどう使うか教えて。'
-            : 'Take a photo of something nearby and send it to me. Then tell me how to use it.',
-        ),
+      assert.match(briefing.text, locale === 'ja' ? /調べるよう頼んで/ : /Ask me to examine/);
+      assert.match(
+        briefing.text,
+        locale === 'ja' ? /写真を送って使い方/ : /send me its photo and tell me how to use it/,
       );
       await post('/api/play/events', { generation: live.generation, event: finalEvent });
       const reconnected = await (
