@@ -23,11 +23,10 @@ function fixture(close = async () => true) {
     transferControl: async () => true,
   });
   const sessions = new SessionStore({
-    passphrase: 'test passphrase',
     now: () => now,
     hasActivePlay: (owner) => registry.hasActivePlay(owner),
   });
-  const auth = () => sessions.authenticate('test passphrase');
+  const auth = () => sessions.createSession();
   const create = (owner = auth().session, requestId = 'request', clientId = 'tab') =>
     registry.create(owner, { requestId, clientId }).play;
   return {
@@ -49,11 +48,11 @@ test('auth does not allocate game; opaque cookie renewal and rate cap', () => {
   assert.equal(f.factories(), 0);
   assert.equal(f.registry.occupied, 0);
   f.time(100);
-  assert.equal(f.sessions.authenticate('test passphrase', token).session, session);
+  assert.equal(f.sessions.createSession(token).session, session);
   assert.equal(session.expiresAt, 1_800_100);
-  const rate = new SessionStore({ passphrase: 'secret', authAttemptsPerMinute: 1 });
-  assert.throws(() => rate.authenticate('wrong'), /AUTH_FAILED/);
-  assert.throws(() => rate.authenticate('secret'), /AUTH_RATE_LIMIT/);
+  const rate = new SessionStore({ authAttemptsPerMinute: 1 });
+  assert.ok(rate.createSession().token);
+  assert.throws(() => rate.createSession(), /AUTH_RATE_LIMIT/);
 });
 test('five slots, idempotent create, independent owners, release and replay', async () => {
   const f = fixture();
@@ -166,7 +165,7 @@ test('auth expiry permits active game only; restart invalidates cookie', async (
   f.registry.heartbeat(session, p.id, 'tab', 1, 'connected');
   f.time(1_800_001);
   assert.equal(f.sessions.authorize(token), session);
-  const restarted = new SessionStore({ passphrase: 'test passphrase' });
+  const restarted = new SessionStore({});
   assert.throws(() => restarted.authorize(token), /SESSION_EXPIRED/);
   await f.registry.end(p);
   assert.throws(() => f.sessions.authorize(token), /SESSION_EXPIRED/);
@@ -185,11 +184,11 @@ test('late heartbeat cannot revive an expired play even before watchdog sweep', 
 
 test('auth map is bounded and sweeps expired owners', () => {
   let now = 0;
-  const store = new SessionStore({ passphrase: 'secret', now: () => now, capacity: 1, ttlMs: 100 });
-  const first = store.authenticate('secret');
-  assert.throws(() => store.authenticate('secret'), /AUTH_CAPACITY/);
+  const store = new SessionStore({ now: () => now, capacity: 1, ttlMs: 100 });
+  const first = store.createSession();
+  assert.throws(() => store.createSession(), /AUTH_CAPACITY/);
   now = 100;
-  const second = store.authenticate('secret');
+  const second = store.createSession();
   assert.notEqual(first.token, second.token);
   assert.equal(store.size, 1);
 });
@@ -206,7 +205,7 @@ test('control cleanup completion cannot return a newer tab control or revive an 
     dispose: () => {},
     transferControl: () => new Promise<boolean>((r) => pending.push(r)),
   });
-  const owner = new SessionStore({ passphrase: 'secret' }).authenticate('secret').session;
+  const owner = new SessionStore({}).createSession().session;
   const p = registry.create(owner, { requestId: 'r', clientId: 'first' }).play;
   const old = registry.control(owner, p.id, 'second', true);
   const latest = registry.control(owner, p.id, 'third', true);

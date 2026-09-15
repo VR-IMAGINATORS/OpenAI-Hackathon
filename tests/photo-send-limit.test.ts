@@ -18,7 +18,7 @@ async function until(predicate: () => boolean) {
 async function setup(t: TestContext) {
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: 'send-limit-test',
+
     AI_MODE: 'mock',
   });
   let recognitions = 0;
@@ -108,9 +108,7 @@ async function setup(t: TestContext) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   }
-  cookie = (await request('/api/auth', { passphrase: 'send-limit-test' })).headers
-    .get('set-cookie')!
-    .split(';')[0];
+  cookie = (await request('/api/auth', {})).headers.get('set-cookie')!.split(';')[0];
   const created = await (
     await request('/api/plays', {
       requestId: randomUUID(),

@@ -40,7 +40,7 @@ function fixture(t: TestContext) {
 const environment = {
   SCENARIO_PATH: 'scenarios/story-catalog.json',
   HOSTED_NO_ENV_FILE: '1',
-  APP_PASSPHRASE: 'story-test-only',
+
   AI_MODE: 'mock',
 };
 
@@ -169,7 +169,7 @@ test('HTTP bootstrap, duplicate creation, state reload and control takeover pres
   const bootstrap = await request('/api/bootstrap');
   assert.equal(draws, 0);
   assert.equal(bootstrap.data.scenario.obstacleCount, 3);
-  const auth = await request('/api/auth', { passphrase: environment.APP_PASSPHRASE });
+  const auth = await request('/api/auth', {});
   cookie = auth.response.headers.get('set-cookie')!.split(';')[0];
   const body = { requestId: randomUUID(), clientId: randomUUID(), locale: 'en' };
   const created = await request('/api/plays', body);

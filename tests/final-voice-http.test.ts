@@ -13,7 +13,7 @@ test('HTTP keeps final playback alive with input rejected, then hangs up once af
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
     AI_MODE: 'mock',
-    APP_PASSPHRASE: 'final-voice-test',
+
     SCENARIO_PATH: 'scenarios/mobile-playtest.json',
   });
   const hosted = createHostedApp(config, {
@@ -64,9 +64,7 @@ test('HTTP keeps final playback alive with input rejected, then hangs up once af
     assert.ok(response.ok, JSON.stringify(data));
     return { response, data };
   }
-  cookie = (await request('/api/auth', { passphrase: 'final-voice-test' })).response.headers
-    .get('set-cookie')!
-    .split(';')[0];
+  cookie = (await request('/api/auth', {})).response.headers.get('set-cookie')!.split(';')[0];
   playId = (await request('/api/plays', { requestId: randomUUID(), clientId, locale: 'ja' })).data
     .playId;
   const { generation } = (

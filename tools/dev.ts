@@ -48,14 +48,14 @@ function run(name: string, args: string[], extra: NodeJS.ProcessEnv = {}) {
   });
 }
 
-if (mock) console.log('画面確認用MOCK — 合言葉: local-demo-only / 音声AIには接続しません');
+if (mock) console.log('画面確認用MOCK — 音声AIには接続しません');
 run('app', ['--import', 'tsx', 'apps/server/index.ts'], {
   HOST: '127.0.0.1',
   PORT: '4310',
   APP_ALLOWED_HOSTS: '127.0.0.1:4310,localhost:4310,127.0.0.1:5173,localhost:5173',
   APP_ALLOWED_ORIGINS:
     'http://127.0.0.1:4310,http://localhost:4310,http://127.0.0.1:5173,http://localhost:5173',
-  ...(mock ? { HOSTED_NO_ENV_FILE: '1', AI_MODE: 'mock', APP_PASSPHRASE: 'local-demo-only' } : {}),
+  ...(mock ? { HOSTED_NO_ENV_FILE: '1', AI_MODE: 'mock' } : {}),
 });
 run('web', [viteCli]);
 console.log('開発画面: http://127.0.0.1:5173 （Ctrl+Cでまとめて停止）');

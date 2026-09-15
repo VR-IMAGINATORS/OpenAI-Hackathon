@@ -19,7 +19,7 @@ paths:
     get:
       security: []
       responses:
-        '200': { description: 'app.stage=hosted-multiplayer, 公開scenario, auth.required=true, ai.mode。relay情報/秘密なし' }
+        '200': { description: 'app.stage=hosted-multiplayer, 公開scenario, auth.required=false, ai.mode。relay情報/秘密なし' }
   /api/auth:
     post:
       security: []
@@ -30,12 +30,9 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [passphrase]
-              properties:
-                passphrase: { type: string, minLength: 1, maxLength: 256 }
+              description: 合言葉不要。空のJSONオブジェクトで匿名セッションを発行・更新する。
       responses:
         '200': { description: 'play_session Cookieを発行/更新。{authenticated:true}、プレイ枠は未確保' }
-        '401': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/Error' }
   /api/session:
     get:

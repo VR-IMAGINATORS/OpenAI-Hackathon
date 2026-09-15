@@ -77,7 +77,6 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     AI_MODE: 'live',
     MAX_PLAYERS: '5',
     OPENAI_API_KEY: required('OPENAI_API_KEY'),
-    APP_PASSPHRASE: required('APP_PASSPHRASE'),
     OPS_TOKEN: required('OPS_TOKEN'),
     AI_GLOBAL_LIVE_ATTEMPTS: required('AI_GLOBAL_LIVE_ATTEMPTS'),
     AI_GLOBAL_RESPONSE_ATTEMPTS: required('AI_GLOBAL_RESPONSE_ATTEMPTS'),

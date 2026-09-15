@@ -79,7 +79,7 @@ test('HTTP new plays use edited settings; invalid config preserves existing game
   const { catalog, scenarioPath } = fixture(t);
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: 'catalog-test',
+
     AI_MODE: 'mock',
   });
   config.scenarioCatalog = catalog;
@@ -102,9 +102,7 @@ test('HTTP new plays use edited settings; invalid config preserves existing game
     });
   }
   async function auth() {
-    return (await post('/api/auth', { passphrase: 'catalog-test' })).headers
-      .get('set-cookie')!
-      .split(';')[0];
+    return (await post('/api/auth', {})).headers.get('set-cookie')!.split(';')[0];
   }
   const firstOwner = await auth(),
     secondOwner = await auth(),

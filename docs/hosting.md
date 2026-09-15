@@ -2,6 +2,8 @@
 
 この手順の正本は `specs/hosted-multiplayer/plan.md`。公開版は単一Nodeプロセス、Lightsail Containers Micro、scale=1。開発・審査のサービスは別々に用意する。ゲーム状態はメモリだけにあり、再起動時は失われる。既存のrelayを別に起動する必要はない。
 
+合言葉なしで参加できます。`APP_PASSPHRASE` は不要で、デプロイ時にも注入しません。プレイヤー用Cookieによるプレイ所有権と運用APIのBearer認証は継続します。
+
 ## 先に準備するもの
 
 運営がAWS account ID、region、service nameを決める。東京 `ap-northeast-1` は案であり、コードに実アカウントは設定していない。Micro基本料金は1環境10 USD/月、2環境20 USD/月を目安にし、API・税・転送超過等は別。無効化中も課金されるため、終了時は削除する。[AWS料金](https://aws.amazon.com/lightsail/pricing/)
@@ -18,7 +20,6 @@
 | --- | --- | --- |
 | Secret | OPENAI_API_KEY | この環境用のOpenAIキー |
 | Secret | FAL_KEY | 動画有効化時に必要なfalキー。登録手順は[こちら](fal-ending-setup.md) |
-| Secret | APP_PASSPHRASE | 参加者へ伝える共通合言葉 |
 | Secret | OPS_TOKEN | 十分に長いランダムな運用専用token。参加用と別にする |
 | Variable | AWS_ACCOUNT_ID | 12桁の対象account |
 | Variable | AWS_REGION | 対象region |
@@ -37,7 +38,7 @@
 | Variable | ENDING_CONCURRENT | 省略時2、1〜2 |
 | Variable | RESULT_TTL_SECONDS | 動画有効時の省略値600、無効時300。動画締切+60秒以上、最大600 |
 
-例示回数は予算の推奨値ではない。運営の実予算と利用権限で決める。回数上限はプロセス再起動で戻り、金額上限ではない。合言葉やキーをコマンドに直書きせず、GitHubのSecret入力UI等で登録する。ローカルのルート`.env`は読み込まない。`.env.relay.local`からの移行が必要な場合は、運営が必要な値だけを新しい`.env.local`へ手動で移す。キー値をGitへ追加しない。
+例示回数は予算の推奨値ではない。運営の実予算と利用権限で決める。回数上限はプロセス再起動で戻り、金額上限ではない。キーをコマンドに直書きせず、GitHubのSecret入力UI等で登録する。ローカルのルート`.env`は読み込まない。`.env.relay.local`からの移行が必要な場合は、運営が必要な値だけを新しい`.env.local`へ手動で移す。キー値をGitへ追加しない。
 
 環境変数はDocker buildへ渡さず、配信時だけLightsail deployment environmentに注入する。Lightsailのdeploymentを閲覧できるIAM権限では環境変数も見えるため、その閲覧者も秘密を扱う人として限定する。以前のdeployment履歴に古いキーが残ることを考慮し、ローテーションでは旧キーも失効させる。[AWS Container environment](https://docs.aws.amazon.com/lightsail/2016-11-28/api-reference/API_Container.html)
 
@@ -65,7 +66,7 @@
 
 動画もdrain時に新しい生成を止め、既知のfal要求をキャンセルする。キャンセル応答だけで完了とせず、上流の停止が未確認の動画や受理不明の送信はdrainのremainingに残る。120秒で停止を確認できない場合は配信を止め、運営がfal側の状態を確認する。結果を保持しているだけの状態と、進行中・停止未確認の要求を混同しない。
 
-旧版が残り、旧版へのdrainが完了していて、未確認Live・pending create等が0なら、運営の信頼された端末から同じOPS_TOKENで `POST /api/ops/resume` を行える。bodyは `{ "expectedVersion": "確認した40桁SHA", "expectedBootId": "確認したbootId" }`。tokenはAuthorization Bearerヘッダーに入れ、Originは送らない。プレイヤーcookie・合言葉では管理APIを操作できない。tokenをブラウザconsoleやshell履歴に貼らず、秘密を表示しない管理スクリプト等から呼ぶ。現在のversion/bootが変わった場合は再確認してから操作する。
+旧版が残り、旧版へのdrainが完了していて、未確認Live・pending create等が0なら、運営の信頼された端末から同じOPS_TOKENで `POST /api/ops/resume` を行える。bodyは `{ "expectedVersion": "確認した40桁SHA", "expectedBootId": "確認したbootId" }`。tokenはAuthorization Bearerヘッダーに入れ、Originは送らない。プレイヤーcookieでは管理APIを操作できない。tokenをブラウザconsoleやshell履歴に貼らず、秘密を表示しない管理スクリプト等から呼ぶ。現在のversion/bootが変わった場合は再確認してから操作する。
 
 失敗した新版がactiveになった場合は、その版をdrainしてから確認済みのmain履歴SHAを審査workflowで指定する。開発環境では修正/revertをmainへ反映し、通常の自動更新を使う。直接の無条件rollbackや二重受付はしない。
 
@@ -78,7 +79,7 @@
 - 標準HTTPSで実GPT-Live、実機撮影復帰、再読み込み、Cookie、操作権、60秒復帰猶予/10分上限。
 - 30秒程度の上流遅延とHTTP再試行でも二重行動・二重API作成にならないこと。
 - dev自動、judging手動、失敗配信、旧新切替中の受付と実音声停止。AWSのSIGTERM猶予とshutdown所要時間。
-- image・静的配信・Actions/AWSログにキー、合言葉、写真、会話、SDPが入らないこと。
+- image・静的配信・Actions/AWSログにキー、写真、会話、SDPが入らないこと。
 - 実falによる15秒768P動画、開始/終了画像と文字、提示済み伏線と確定行動に沿った物語、normal / bad分岐。実スマホの音声付き再生・期限切れ・再読み込みと、5人同時生成時のメモリを確認する。
 
 強制kill、OOM、プラットフォーム障害ではメモリのLive IDが失われるため、外部音声接続終了や課金停止を完全には保証しない。正常drainの確認と混同しない。上流側の独立期限・回収方法は実公開前に確認する。未確認のAPI仕様を保証として説明しない。
@@ -102,4 +103,4 @@
 
 SCENARIO_PATH未指定時は `scenarios/playtest/warehouse-expanded-r1.json` を読み込む。mainから配信する統合サーバーは最新の共通ハーネスと、この拡充候補を使用する。元カタログは保持し、ローカルで明示的に `SCENARIO_PATH=scenarios/story-catalog.json` を指定すると従来の抽選に戻せる。
 
-既存 `.env.local` に旧SCENARIO_PATHが残っている場合は、拡充版パスへ変更するかその設定行を削除する。合言葉やAPIキーは変更不要。品質評価の未合格・内扉の説明課題は継続中であり、今回の既定変更は自動評価の合格を意味しない。
+既存 `.env.local` に旧SCENARIO_PATHが残っている場合は、拡充版パスへ変更するかその設定行を削除する。APIキーは変更不要。品質評価の未合格・内扉の説明課題は継続中であり、今回の既定変更は自動評価の合格を意味しない。

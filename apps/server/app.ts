@@ -314,7 +314,6 @@ export function createHostedApp(
     transferControl: (r) => r.transferControl(),
   });
   const sessions = new SessionStore({
-    passphrase: config.passphrase,
     now,
     authAttemptsPerMinute: config.authAttempts,
     hasActivePlay: (s) => registry.hasActivePlay(s),
@@ -504,16 +503,15 @@ export function createHostedApp(
             ]),
           )
         : { ja: publicScenario(config.scenario), en: publicScenario(config.scenario) },
-      auth: { required: true },
+      auth: { required: false },
       ai: { mode: config.ai.mode },
     }),
   );
   app.post('/api/auth', (req, res) => {
-    const body = z
-      .object({ passphrase: z.string().min(1).max(256) })
+    z.object({})
       .strict()
-      .parse(req.body);
-    const auth = sessions.authenticate(body.passphrase, cookieToken(req));
+      .parse(req.body ?? {});
+    const auth = sessions.createSession(cookieToken(req));
     res.cookie('play_session', auth.token, {
       httpOnly: true,
       secure: config.secureCookie,
@@ -870,7 +868,7 @@ export function createHostedApp(
         : status === 410
           ? '体験が終了したか、セッションの期限が切れました。'
           : status === 401
-            ? '合言葉を入力してください。'
+            ? '開始画面から参加してください。'
             : status === 409
               ? '状態が変わりました。画面を確認して再試行してください。'
               : status === 503

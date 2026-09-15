@@ -1,7 +1,7 @@
 # データモデルと寿命
 
 ## AuthSession（プレイ枠ではない）
-32byte乱数tokenをHttpOnly Cookie `play_session` に保存し、サーバーはSHA256 digestをキーにMapで保持。fields: expiresAt（合言葉認証から30分、固定）、activePlayId|null、lastCreateRequestId/result（冪等応答用）。上限1000件/環境、期限掃除あり。再認証は有効cookieがあれば同じ所有者を延長し、別枠を発行しない。認証期限は進行中プレイの強制終了条件にせず、そのプレイの絶対期限まではauthorizeを許可する。
+32byte乱数tokenをHttpOnly Cookie `play_session` に保存し、サーバーはSHA256 digestをキーにMapで保持。fields: expiresAt（セッション発行・更新から30分、固定）、activePlayId|null、lastCreateRequestId/result（冪等応答用）。上限1000件/環境、期限掃除あり。再認証は有効cookieがあれば同じ所有者を延長し、別枠を発行しない。認証期限は進行中プレイの強制終了条件にせず、そのプレイの絶対期限まではauthorizeを許可する。
 再起動でAuthSessionも消える。cookieがあるのにMapにない場合はSESSION_EXPIRED。画面は更新・期限切れの可能性を案内し、再認証→最初から。再起動による失効だけを断定しない。
 
 ## PlayRuntime（所有者ごとに1件）

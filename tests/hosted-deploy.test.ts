@@ -18,7 +18,7 @@ const env = {
   AWS_REGION: 'ap-northeast-1',
   PUBLIC_APP_URL: 'https://game-dev.example.ap-northeast-1.cs.amazonlightsail.com',
   OPENAI_API_KEY: 'sentinel-api-private',
-  APP_PASSPHRASE: 'sentinel-passphrase-private',
+
   OPS_TOKEN: 'sentinel-ops-private',
   AI_GLOBAL_LIVE_ATTEMPTS: '50',
   AI_GLOBAL_RESPONSE_ATTEMPTS: '1000',
@@ -125,6 +125,7 @@ test('hosted deploy validates all target values and serializes secrets only into
   assert.throws(() => deploymentConfig({ ...env, PUBLIC_APP_URL: 'http://example.com' }));
   assert.throws(() => deploymentConfig({ ...env, AI_GLOBAL_LIVE_ATTEMPTS: '' }));
   const doc = deploymentDocument(config(), image);
+  assert.equal(doc.containers.app.environment.APP_PASSPHRASE, undefined);
   assert.equal(doc.publicEndpoint.healthCheck.path, '/healthz');
   assert.equal(doc.containers.app.ports['4310'], 'HTTP');
   assert.throws(() => deploymentDocument(config(), ':other.sha.1'));
@@ -186,7 +187,7 @@ test('hosted deploy confirms old drain before deploy and verifies registered ima
   );
   assert.ok(h.logs.some((entry) => (entry as string[])[0] === 'deployment_confirmed'));
   assert.ok(JSON.stringify(h.logs).includes(image));
-  for (const secret of [env.OPENAI_API_KEY, env.OPS_TOKEN, env.APP_PASSPHRASE])
+  for (const secret of [env.OPENAI_API_KEY, env.OPS_TOKEN])
     assert.equal(JSON.stringify(h.logs).includes(secret), false);
   for (const file of h.temporaryFiles) await assert.rejects(access(file));
 });

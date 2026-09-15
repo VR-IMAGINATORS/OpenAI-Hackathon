@@ -24,7 +24,6 @@ export interface HostedConfig {
   allowedHosts: Set<string>;
   allowedOrigins: Set<string>;
   secureCookie: boolean;
-  passphrase: string;
   opsToken: string;
   version: string;
   scenario: Scenario;
@@ -60,8 +59,6 @@ export function loadHostedConfig(
       throw new Error('PUBLIC_APP_URL must be an HTTPS origin');
     publicUrl = url.origin;
   }
-  const passphrase = values.APP_PASSPHRASE ?? '';
-  if (!passphrase.trim() || passphrase.length > 256) throw new Error('APP_PASSPHRASE is required');
   const opsToken = values.OPS_TOKEN ?? '';
   if (opsToken && opsToken.length < 32)
     throw new Error('OPS_TOKEN requires at least 32 characters');
@@ -110,7 +107,6 @@ export function loadHostedConfig(
     allowedHosts: allowedHosts(values.APP_ALLOWED_HOSTS, hosts),
     allowedOrigins: allowedOrigins(values.APP_ALLOWED_ORIGINS, origins),
     secureCookie: !!publicUrl,
-    passphrase,
     opsToken,
     version: values.APP_VERSION ?? 'local',
     scenario,

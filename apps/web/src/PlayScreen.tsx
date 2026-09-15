@@ -107,7 +107,6 @@ export default function PlayScreen({
   const current = useRef(state);
   current.current = state;
   const [voice, setVoice] = useState<VoiceState>('closed');
-  const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
@@ -919,7 +918,7 @@ export default function PlayScreen({
                 disabled={!invalid && lifecycle !== 'terminal'}
               >
                 {invalid
-                  ? t('合言葉で参加し直す', 'Join again with passphrase')
+                  ? t('開始画面に戻る', 'Return to start')
                   : t('もう一度プレイ', 'Play again')}
               </button>
             </div>
@@ -1410,7 +1409,7 @@ export default function PlayScreen({
         )}
         {invalid ? (
           <button className="primary-button" onClick={onExit}>
-            {t('合言葉で参加し直す', 'Join again with passphrase')}
+            {t('開始画面に戻る', 'Return to start')}
           </button>
         ) : (
           ended && (

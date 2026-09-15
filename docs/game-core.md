@@ -7,7 +7,7 @@
 PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobile` → ターミナルのQRコード。
 既存プロセスはCtrl+Cで終了してから再起動する。両方とも.env.localの設定を読み、統合サーバーを起動する。別の中継サーバーは不要。
 
-.env.local.exampleの画像関連設定を参照。ローカルは画像設定省略時も初期値で動く。AI_MODE=liveと既存APIキー/予算/合言葉が必要。キーを文書や会話へ貼らない。mockは画面用で音声AIに接続しない。
+.env.local.exampleの画像関連設定を参照。ローカルは画像設定省略時も初期値で動く。AI_MODE=liveと既存APIキー/予算が必要。キーを文書や会話へ貼らない。mockは画面用で音声AIに接続しない。
 
 画像にはIMAGE_MODEL=gpt-image-2.5-flare、検査にはIMAGE_INSPECTION_MODEL=gpt-5.6-lunaを使う。実アカウントでの利用可否は実機確認が必要。画像だけが失敗した場合もゲームは続く。
 

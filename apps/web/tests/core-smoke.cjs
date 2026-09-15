@@ -102,6 +102,7 @@ const scenario = {
     const createIds = [],
       liveIds = [];
     let owner = false;
+    let nextPlayState = null;
     let hasPlay = false,
       creates = 0,
       epoch = 1,
@@ -175,11 +176,11 @@ const scenario = {
       if (url.pathname === '/api/bootstrap')
         return respond(route, {
           app: { stage: 'hosted-multiplayer', name: 'Call to Past' },
-          auth: { required: true },
+          auth: { required: false },
           ai: { mode: 'live' },
         });
       if (url.pathname === '/api/auth') {
-        assert.equal(body.passphrase, 'demo');
+        assert.deepEqual(body, {});
         owner = true;
         return respond(route, { ok: true });
       }
@@ -188,7 +189,7 @@ const scenario = {
         return respond(route, {
           authenticated: true,
           playId: hasPlay ? 'play-one' : null,
-          lifecycle: hasPlay ? 'active' : null,
+          lifecycle: hasPlay ? envelope().lifecycle : null,
           expiresAt: null,
         });
       if (url.pathname === '/api/plays') {
@@ -204,6 +205,10 @@ const scenario = {
             409,
           );
         assert.ok(['ja', 'en'].includes(body.locale));
+        if (nextPlayState) {
+          state = nextPlayState;
+          nextPlayState = null;
+        }
         state.locale = body.locale;
         createIds.push(body.requestId);
         if (createFailure) {
@@ -392,7 +397,7 @@ const scenario = {
       .getByRole('button', { name: 'Standard Pro Plan 5 min · 1,000 credits', exact: true })
       .waitFor();
     await page.getByRole('combobox').selectOption('ja');
-    await page.getByLabel('参加の合言葉').fill('demo');
+    assert.equal(await page.locator('input[type=password]').count(), 0);
     await page.getByRole('button', { name: 'スタンダードProプラン 5分 · 1,000クレジット' }).click();
     await enterCall();
     await page.getByText('音声で会話できます', { exact: true }).waitFor();
@@ -695,7 +700,7 @@ const scenario = {
     await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'), 'ja', 'Japanese play restored');
     await page.getByRole('button', { name: 'もう一度プレイ', exact: true }).click();
-    state = {
+    nextPlayState = {
       ...state,
       status: 'briefing',
       title: 'The locked laboratory',

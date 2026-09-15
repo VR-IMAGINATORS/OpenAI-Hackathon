@@ -10,7 +10,7 @@ const enabled = {
 };
 const hosted = {
   HOSTED_NO_ENV_FILE: '1',
-  APP_PASSPHRASE: 'local-config-test',
+
   AI_MODE: 'mock',
 };
 

@@ -12,7 +12,7 @@ async function setup(t: TestContext, withLive = false) {
   let now = 0;
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
-    APP_PASSPHRASE: 'test-only-result-password',
+
     AI_MODE: 'mock',
   });
   const hosted = createHostedApp(config, {
@@ -71,7 +71,7 @@ async function setup(t: TestContext, withLive = false) {
   }
   async function login() {
     const response = await request('/api/auth', {
-      body: { passphrase: 'test-only-result-password' },
+      body: {},
     });
     assert.equal(response.status, 200);
     return response.headers.get('set-cookie')!.split(';')[0]!;
