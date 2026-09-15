@@ -7,7 +7,7 @@ import type { PublicGameState, PlayUpdate } from '../../../packages/shared/game.
 import { LiveConnection, type VoiceState } from './live.js';
 import { preparePhoto, type PreparedPhoto } from './photo.js';
 import { PlayApiError, playRequest, clientId, controlHeaders, setApiLocale } from './play-api.js';
-import GameStatusSummary from './GameStatusSummary.js';
+import GameStatusSummary, { GameResourceCounters } from './GameStatusSummary.js';
 import { discardWarning } from './live-command-delivery.js';
 
 const voiceLabels: Record<VoiceState, string> = {
@@ -708,8 +708,6 @@ export default function PlayScreen({
                 : state.obstacle.title
             }
             ended={ended}
-            remainingMs={state.remainingMs}
-            photoSendsRemaining={state.photoSendsRemaining}
             locale={locale}
           />
           <div className="messenger-info-body">
@@ -761,6 +759,14 @@ export default function PlayScreen({
           generation={state.generation}
         />
         <footer className="messenger-composer">
+          {!ended && (
+            <GameResourceCounters
+              key={playId}
+              remainingMs={state.remainingMs}
+              photoSendsRemaining={state.photoSendsRemaining}
+              locale={locale}
+            />
+          )}
           {!ended && state.photoSendsRemaining === 0 && (
             <p className="messenger-notice" role="status">
               {t(

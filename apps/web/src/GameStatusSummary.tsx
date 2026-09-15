@@ -3,18 +3,39 @@ import { useEffect, useRef, useState } from 'react';
 export default function GameStatusSummary({
   title,
   ended,
-  remainingMs,
-  photoSendsRemaining,
   locale,
 }: {
   title: string;
   ended: boolean;
+  locale: 'ja' | 'en';
+}) {
+  const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
+  return (
+    <summary className="messenger-status">
+      <span className="messenger-objective">
+        {!ended && (
+          <span className="messenger-resource-label">{t('現在の目標', 'Current objective')}</span>
+        )}
+        <strong>{title}</strong>
+      </span>
+      <svg className="messenger-details-chevron" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </summary>
+  );
+}
+
+export function GameResourceCounters({
+  remainingMs,
+  photoSendsRemaining,
+  locale,
+}: {
   remainingMs: number;
   photoSendsRemaining: number;
   locale: 'ja' | 'en';
 }) {
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
-  const lowTime = !ended && remainingMs > 0 && remainingMs <= 60_000;
+  const lowTime = remainingMs > 0 && remainingMs <= 60_000;
   const previousTime = useRef(remainingMs);
   // Restoring a play already below one minute should not replay the threshold warning.
   const warned = useRef(remainingMs <= 60_000);
@@ -48,61 +69,41 @@ export default function GameStatusSummary({
           : '';
 
   return (
-    <summary className="messenger-status">
-      <span className="messenger-objective">
-        {!ended && (
-          <span className="messenger-resource-label">{t('現在の目標', 'Current objective')}</span>
-        )}
-        <strong>{title}</strong>
+    <div className="messenger-counters">
+      <span
+        className={
+          'messenger-resource messenger-clock' +
+          (lowTime ? ' is-urgent' : '') +
+          (pulse ? ' clock-warning-pulse' : '')
+        }
+      >
+        <span className="messenger-resource-label">{t('残り時間', 'Time left')}</span>
+        <strong>
+          {clock}
+          {lowTime && <WarningIcon />}
+        </strong>
       </span>
-      <svg className="messenger-details-chevron" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-      {!ended && (
-        <span className="messenger-counters">
-          <span
-            className={
-              'messenger-resource messenger-clock' +
-              (lowTime ? ' is-urgent' : '') +
-              (pulse ? ' clock-warning-pulse' : '')
-            }
-          >
-            <span className="messenger-resource-label">{t('残り時間', 'Time left')}</span>
-            <strong>
-              {clock}
-              {lowTime && <WarningIcon />}
-            </strong>
-          </span>
-          <span
-            className={
-              'messenger-resource messenger-action-count' +
-              (photoSendsRemaining <= 1
-                ? ' is-urgent'
-                : photoSendsRemaining === 2
-                  ? ' is-caution'
-                  : '')
-            }
-          >
-            <span className="messenger-resource-label">
-              {t('残り送信回数', 'Photo sends left')}
-            </span>
-            <strong>
-              {photoSendsRemaining}
-              {photoSendsRemaining <= 2 && <WarningIcon />}
-            </strong>
-          </span>
-        </span>
-      )}
+      <span
+        className={
+          'messenger-resource messenger-action-count' +
+          (photoSendsRemaining <= 1 ? ' is-urgent' : photoSendsRemaining === 2 ? ' is-caution' : '')
+        }
+      >
+        <span className="messenger-resource-label">{t('残り送信回数', 'Photo sends left')}</span>
+        <strong>
+          {photoSendsRemaining}
+          {photoSendsRemaining <= 2 && <WarningIcon />}
+        </strong>
+      </span>
       <span className="messenger-status-announcement" role="status" aria-atomic="true">
-        {!ended &&
-          [
-            lowTime ? t('残り時間は1分以下です。', 'One minute or less remaining.') : '',
-            actionWarning,
-          ]
-            .filter(Boolean)
-            .join(' ')}
+        {[
+          lowTime ? t('残り時間は1分以下です。', 'One minute or less remaining.') : '',
+          actionWarning,
+        ]
+          .filter(Boolean)
+          .join(' ')}
       </span>
-    </summary>
+    </div>
   );
 }
 

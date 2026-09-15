@@ -1658,16 +1658,16 @@ h1 span {
 .messenger-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  gap: 10px;
+  padding: calc(2px + env(safe-area-inset-top)) 16px 2px;
   background: #15232e;
   flex-shrink: 0;
 }
 .messenger-avatar {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   border-radius: 50%;
   background: #244941;
@@ -1679,11 +1679,14 @@ h1 span {
   min-width: 0;
 }
 .messenger-contact h1 {
-  font-size: 16px;
-  margin: 0 0 4px;
+  font-size: 15px;
+  line-height: 1.2;
+  margin: 0;
 }
 .messenger-contact > span {
+  display: block;
   font-size: 9px;
+  line-height: 1.4;
   letter-spacing: 0.16em;
   color: #8fa8b2;
 }
@@ -1711,7 +1714,7 @@ h1 span {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 4px 16px;
   background: #19392f;
   font-size: 11px;
   flex-shrink: 0;
@@ -1781,26 +1784,33 @@ h1 span {
   transform: rotate(180deg);
 }
 .messenger-counters {
-  grid-column: 1 / -1;
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 .messenger-resource {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 8px;
   border: 1px solid #304550;
   border-radius: 8px;
   background: #1a2b36;
   color: #f3f8f6;
 }
+.messenger-resource .messenger-resource-label {
+  font-size: 12px;
+}
 .messenger-resource strong {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 24px;
+  flex-shrink: 0;
+  gap: 4px;
+  font-size: 20px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -2107,9 +2117,6 @@ h1 span {
   }
 }
 @media (max-height: 480px) {
-  .messenger-header {
-    padding-block: 6px;
-  }
   .messenger-info summary {
     padding-block: 6px;
   }

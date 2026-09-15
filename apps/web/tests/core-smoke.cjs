@@ -627,13 +627,21 @@ const scenario = {
     const hudMetrics = await page.evaluate(() => {
       const objective = document.querySelector('.messenger-objective');
       const counters = document.querySelector('.messenger-counters');
+      const composer = document.querySelector('.messenger-composer');
+      const controls = document.querySelector('.messenger-compose-row');
       return {
-        stacked: counters.getBoundingClientRect().top >= objective.getBoundingClientRect().bottom,
+        aboveControls:
+          composer.contains(counters) &&
+          counters.getBoundingClientRect().bottom <= controls.getBoundingClientRect().top,
         objectiveSize: getComputedStyle(objective.querySelector('strong')).fontSize,
         numberSize: getComputedStyle(counters.querySelector('strong')).fontSize,
       };
     });
-    assert.deepEqual(hudMetrics, { stacked: true, objectiveSize: '20px', numberSize: '24px' });
+    assert.deepEqual(hudMetrics, {
+      aboveControls: true,
+      objectiveSize: '20px',
+      numberSize: '20px',
+    });
     await page.screenshot({ path: 'artifacts/hud-normal-en-mobile.png', fullPage: true });
     await page
       .locator('.messenger-info')
