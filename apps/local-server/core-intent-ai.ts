@@ -15,6 +15,7 @@ import { storyHint } from './story.js';
 import { buildCompanionContext, type KnowledgeStore } from './companion-knowledge.js';
 import type { PublicGameState } from '../../packages/shared/game.js';
 import { inferenceSchema } from '../../packages/shared/harness.js';
+import { creativeRouting } from './creative-acceptance.js';
 
 // Provider responses must include the actual answer; optionality in the shared type
 // only preserves compatibility with older in-process adapters.
@@ -179,6 +180,7 @@ export async function classifyCoreIntent(options: {
       judgment: snapshot.coreConfig.judgment,
       acceptancePolicy: snapshot.coreConfig.acceptancePolicy[snapshot.locale],
     }),
+    ...(snapshot.coreConfig.creativity?.enabled ? [creativeRouting] : []),
   ].join('\n');
   if (instructions.length > 16000) return { kind: 'wait', reason: '会話設定が長すぎます。' };
   const response = await options.respond({

@@ -1,6 +1,7 @@
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import { creativeLiveInstructions } from './creative-acceptance.js';
 import type { LiveCommand, PublicGameState } from '../../packages/shared/game.js';
 import type { GameFacts } from '../../packages/shared/conversation.js';
 import { openingHandoff, storyOpening, storyFromState } from './story.js';
@@ -81,6 +82,7 @@ export function liveInstructions(
       '途中の間や未完の発言で勝手に行動しない。質問と指示を区別する。判定中の中止・訂正もすぐclientへ委譲する。古い行動の完了を待つよう求めない。同じ指示の繰り返しで二つ目の行動を始めない。攻略ヒントは尋ねられたときだけ段階的に出す。特殊能力を付与しない。',
       'storyがある場合はそのaiNameの相棒として話す。物語の方向性は演出指示であり、起きた事実ではない。完全解除による物語段階の更新が届いたら、確定結果と既に見えた手がかりに結びつく短い自然な反応を加える。未確定の真相や後続障害、正解を勝手に明かさない。世界観や背景の質問もclientへ委譲する。',
       snapshot.coreConfig.conversation[snapshot.locale].liveInstructions,
+      ...(snapshot.coreConfig.creativity?.enabled ? [creativeLiveInstructions] : []),
       ...(snapshot.scenarioV2.story
         ? [
             `導入の返事後に話すのはopeningMessageだけ。自己紹介・舞台・脱出の必要性・写真から道具を作って扱えることを短く伝える。状況・拘束・手がかり・詳しい通信の仕組みは補足メッセージとしてアプリが表示するので、導入の音声に追加しない。最後は必ず「${openingHandoff[snapshot.locale]}」と話して止まり、続けて質問や説明を加えない。補足メッセージを自分から読み上げたり復唱したりしない。内容を尋ねられた場合は通常どおりclientへ委譲する。途中で「待って」「聞こえない」と言われたら止め、再開を求められたら未説明の要点だけを続けて最後の案内を伝える。`,

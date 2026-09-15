@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -649,6 +650,7 @@ test('runtime advances requested hint levels across partial progress and resets 
         }
         return response({
           ...judgments.shift()!,
+          creativity: ordinaryCreativity,
           narrative: '確定した変化。',
           situation: '部分変化。',
           shortReason: '通常の物性。',

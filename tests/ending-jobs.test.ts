@@ -547,6 +547,16 @@ test('expiry during transcript grace records the story error separately from vid
   assert.equal(p.view().status, 'expired');
   assert.equal(f.ai.snapshot().responseAttempts, 0);
 });
+
+test('deadline crossing before the timer callback preserves the timeout classification', async (t) => {
+  const f = setup(t);
+  const p = f.add();
+  f.setNow(60_000);
+  await until(() => f.jobs.snapshot().remaining === 0);
+  assert.equal(p.view().status, 'expired');
+  assert.equal(p.view().storyErrorCode, 'ENDING_TIMEOUT');
+  assert.equal(f.ai.snapshot().responseAttempts, 0);
+});
 test('invalid MP4 is not published, factual outcome survives, and completed provider releases capacity', async (t) => {
   const f = setup(t, {
     fal: {

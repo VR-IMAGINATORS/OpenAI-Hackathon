@@ -293,8 +293,12 @@ export class EndingJobs {
   }
   private assertCurrent(job: Job): void {
     job.controller.signal.throwIfAborted();
-    if (this.stopped || this.now() >= job.deadline || !this.results.has(job.playId))
-      throw new Error('ENDING_EXPIRED');
+    if (this.now() >= job.deadline) {
+      // The monotonic deadline can pass before the timer callback gets CPU time.
+      job.controller.abort('ENDING_TIMEOUT');
+      job.controller.signal.throwIfAborted();
+    }
+    if (this.stopped || !this.results.has(job.playId)) throw new Error('ENDING_EXPIRED');
   }
   private publishStory(job: Job, story: EndingStory): void {
     this.assertCurrent(job);

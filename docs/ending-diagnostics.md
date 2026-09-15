@@ -1,5 +1,7 @@
 # タグ・結末文の失敗を調査する
 
+追加の境界条件は [再検証結果](../specs/ending-tags/ending-second-pass.md)。`ending_failed_extraction / ENDING_EXTRACTION_BUDGET_RESERVED` は任意の抽出を省略して本文の予算を優先したことを示し、文章の最終失敗ではない。`storyStatus`で最終結果を確認する。
+
 2026-09-15の `ENDING_STORY_INVALID_EVIDENCE` 再発については [原因別の調査・修正・検証結果](../specs/ending-tags/ending-recovery-investigation.md) を参照。更新後の `ending_failed_extraction` は文章の回復開始を示し、最終失敗とは区別する。
 
 途中画像受信失敗・`ENDING_DIRECTION_TIMEOUT`については[画像・動画の回復経路](../specs/ending-video/recovery-investigation.md)を参照。`ending_recovery`は代替演出・画像再試行・動画回収の継続、`scene_recovery`は途中画像の回復を示す。`ending_failed_*`には経過時間と残り時間、`request_failed`には所有者確認済みプレイIDとAPI経路、`scene_failed`には画像の失敗段階を追加した。画像・会話・認証値は記録しない。

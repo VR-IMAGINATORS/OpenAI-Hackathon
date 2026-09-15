@@ -2,6 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
 import { GameRuntime } from '../apps/local-server/hosted-runtime.js';
 import { ScenarioCatalog } from '../apps/server/scenario-catalog.js';
 import { PhotoQueue } from '../apps/server/photo-queue.js';
@@ -47,6 +48,7 @@ async function setup(
   judgeResponse?: (input: any, signal?: AbortSignal) => unknown | Promise<unknown>,
   locale: 'ja' | 'en' = 'ja',
   initialCredits = 1000,
+  creativeProbability?: number,
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0, photo: 0, control: 0, reply: 0 };
@@ -103,10 +105,15 @@ async function setup(
         }
         if (context.proposal) {
           calls.judge++;
-          if (judgeResponse) return response(await judgeResponse(context, signal));
+          if (judgeResponse)
+            return response({
+              creativity: ordinaryCreativity,
+              ...((await judgeResponse(context, signal)) as object),
+            });
           await judgeGate;
           return response({
             success: false,
+            creativity: ordinaryCreativity,
             narrative: 'ロープは切れなかった。',
             situation: 'ロープはまだつながっている。',
             inventoryChanges: [],
@@ -133,6 +140,8 @@ async function setup(
   );
   const queue = new PhotoQueue();
   snapshot.scenarioV2.rules.initialCredits = initialCredits;
+  if (creativeProbability !== undefined)
+    snapshot.coreConfig.creativity = { enabled: true, successProbability: creativeProbability };
   const notices: string[] = [];
   const scenes: any[] = [];
   const results = new ResultStore();
@@ -1105,3 +1114,69 @@ test('rejected photo stays rejected under pressure but new physical information 
   assert.equal(h.runtime.game.credits.remaining, 860);
   assert.equal(h.calls.recognize, 1);
 });
+
+for (const origin of ['photo', 'voice'] as const) {
+  for (const probability of [0, 1]) {
+    test(`creative ${origin} action at probability ${probability} reaches committed state, speech and image once`, async (t) => {
+      const h = await setup(
+        t,
+        execute,
+        undefined,
+        false,
+        undefined,
+        origin === 'photo' ? obviousPhoto : undefined,
+        async () => ({
+          success: true,
+          narrative: 'PRIVATE_CREATIVE_CANDIDATE',
+          situation: 'PRIVATE_CREATIVE_CANDIDATE',
+          shortReason: 'PRIVATE_CREATIVE_CANDIDATE',
+          inventoryChanges: [],
+          factChanges: [{ key: 'wrists', from: 'bound', to: 'free' }],
+          creativity: {
+            kind: 'stretch',
+            approach: 'Use scissors with implausible cutting strength',
+            equivalentAttemptId: null,
+            effect: 'edge',
+          },
+        }),
+        'ja',
+        1000,
+        probability,
+      );
+      const photoRequest = randomUUID();
+      await h.runtime.photos(photoRequest, [h.photo]);
+      if (origin === 'voice') {
+        await until(() => h.calls.photo === 1);
+        await h.say('その道具で切って');
+        await h.delegate();
+      }
+      await until(
+        () => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2 && h.calls.reply === 1,
+      );
+      await tick();
+      assert.equal(h.calls.judge, 1);
+      assert.equal(h.runtime.game.obstacleIndex, probability);
+      assert.equal(h.runtime.game.facts.values.wrists, probability ? 'free' : 'bound');
+      assert.equal(h.runtime.game.lastResult!.success, probability === 1);
+      assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 900 : 880);
+      const scene = h.scenes[1]!;
+      const commands = h.runtime
+        .pollCommands(h.generation, 0)
+        .commands.filter(
+          (command) =>
+            command.messageId === scene.messageId && command.type === 'session.commentary.append',
+        );
+      assert.equal(commands.length, 1);
+      const published = JSON.stringify([scene, commands, h.runtime.game.state()]);
+      assert.equal(published.includes('PRIVATE_CREATIVE_CANDIDATE'), false);
+      assert.equal(published.includes('equivalentAttemptId'), false);
+      if (probability === 1) {
+        assert.match(scene.text, /思いがけない切れ味/);
+        assert.match(commands[0]!.content, /思いがけない切れ味/);
+      } else assert.doesNotMatch(published, /思いがけない切れ味/);
+      await h.runtime.photos(photoRequest, [h.photo]);
+      assert.equal(h.calls.judge, 1);
+      assert.equal(h.runtime.game.actionsUsed, 1);
+    });
+  }
+}

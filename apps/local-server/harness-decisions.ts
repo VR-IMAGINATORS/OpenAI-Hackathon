@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { itemReferenceSchema } from '../../packages/shared/conversation.js';
+import { creativeRouting } from './creative-acceptance.js';
 
 const text = z.string().min(1).max(2000);
 export const photoDecisionSchema = z
@@ -54,7 +55,7 @@ export async function harnessResponse<T>(
   return schema.parse(JSON.parse(texts[0]));
 }
 
-export function classifyPhoto(client: HarnessModel, input: unknown) {
+export function classifyPhoto(client: HarnessModel, input: unknown, creativityEnabled = false) {
   return harnessResponse(
     client,
     photoDecisionSchema,
@@ -68,6 +69,7 @@ export function classifyPhoto(client: HarnessModel, input: unknown) {
       'When priorDecision is provided, preserve its conclusion unless userSpeech gives relevant new factual information or corrects recognition. Repeated insistence, magic claims, or paraphrasing the same request is not new evidence. Reevaluate the requestedUsage under the same policy and known physics; never silently replace the item.',
       'Low-risk experiments are allowed. If unapproved irreversible harm or tool loss is likely, return confirm_risk with the proposed usage and specific risk. Never claim success before a committed result.',
       'References must exist in the input. Do not mention internal decisions, action counters, delegation or processing mechanics. message is a short natural response, reason is internal.',
+      ...(creativityEnabled ? [creativeRouting] : []),
     ].join('\n'),
     input,
   );

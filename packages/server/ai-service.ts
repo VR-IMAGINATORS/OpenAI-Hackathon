@@ -224,6 +224,20 @@ export class AiService {
         this.limit();
     }
     if (this.endingDelay(kind) > 0 || permit.busy) this.limit();
+    if (kind === 'extraction') {
+      // Optional clue work must leave one first writer call for each admitted
+      // ending. This check and the attempt charge below are synchronous.
+      const waitingStories = [...this.media.values()].filter(
+        (candidate) =>
+          candidate.ending?.story === 0 && !candidate.cancelled && this.now() < candidate.expiresAt,
+      ).length;
+      if (this.config.globalResponseAttempts - this.responseAttempts <= waitingStories)
+        throw new AiServiceError(
+          429,
+          'ENDING_EVIDENCE_BUDGET',
+          'Response budget reserved for endings',
+        );
+    }
     const controller = new AbortController();
     permit.controllers.add(controller);
     permit.busy++;

@@ -386,22 +386,26 @@ export class GameRuntime {
       intent.itemRefs.some((ref) => 'photoId' in ref)
     ) {
       const revision = this.game.inputRevision;
-      const decision = await classifyPhoto(this.modelClient(), {
-        acceptancePolicy: coreSnapshot.coreConfig.acceptancePolicy[coreSnapshot.locale],
-        priorDecision: this.photoAcceptance.decision,
-        publicState: this.publicContext(),
-        inventory: this.game.inventory,
-        recognizedItems: this.game.proposal?.items,
-        photos: this.game.photos.map((photo) => photo.id),
-        requestedUsage: intent.usage,
-        userSpeech: context.fragments
-          .filter(
-            (fragment) =>
-              fragment.speaker === 'user' && intent.evidenceSeq.includes(fragment.serverSeq),
-          )
-          .map((fragment) => fragment.delta)
-          .join(''),
-      });
+      const decision = await classifyPhoto(
+        this.modelClient(),
+        {
+          acceptancePolicy: coreSnapshot.coreConfig.acceptancePolicy[coreSnapshot.locale],
+          priorDecision: this.photoAcceptance.decision,
+          publicState: this.publicContext(),
+          inventory: this.game.inventory,
+          recognizedItems: this.game.proposal?.items,
+          photos: this.game.photos.map((photo) => photo.id),
+          requestedUsage: intent.usage,
+          userSpeech: context.fragments
+            .filter(
+              (fragment) =>
+                fragment.speaker === 'user' && intent.evidenceSeq.includes(fragment.serverSeq),
+            )
+            .map((fragment) => fragment.delta)
+            .join(''),
+        },
+        !!coreSnapshot.coreConfig.creativity?.enabled,
+      );
       this.check(context.controllerEpoch);
       if (
         this.game.inputRevision !== revision ||
@@ -517,16 +521,20 @@ export class GameRuntime {
     const version = this.game.gameVersion;
     for (let attempt = 0; attempt < 2; attempt++) {
       const context = this.ledger.captureUnconsumedContext();
-      const decision = await classifyPhoto(this.modelClient(), {
-        acceptancePolicy: this.coreSnapshot.coreConfig.acceptancePolicy[this.coreSnapshot.locale],
-        publicState: this.publicContext(),
-        inventory: this.game.inventory,
-        recognizedItems: this.game.proposal?.items,
-        photos: photoIds,
-        conversation: context.fragments
-          .slice(-24)
-          .map(({ speaker, delta }) => ({ speaker, text: delta })),
-      });
+      const decision = await classifyPhoto(
+        this.modelClient(),
+        {
+          acceptancePolicy: this.coreSnapshot.coreConfig.acceptancePolicy[this.coreSnapshot.locale],
+          publicState: this.publicContext(),
+          inventory: this.game.inventory,
+          recognizedItems: this.game.proposal?.items,
+          photos: photoIds,
+          conversation: context.fragments
+            .slice(-24)
+            .map(({ speaker, delta }) => ({ speaker, text: delta })),
+        },
+        !!this.coreSnapshot.coreConfig.creativity?.enabled,
+      );
       if (
         !this.valid(epoch) ||
         this.game.gameVersion !== version ||

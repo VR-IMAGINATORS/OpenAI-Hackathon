@@ -68,6 +68,86 @@ test('ending views and media isolate owners and a new play; returned views canno
   assert.throws(() => store.endingVideo('alice', replay), error(409, 'VIDEO_NOT_READY'));
 });
 
+test('ending errors and valid text can still be saved when presentation storage is full', () => {
+  const store = new ResultStore({ maxEntryBytes: 32 * 1024 });
+  const id = create(store);
+  store.initializeEnding(id, { ...view(id), storyStatus: 'generating' });
+  // Occupy the remaining capacity with normal, bounded messages.
+  for (let i = 0; i < 1000; i++) {
+    try {
+      store.appendMessage(id, { side: 'assistant', kind: 'result', text: '記録'.repeat(10) });
+    } catch (error) {
+      assert(error instanceof ResultStoreError);
+      break;
+    }
+  }
+  store.updateEnding(id, {
+    storyStatus: 'failed',
+    storyErrorCode: 'ENDING_STORY_INVALID_TAG_EVIDENCE',
+    status: 'failed',
+    errorCode: 'ENDING_REFERENCE_MISSING',
+  });
+  assert.equal(store.ending('alice', id).storyStatus, 'failed');
+  const story = { title: '結末', text: '文章'.repeat(100), evaluation: '評価'.repeat(1000) };
+  store.updateEnding(id, { story, storyStatus: 'ready' });
+  assert.deepEqual(store.ending('alice', id).story, story);
+});
+
+test('reserving the ending at play creation protects it from later feed growth and counts globally', () => {
+  const store = new ResultStore({ maxEntryBytes: 32 * 1024, maxTotalBytes: 32 * 1024 });
+  const id = randomUUID();
+  store.create({ playId: id, ownerDigest: 'alice', locale: 'ja', reserveEnding: true });
+  for (let i = 0; i < 1000; i++) {
+    try {
+      store.appendMessage(id, { side: 'assistant', kind: 'result', text: '記録'.repeat(10) });
+    } catch (error) {
+      assert(error instanceof ResultStoreError);
+      break;
+    }
+  }
+  store.initializeEnding(id, view(id));
+  // Worst-case JSON escaping for the schema's display limits still fits the reserved slot.
+  const story = {
+    title: '\u0000'.repeat(200),
+    text: '\u0000'.repeat(240),
+    evaluation: '\u0000'.repeat(2000),
+  };
+  store.updateEnding(id, { storyStatus: 'ready', story });
+  store.updateEnding(id, { status: 'failed', errorCode: 'ENDING_REFERENCE_MISSING' });
+  assert.deepEqual(store.ending('alice', id).story, story);
+  const other = randomUUID();
+  assert.throws(
+    () => store.create({ playId: other, ownerDigest: 'bob', locale: 'en', reserveEnding: true }),
+    error(413, 'RESULT_CAPACITY'),
+  );
+  assert.equal(store.has(other), false, 'failed reservation does not leave a ghost play');
+  assert.equal(store.has(id), true);
+});
+
+test('a snapshot storage failure still starts result retention and cannot leak an ended play', () => {
+  let now = 1000;
+  const evicted: string[] = [];
+  const store = new ResultStore({
+    now: () => now,
+    ttlMs: 100,
+    maxEntryBytes: 32 * 1024,
+    onEvict: (id) => evicted.push(id),
+  });
+  const id = create(store);
+  store.initializeEnding(id, view(id));
+  assert.throws(
+    () => store.end(id, { status: 'lost', oversized: 'x'.repeat(32 * 1024) }),
+    error(413, 'RESULT_CAPACITY'),
+  );
+  assert.equal(store.ending('alice', id).retainUntil, new Date(1100).toISOString());
+  now = 1050;
+  store.end(id, { status: 'lost' });
+  assert.equal(store.ending('alice', id).retainUntil, new Date(1100).toISOString());
+  now = 1100;
+  assert.equal(store.has(id), false);
+  assert.deepEqual(evicted, [id]);
+});
+
 test('ending lifetime starts at game end and neither updates nor repeated end extend it', () => {
   let now = 0;
   const evicted: string[] = [];

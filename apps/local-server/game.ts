@@ -8,7 +8,12 @@ import {
   type GameFacts,
 } from '../../packages/shared/conversation.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
-import { coreJudgmentSchema, type CoreJudgment } from './game-ai.js';
+import { parseCoreJudgment, projectPublicJudgment, type CoreJudgment } from './game-ai.js';
+import {
+  CreativeAttemptLedger,
+  creativeSuccessNarrative,
+  normalizeIdea,
+} from './creative-acceptance.js';
 import type { Scenario } from '../../packages/shared/scenario.js';
 import {
   proposalSchema,
@@ -44,6 +49,7 @@ export class GameSession {
   currentContextVersion = 0;
   facts: GameFacts;
   private reservedEvidence = new Set<number>();
+  private readonly creativeAttempts?: CreativeAttemptLedger;
   private coreActions = new Map<
     string,
     {
@@ -90,7 +96,13 @@ export class GameSession {
     now?: () => number,
     private onEnd: () => void = () => {},
     readonly coreSnapshot?: ScenarioSnapshot,
+    creativeRandom?: () => number,
   ) {
+    if (coreSnapshot?.coreConfig.creativity?.enabled)
+      this.creativeAttempts = new CreativeAttemptLedger(
+        coreSnapshot.coreConfig.creativity.successProbability,
+        creativeRandom,
+      );
     this.credits = new GameCredits(scenario.rules.initialCredits);
     this.situation = scenario.obstacles[0].situation;
     if (coreSnapshot) this.generation = 1;
@@ -187,6 +199,7 @@ export class GameSession {
     this.photos = [];
     this.transcript = '';
     this.proposal = null;
+    this.creativeAttempts?.clear();
     this.clock.stop();
     this.onEnd();
   }
@@ -352,6 +365,7 @@ export class GameSession {
         controller.abort();
       }
       context.photos = [];
+      context.creativity = undefined;
     }
     for (const record of this.coreActions.values()) this.releaseActionControls(record);
   }
@@ -538,6 +552,12 @@ export class GameSession {
       }
     }
     if (context.inventory.length > 40) throw new GameError(409, 'INVENTORY_LIMIT');
+    if (this.creativeAttempts)
+      context.creativity = {
+        previousAttempts: this.creativeAttempts.candidates(
+          this.creativeIdentity(context, proposal).scope,
+        ),
+      };
     const ticket: ActionTicket = {
       id: randomUUID(),
       playId: this.id,
@@ -598,7 +618,7 @@ export class GameSession {
         this.assertPendingAction(ticket);
         record.attempts++;
         try {
-          judgment = coreJudgmentSchema.parse(
+          judgment = parseCoreJudgment(
             await this.ai.judge(
               {
                 ...structuredClone(context),
@@ -670,6 +690,101 @@ export class GameSession {
     const record = this.coreActions.get(ticket.id)!;
     if (record.controls.size) throw new GameError(409, 'ACTION_CONTROL_PENDING');
     const { context, proposal } = record;
+    // Validate the hypothetical candidate before drawing or changing any state.
+    // Failed/stale/cancelled requests never consume a draw.
+    let { facts, inventory } = this.validateCoreJudgment(context, judgment);
+    if (this.creativeAttempts && judgment.creativity) {
+      if (judgment.creativity.kind === 'stretch' && !judgment.success)
+        throw new Error('INVALID_STRETCH_CANDIDATE');
+      const identity = this.creativeIdentity(context, proposal);
+      const decision = this.creativeAttempts.resolve(
+        identity.scope,
+        identity.fingerprint,
+        judgment.creativity,
+      );
+      if (
+        !decision.allowed ||
+        judgment.creativity.kind === 'invalid' ||
+        // An earlier ordinary attempt grants no license for a later hypothetical stretch.
+        (decision.kind === 'ordinary' && judgment.creativity.kind === 'stretch')
+      ) {
+        judgment = projectPublicJudgment(this.coreSnapshot!, context, {
+          ...judgment,
+          success: false,
+          factChanges: [],
+          inventoryChanges: [],
+        });
+        ({ facts, inventory } = this.validateCoreJudgment(context, judgment));
+      } else if (decision.kind === 'stretch') {
+        if (!judgment.success) throw new Error('INVALID_STRETCH_CANDIDATE');
+        const description = creativeSuccessNarrative(
+          this.coreSnapshot!.locale,
+          judgment.creativity!.effect,
+          proposal.items.map((item) => item.name),
+        );
+        judgment = {
+          ...judgment,
+          narrative: `${description} ${judgment.narrative}`.slice(0, 2000),
+        };
+      }
+    }
+    const result = actionResultSchema.parse({
+      actionId: ticket.id,
+      beforeVersion: this.gameVersion,
+      afterVersion: this.gameVersion + 1,
+      success: judgment.success,
+      factChanges: judgment.factChanges,
+      inventoryChanges: judgment.inventoryChanges,
+      narrative: judgment.narrative,
+      shortReason: judgment.shortReason,
+    });
+    this.facts = facts;
+    this.inventory = inventory;
+    this.gameVersion++;
+    this.actionsUsed++;
+    this.situation = judgment.situation;
+    this.lastResult = { success: judgment.success, narrative: judgment.narrative };
+    this.photos = [];
+    this.transcript = '';
+    this.invalidate();
+    ticket.status = 'committed';
+    record.result = result;
+    this.recordCommittedAction(ticket.id, context, proposal, result);
+    this.clock.resume('judgment');
+    this.pending = null;
+    this.status = 'playing';
+    if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
+      this.end('won');
+    else if (judgment.success) {
+      this.obstacleIndex++;
+      this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
+      this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
+    }
+    return structuredClone(result);
+  }
+
+  private creativeIdentity(context: AIContext, proposal: Proposal) {
+    const keys = this.coreSnapshot!.scenarioV2.obstacles[context.obstacleIndex]!.factKeys;
+    return {
+      // gameVersion, knowledge reveals, new photos and unused inventory do not alter this scope.
+      scope: JSON.stringify([
+        context.facts!.obstacleId,
+        [...keys].sort().map((key) => [key, context.facts!.values[key]]),
+      ]),
+      fingerprint: JSON.stringify([
+        proposal.mode ?? 'tool',
+        normalizeIdea(proposal.usage),
+        proposal.items
+          .map((item) => [
+            normalizeIdea(item.name),
+            context.inventory.find((entry) => entry.id === item.inventoryId)?.status ?? 'available',
+          ])
+          .sort(),
+      ]),
+    };
+  }
+
+  private validateCoreJudgment(context: AIContext, judgment: CoreJudgment) {
     const facts = structuredClone(this.facts);
     const obstacle = this.coreSnapshot!.scenarioV2.obstacles[this.obstacleIndex];
     const allowedKeys = obstacle.factKeys;
@@ -711,39 +826,7 @@ export class GameSession {
       ids.add(change.id);
       Object.assign(item, change);
     }
-    const result = actionResultSchema.parse({
-      actionId: ticket.id,
-      beforeVersion: this.gameVersion,
-      afterVersion: this.gameVersion + 1,
-      success: judgment.success,
-      factChanges: judgment.factChanges,
-      inventoryChanges: judgment.inventoryChanges,
-      narrative: judgment.narrative,
-      shortReason: judgment.shortReason,
-    });
-    this.facts = facts;
-    this.inventory = inventory;
-    this.gameVersion++;
-    this.actionsUsed++;
-    this.situation = judgment.situation;
-    this.lastResult = { success: judgment.success, narrative: judgment.narrative };
-    this.photos = [];
-    this.transcript = '';
-    this.invalidate();
-    ticket.status = 'committed';
-    record.result = result;
-    this.recordCommittedAction(ticket.id, context, proposal, result);
-    this.clock.resume('judgment');
-    this.pending = null;
-    this.status = 'playing';
-    if (judgment.success && this.obstacleIndex === this.scenario.obstacles.length - 1)
-      this.end('won');
-    else if (judgment.success) {
-      this.obstacleIndex++;
-      this.facts.obstacleId = this.scenario.obstacles[this.obstacleIndex].id;
-      this.situation = this.scenario.obstacles[this.obstacleIndex].situation;
-    }
-    return structuredClone(result);
+    return { facts, inventory };
   }
 
   async commit(actionId: string, proposalRevision: number) {

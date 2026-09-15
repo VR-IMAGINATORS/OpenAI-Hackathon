@@ -19,6 +19,8 @@ Status: 2026-09-15のgrill-meと最終まとめで要件承認済み。仕様化
 
 上記以外の[game-core](../game-core/spec.md)、[写真送信制限](../photo-send-limit/spec.md)、[シナリオ](../story-integration/spec.md)、[難易度](../difficulty-selection/spec.md)、[公開構成](../hosted-multiplayer/spec.md)を引き継ぐ。
 
+2026-09-15更新: H05/H09の物理的成立性とH10の同一案の扱いは、[無茶な工夫の許容](../creative-acceptance/spec.md)で拡張する。通常の工夫は広く認め、道具と目標につながりがある無茶な案だけサーバーが1/3で成立させる。保留・重大リスク・特殊能力・知識の境界は維持する。
+
 ## 2. スコープとUI
 
 - 対象: 既存シナリオの知識整理、許容方針、Liveへの指示と情報、意図判断、自律行動、訂正、復旧、音声警告。モバイル主・PC副、日英の既存対応を維持する。
