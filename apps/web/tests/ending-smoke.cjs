@@ -101,10 +101,35 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByText('食器縛り', { exact: true }).waitFor();
     const readyGets = gets;
     await page.waitForTimeout(2300);
-    assert.equal(await readyNotice.count(), 0, 'completion notice dismisses automatically');
+    assert(await readyNotice.isVisible(), 'completion notice remains until acknowledged');
     assert.equal(gets, readyGets, 'ready should stop polling');
+    const dismissNotice = page.getByRole('button', {
+      name: '動画の生成完了を確認して閉じる', exact: true,
+    });
+    const dismissBounds = await dismissNotice.boundingBox();
+    assert(dismissBounds.width >= 44 && dismissBounds.height >= 44, 'check button is touch-sized');
+    await page.screenshot({ path: 'artifacts/ending-ready-confirm-mobile.png', fullPage: true });
+    await dismissNotice.click();
+    assert.equal(await readyNotice.count(), 0, 'check button dismisses the notice');
+    await page.getByRole('button', { name: 'リザルトを折りたたむ', exact: true }).click();
+    await page.getByRole('button', { name: 'リザルトを開く', exact: true }).click();
+    assert.equal(await readyNotice.count(), 0, 'acknowledged notice stays dismissed on re-render');
     await page.reload();
     await page.locator('video').waitFor();
+    await readyNotice.waitFor();
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.evaluate((id) => window.renderEnding(id, 'en'), first);
+    const englishDismiss = page.getByRole('button', {
+      name: 'Acknowledge video completion and close', exact: true,
+    });
+    await englishDismiss.waitFor();
+    const noticeBounds = await readyNotice.boundingBox();
+    assert(noticeBounds.x >= 0 && noticeBounds.x + noticeBounds.width <= 320, 'notice fits a narrow phone');
+    await englishDismiss.focus();
+    await englishDismiss.press('Space');
+    assert.equal(await readyNotice.count(), 0, 'check button supports keyboard acknowledgement');
+    await page.evaluate((id) => window.renderEnding(id), first);
+    await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.getByRole('heading', { name: '赤い印の約束' }).count(), 0);
     await page.getByText('食器縛り', { exact: true }).waitFor();
     const bounds = await page.evaluate(() => {
@@ -209,6 +234,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByRole('button', { name: 'リザルトを折りたたむ', exact: true }).click();
     status = 'ready';
     await readyNotice.waitFor();
+    await dismissNotice.click();
+    assert.equal(await readyNotice.count(), 0, 'notice can be acknowledged while result is folded');
     assert.equal(
       await page.locator('video').isVisible(),
       false,
@@ -221,6 +248,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await page.locator('.ending-tag').count(), 0);
     await page.reload();
     await page.locator('video').waitFor();
+    await dismissNotice.click();
     await page.getByText('不具合報告用の情報', { exact: true }).click();
     await page.getByText(storyErrorCode, { exact: true }).waitFor();
     status = 'failed';

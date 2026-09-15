@@ -104,8 +104,6 @@ export default function EndingVideo({
     if (readyNotified.current) return;
     readyNotified.current = true;
     setShowReadyNotice(true);
-    const timer = window.setTimeout(() => setShowReadyNotice(false), 1500);
-    return () => window.clearTimeout(timer);
   }, [ready, mediaFailed]);
   const story = !unavailable || unavailable === 'network' ? view?.story : null;
   const tagLabel = endingTagLabel(story?.tagId, locale);
@@ -162,9 +160,20 @@ export default function EndingVideo({
       aria-label={t('このプレイの結末', 'Your ending')}
     >
       {showReadyNotice && (
-        <div className="ending-ready-notice" role="status" aria-atomic="true">
-          <span aria-hidden="true">✓</span>
-          {t('リザルト動画ができました', 'Your ending video is ready')}
+        <div className="ending-ready-notice">
+          <span role="status" aria-atomic="true">
+            {t('リザルト動画ができました', 'Your ending video is ready')}
+          </span>
+          <button
+            type="button"
+            className="ending-ready-dismiss"
+            aria-label={t('動画の生成完了を確認して閉じる', 'Acknowledge video completion and close')}
+            onClick={() => setShowReadyNotice(false)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m5 12 4 4L19 6" />
+            </svg>
+          </button>
         </div>
       )}
       <div className="ending-heading">

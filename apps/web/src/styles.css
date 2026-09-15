@@ -2192,7 +2192,35 @@ h1 span {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
-  pointer-events: none;
+}
+.ending-ready-dismiss {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #9eead6;
+  border-radius: 50%;
+  background: #9eead6;
+  color: #163b31;
+  cursor: pointer;
+}
+.ending-ready-dismiss:hover {
+  background: #c7f4e5;
+}
+.ending-ready-dismiss:focus-visible {
+  outline: 3px solid #edf4f1;
+  outline-offset: 3px;
+}
+.ending-ready-dismiss svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .ending-continued {
   width: min(40vw, 240px, 100%);
