@@ -56,7 +56,7 @@ export interface RuntimePresentation {
     facts: import('../../packages/shared/conversation.js').GameFacts;
     situation: string;
   }): void;
-  notice?(text: string): void;
+  notice?(text: string, kind?: 'opening-briefing'): void;
   ending?(packet: EndingPacket, seal: () => EndingPacket): void;
   ended(state: import('../../packages/shared/game.js').PublicGameState): void;
 }
@@ -745,8 +745,9 @@ export class GameRuntime {
     ) {
       const text = this.pendingOpeningBriefing;
       this.pendingOpeningBriefing = undefined;
-      // A separate text-only bubble. Never enqueue a Live commentary command.
-      this.presentNotice(text);
+      // Publish the silent briefing with its already-running initial scene image.
+      // Never enqueue a Live commentary command.
+      this.presentNotice(text, 'opening-briefing');
     }
   }
   private drainNotifications() {
@@ -831,7 +832,7 @@ export class GameRuntime {
       text,
     });
   }
-  private presentNotice(text: string) {
+  private presentNotice(text: string, kind?: 'opening-briefing') {
     if (this.presentation?.notice) {
       this.story.append({
         sourceId: `notice:${randomUUID()}`,
@@ -840,7 +841,7 @@ export class GameRuntime {
         gameVersion: this.game.gameVersion,
         text,
       });
-      this.presentation.notice(text);
+      this.presentation.notice(text, kind);
     }
   }
   private presentScene(

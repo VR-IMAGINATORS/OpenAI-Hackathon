@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { createHostedApp } from '../apps/server/app.js';
 import { loadHostedConfig } from '../apps/server/config.js';
 import type { ChatMessage } from '../packages/shared/conversation.js';
+import { openingHandoff } from '../apps/local-server/story.js';
 
 async function setup(t: TestContext, reject = false) {
   const config = loadHostedConfig({
@@ -100,7 +101,56 @@ async function setup(t: TestContext, reject = false) {
     });
     return response;
   }
-  async function create(start = true) {
+  async function finishIntro(play: { playId: string; clientId: string; generation: number }) {
+    const { generation } = play;
+    for (const [index, speaker, delta] of [
+      [0, 'output', '聞こえる？ 聞こえたら返事をして。'],
+      [1, 'input', '聞こえるよ'],
+      [2, 'output', openingHandoff.ja],
+    ] as const) {
+      if (index === 2)
+        assert.equal(
+          (
+            await request('/api/play/voice-activity', play, {
+              generation,
+              sequence: 1,
+              input: 'quiet',
+              output: 'active',
+              playbackReady: true,
+            })
+          ).status,
+          202,
+        );
+      assert.equal(
+        (
+          await request('/api/play/events', play, {
+            generation,
+            event: {
+              type: `session.${speaker}_transcript.delta`,
+              event_id: randomUUID(),
+              delta,
+              start_ms: index * 1000,
+              end_ms: index * 1000 + 100,
+            },
+          })
+        ).status,
+        202,
+      );
+    }
+    assert.equal(
+      (
+        await request('/api/play/voice-activity', play, {
+          generation,
+          sequence: 2,
+          input: 'quiet',
+          output: 'quiet',
+          playbackReady: true,
+        })
+      ).status,
+      202,
+    );
+  }
+  async function create(start = true, withIntro = true) {
     const clientId = randomUUID();
     const response = await request('/api/plays', undefined, {
       requestId: randomUUID(),
@@ -108,11 +158,12 @@ async function setup(t: TestContext, reject = false) {
       locale: 'ja',
     });
     assert.equal(response.status, 201);
-    const play = { playId: (await response.json()).playId, clientId };
+    const play = { playId: (await response.json()).playId, clientId, generation: 0 };
     if (start) {
       const live = await request('/api/play/live', play, { requestId: randomUUID(), sdp: 'offer' });
       assert.equal(live.status, 201);
       const generation = (await live.json()).generation;
+      play.generation = generation;
       assert.equal(
         (await request('/api/play/heartbeat', play, { generation, voiceState: 'connected' }))
           .status,
@@ -124,6 +175,7 @@ async function setup(t: TestContext, reject = false) {
       });
       assert.equal(again.status, 200);
       assert.equal((await again.json()).state.status, 'playing');
+      if (withIntro) await finishIntro(play);
     }
     return play;
   }
@@ -136,6 +188,7 @@ async function setup(t: TestContext, reject = false) {
     hosted,
     request,
     create,
+    finishIntro,
     messages,
     pending,
     counts: () => ({ imageCalls, inspectionCalls }),
@@ -160,6 +213,11 @@ test('start image stays private until passed inspection, then attaches to its or
   await until(() => f.pending.length === 1);
   const before = (await f.messages(play)).find((m) => m.imageSlot)!;
   assert.ok(before);
+  assert.equal(before.kind, 'system');
+  assert.match(before.text, /特殊な通信/);
+  assert.ok(
+    (await f.messages(play)).filter((m) => m.kind === 'transcript').every((m) => !m.imageSlot),
+  );
   assert.equal(before.imageSlot!.assetId, null);
   assert.notEqual(before.imageSlot!.status, 'ready');
   f.resolve();
@@ -171,6 +229,30 @@ test('start image stays private until passed inspection, then attaches to its or
   const asset = await f.request('/api/play/assets/' + message.imageSlot!.assetId, play);
   assert.equal(asset.status, 200);
   assert.match(asset.headers.get('content-type') ?? '', /image\/jpeg/);
+  assert.deepEqual(f.counts(), { imageCalls: 1, inspectionCalls: 1 });
+});
+
+test('an initial image finished before the briefing stays hidden and appears with the later explanation', async (t) => {
+  const f = await setup(t),
+    play = await f.create(true, false);
+  await until(() => f.pending.length === 1);
+  assert.deepEqual(await f.messages(play), [], 'no early receiving bubble');
+  f.resolve();
+  await until(() => f.hosted.results.readySceneReferences(play.playId, 0).length === 1);
+  const reference = f.hosted.results.readySceneReferences(play.playId, 0)[0]!;
+  assert.deepEqual(await f.messages(play), [], 'finished image stays hidden too');
+  await f.finishIntro(play);
+  const messages = await f.messages(play);
+  assert.equal(messages.length, 4);
+  const briefing = messages[3]!;
+  assert.equal(briefing.id, reference.messageId);
+  assert.match(briefing.text, /特殊な通信/);
+  assert.equal(briefing.imageSlot?.status, 'ready');
+  assert.ok(messages.slice(0, 3).every((m) => !m.imageSlot));
+  assert.equal(
+    (await f.request('/api/play/assets/' + briefing.imageSlot!.assetId, play)).status,
+    200,
+  );
   assert.deepEqual(f.counts(), { imageCalls: 1, inspectionCalls: 1 });
 });
 test('two rejected generations fail the original slot without publishing assets', async (t) => {

@@ -43,6 +43,7 @@ interface Entry {
   version: number;
   order: number;
   messages: Map<string, ChatMessage>;
+  deferredMessages: Set<string>;
   groups: Map<string, Group>;
   removed: { id: string; version: number }[];
   floor: number;
@@ -85,6 +86,7 @@ export class ResultStore {
       version: 0,
       order: 0,
       messages: new Map(),
+      deferredMessages: new Set(),
       groups: new Map(),
       removed: [],
       floor: 0,
@@ -132,6 +134,7 @@ export class ResultStore {
       version: e.version,
       reset,
       upserts: [...e.messages.values()]
+        .filter((m) => !e.deferredMessages.has(m.id))
         .filter((m) => reset || m.updatedVersion > after)
         .sort((a, b) => a.createdOrder - b.createdOrder)
         .map((m) => structuredClone(m)),
@@ -139,7 +142,11 @@ export class ResultStore {
       retainUntil: e.retainUntil === null ? null : new Date(e.retainUntil).toISOString(),
     };
   }
-  appendMessage(playId: string, input: MessageInput): ChatMessage {
+  appendMessage(
+    playId: string,
+    input: MessageInput,
+    options: { deferDisplay?: boolean } = {},
+  ): ChatMessage {
     const e = this.entry(playId);
     if (input.id && e.messages.has(input.id)) return structuredClone(e.messages.get(input.id)!);
     const message = chatMessageSchema.parse({
@@ -156,13 +163,28 @@ export class ResultStore {
     e.version++;
     e.order++;
     e.messages.set(message.id, message);
+    if (options.deferDisplay) e.deferredMessages.add(message.id);
     try {
       this.trim(e, message.id);
       this.makeRoom(e, 0);
     } catch (error) {
       e.messages.delete(message.id);
+      e.deferredMessages.delete(message.id);
       throw error;
     }
+    return structuredClone(message);
+  }
+  /** Publish a prepared scene after speech, retaining its latest image state. */
+  publishMessage(playId: string, id: string, text: string): ChatMessage {
+    const e = this.entry(playId);
+    const old = e.messages.get(id);
+    if (!old) throw new ResultStoreError(404, 'MESSAGE_NOT_FOUND');
+    if (!e.deferredMessages.has(id)) return structuredClone(old);
+    // Validate and enforce capacity before changing visibility or display order.
+    const message = this.updateMessage(playId, id, { text });
+    message.createdOrder = ++e.order;
+    e.messages.set(id, message);
+    e.deferredMessages.delete(id);
     return structuredClone(message);
   }
   updateMessage(
@@ -260,6 +282,7 @@ export class ResultStore {
       );
       if (!oldest) throw new ResultStoreError(413, 'FEED_CAPACITY');
       e.messages.delete(oldest.id);
+      e.deferredMessages.delete(oldest.id);
       e.groups.delete(oldest.id);
       e.removed.push({ id: oldest.id, version: ++e.version });
       if (e.removed.length > 128) e.floor = e.removed.shift()!.version;

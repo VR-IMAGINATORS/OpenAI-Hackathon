@@ -99,7 +99,7 @@ function privateResponse(response: Response) {
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
 }
 
-test('HTTP opening feed starts without text and streams into the same image bubble', async (t) => {
+test('HTTP call-check transcript has no scene image or receiving placeholder', async (t) => {
   const f = await setup(t);
   const cookie = await f.login();
   const play = await f.create(cookie);
@@ -115,10 +115,7 @@ test('HTTP opening feed starts without text and streams into the same image bubb
     return response.json();
   };
   const initial = await feed();
-  assert.equal(initial.upserts.length, 1);
-  const opening = initial.upserts[0];
-  assert.equal(opening.text, '');
-  assert.ok(opening.imageSlot);
+  assert.equal(initial.upserts.length, 0);
   let expected = '';
   for (const [index, delta] of ['聞こえる？', '写真を送って。'].entries()) {
     const response = await f.request('/api/play/events', {
@@ -138,9 +135,8 @@ test('HTTP opening feed starts without text and streams into the same image bubb
     expected += delta;
     const current = await feed();
     assert.equal(current.upserts.length, 1);
-    assert.equal(current.upserts[0].id, opening.id);
     assert.equal(current.upserts[0].text, expected);
-    assert.ok(current.upserts[0].imageSlot);
+    assert.equal(current.upserts[0].imageSlot, null);
   }
 });
 
@@ -167,8 +163,7 @@ for (const locale of ['ja', 'en'] as const)
       await post('/api/play/heartbeat', { generation: live.generation, voiceState: 'connected' });
       const feed = async () => (await f.request('/api/play/feed', control)).json();
       const initial = await feed();
-      assert.equal(initial.upserts.length, 1);
-      assert.ok(initial.upserts[0].imageSlot, 'image generation begins before the introduction');
+      assert.equal(initial.upserts.length, 0, 'the initial image stays hidden until the briefing');
       let position = 100;
       const say = async (speaker: 'input' | 'output', delta: string) => {
         const event = {
@@ -212,7 +207,10 @@ for (const locale of ['ja', 'en'] as const)
       assert.equal(briefing.side, 'assistant');
       assert.equal(briefing.kind, 'system');
       assert.equal(briefing.relatedCommandSeq, null, 'display-only text has no speech command');
-      assert.equal(briefing.imageSlot, null, 'no additional scene image job');
+      assert.ok(briefing.imageSlot, 'the initial scene belongs to the silent briefing');
+      assert.ok(
+        delivered.upserts.slice(0, 3).every((m: { imageSlot: unknown }) => m.imageSlot === null),
+      );
       assert.match(briefing.text, locale === 'ja' ? /特殊な通信/ : /special connection/);
       assert.ok(
         briefing.text.endsWith(

@@ -39,6 +39,53 @@ test('feed preserves raw deltas, stable late groups and fixed photo/result order
   assert.notEqual(s.appendTranscript(id, delta('new generation', 1200, 2)).id, first.id);
   assert.throws(() => s.feed('alice', id, 9999), error('INVALID_CURSOR'));
 });
+test('a prepared scene publishes at the end of the conversation and preserves image updates and its ID', () => {
+  const s = new ResultStore(),
+    id = create(s);
+  const slot = {
+    status: 'queued' as const,
+    assetId: null,
+    errorCode: null,
+    deadline: new Date(Date.now() + 10000).toISOString(),
+  };
+  const prepared = s.appendMessage(
+    id,
+    { side: 'assistant', kind: 'system', text: '', liveGeneration: 1, imageSlot: slot },
+    { deferDisplay: true },
+  );
+  const firstFeed = s.feed('alice', id);
+  assert.deepEqual(firstFeed.upserts, []);
+  const call = s.appendTranscript(
+    id,
+    { ...delta('聞こえる？', 100), speaker: 'assistant' },
+    prepared.id,
+  );
+  assert.equal(call.imageSlot, null, 'call-check deltas cannot overwrite the deferred scene');
+  s.appendTranscript(id, delta('聞こえるよ', 1000));
+  const intro = s.appendTranscript(id, {
+    ...delta('詳しくはメッセージで送るわ。', 3000),
+    speaker: 'assistant',
+  });
+  s.updateMessage(id, prepared.id, { imageSlot: { ...slot, status: 'checking' } });
+  const before = s.feed('alice', id, firstFeed.version);
+  assert.equal(before.upserts.length, 3);
+  const published = s.publishMessage(id, prepared.id, '状況説明');
+  assert.ok(published.createdOrder > intro.createdOrder);
+  assert.equal(published.imageSlot?.status, 'checking');
+  const after = s.feed('alice', id, before.version);
+  assert.deepEqual(after.upserts, [published]);
+  assert.equal(s.feed('alice', id).upserts.at(-1)!.id, prepared.id);
+  assert.deepEqual(s.publishMessage(id, prepared.id, '二重配送'), published);
+  assert.deepEqual(s.feed('alice', id, after.version).upserts, []);
+  s.updateMessage(id, prepared.id, {
+    imageSlot: { ...slot, status: 'failed', errorCode: 'SCENE_RECEIVE_FAILED' },
+  });
+  const failed = s.feed('alice', id, after.version).upserts[0]!;
+  assert.equal(failed.id, prepared.id);
+  assert.equal(failed.text, '状況説明');
+  assert.equal(failed.createdOrder, published.createdOrder);
+});
+
 test('history trims transcript first and supports removed IDs and stale cursor reset', () => {
   const s = new ResultStore(),
     id = create(s);

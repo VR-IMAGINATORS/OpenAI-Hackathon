@@ -152,6 +152,7 @@ export function createHostedApp(
         locale: snapshot.locale,
         groupingGapMs: snapshot.coreConfig.chatGroupingGapMs,
       });
+      let openingSceneId: string | undefined;
       try {
         return new GameRuntime(
           id,
@@ -163,14 +164,18 @@ export function createHostedApp(
           now,
           snapshot,
           {
-            notice: (text) =>
-              safeDisplay(() =>
+            notice: (text, kind) =>
+              safeDisplay(() => {
+                if (kind === 'opening-briefing' && openingSceneId) {
+                  results.publishMessage(id, openingSceneId, text.slice(0, 4000));
+                  return;
+                }
                 results.appendMessage(id, {
                   side: 'assistant',
                   kind: 'system',
                   text: text.slice(0, 4000),
-                }),
-              ),
+                });
+              }),
             transcript: (fragment, messageId) =>
               safeDisplay(() => results.appendTranscript(id, fragment, messageId)),
             photos: async (photos) => {
@@ -193,6 +198,8 @@ export function createHostedApp(
             },
             scene: (input) =>
               safeDisplay(() => {
+                const deferDisplay = !!snapshot.scenarioV2.story && !!input.awaitTranscript;
+                if (deferDisplay) openingSceneId = input.messageId;
                 const deadlineIso = new Date(
                   resultNow() + (config.ai.imageJobTimeoutMs ?? 150_000),
                 ).toISOString();
@@ -202,15 +209,21 @@ export function createHostedApp(
                   errorCode: null,
                   deadline: deadlineIso,
                 };
-                results.appendMessage(id, {
-                  id: input.messageId,
-                  side: 'assistant',
-                  kind: 'result',
-                  text: input.awaitTranscript ? '' : input.text.slice(0, 4000),
-                  relatedCommandSeq: input.commandSeq,
-                  liveGeneration: input.generation,
-                  imageSlot: slot,
-                });
+                results.appendMessage(
+                  id,
+                  {
+                    id: input.messageId,
+                    side: 'assistant',
+                    // The initial scene belongs to the silent briefing. A system
+                    // message also cannot absorb the call-check transcript deltas.
+                    kind: deferDisplay ? 'system' : 'result',
+                    text: input.awaitTranscript ? '' : input.text.slice(0, 4000),
+                    relatedCommandSeq: input.commandSeq,
+                    liveGeneration: input.generation,
+                    imageSlot: slot,
+                  },
+                  { deferDisplay },
+                );
                 results.bindScene(id, input.messageId, input.gameVersion);
                 const fail = () =>
                   safeDisplay(() =>
