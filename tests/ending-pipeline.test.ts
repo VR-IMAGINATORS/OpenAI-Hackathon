@@ -464,7 +464,9 @@ test('tag evidence can use an early action outside the two film actions and text
   assert.equal(textAi.calls.length, 1);
   assert.equal(textAi.calls[0].body.input[0].content.length, 1);
   assert.deepEqual(payloadOf(textAi.calls[0]).actions, packet().actions);
-  assert.equal(payloadOf(textAi.calls[0]).tagCatalog.length, 40);
+  const tagIds = payloadOf(textAi.calls[0]).tagCatalog.map((tag: { id: string }) => tag.id);
+  assert(tagIds.includes(chosen.id));
+  assert(!tagIds.includes('combination'), 'single-item actions cannot earn a combination tag');
   assert.equal(payloadOf(f.calls[0]).establishedEnding.tag.id, chosen.id);
 });
 

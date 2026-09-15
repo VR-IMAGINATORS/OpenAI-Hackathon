@@ -167,7 +167,7 @@ for (const variant of [
     textFailure: 'incomplete',
   },
   {
-    name: 'evidence extraction failure still produces video',
+    name: 'evidence extraction failure recovers text before producing video',
     action: 'failed',
     ready: 'opening',
     textFailure: 'evidence',
@@ -200,6 +200,12 @@ for (const variant of [
     const textFailure = 'textFailure' in variant ? variant.textFailure : null;
     if (textFailure === 'evidence') p.evidence.records[0].text = 'x'.repeat(100 * 1024);
     const text = narrative(p);
+    const storyFailed = !!textFailure && textFailure !== 'evidence';
+    const availableEvidence = textFailure === 'evidence' ? p.evidence.records.slice(1) : p.evidence.records;
+    if (textFailure === 'evidence') {
+      text.story = 'The rope frayed during the attempt, but the exit is still closed.';
+      text.usedEvidenceIds = [];
+    }
     if ('tag' in variant)
       text.tag = {
         id: 'brute_force',
@@ -261,7 +267,7 @@ for (const variant of [
           if (request.text.format.name === 'ending_text') {
             textAttempts++;
             assert.deepEqual(input.actions, p.actions, 'failed outcomes must reach the writer');
-            assert.deepEqual(input.presentedEvidence, p.evidence.records);
+            assert.deepEqual(input.presentedEvidence, availableEvidence);
             assert.doesNotMatch(JSON.stringify(input), /UNPRESENTED_SECRET/);
             const { presentedEvidence, ...published } = text;
             if ('repairSource' in variant && textAttempts === 1)
@@ -284,9 +290,9 @@ for (const variant of [
             directions++;
             assert.equal(
               results.ending('owner', p.playId).storyStatus,
-              textFailure ? 'failed' : 'ready',
+              storyFailed ? 'failed' : 'ready',
             );
-            if (textFailure) {
+            if (storyFailed) {
               assert.equal(input.establishedEnding, null);
               assert.equal(input.evidenceIncomplete, true);
               assert.equal(input.clearedIds.length, 0);
@@ -295,7 +301,8 @@ for (const variant of [
             assert.deepEqual(input.allowedModes, replay ? ['actions', 'aftermath'] : ['aftermath']);
             assert.deepEqual(input.actions, p.actions);
             assert.deepEqual(input.facts, p.facts);
-            assert.deepEqual(input.presentedEvidence, textFailure ? [] : p.evidence.records);
+            assert.deepEqual(input.presentedEvidence, storyFailed ? [] : availableEvidence);
+            if (textFailure === 'evidence') assert.equal(input.evidenceIncomplete, true);
             if (!replay) {
               assert.equal(request.text.format.schema.properties.mode.const, 'aftermath');
               assert.equal(request.text.format.schema.properties.usedActionIds.maxItems, 0);
@@ -397,8 +404,14 @@ for (const variant of [
       assert.equal(failures[0].context!.invalidSourceCount, 1);
       assert.equal(failures[0].context!.actionSourceMixupCount, 1);
     }
-    assert.equal(view.storyStatus, textFailure ? 'failed' : 'ready');
-    if (textFailure) {
+    assert.equal(view.storyStatus, storyFailed ? 'failed' : 'ready');
+    if (textFailure === 'evidence') {
+      assert.equal(textAttempts, 1);
+      assert.equal(view.storyErrorCode, null);
+      assert.equal(failures.length, 1);
+      assert.equal(failures[0].code, 'ENDING_EXTRACTION_EVIDENCE_TOO_LARGE');
+    }
+    if (textFailure && storyFailed) {
       assert.equal(view.story, null);
       const causes = {
         network: 'FAILED',

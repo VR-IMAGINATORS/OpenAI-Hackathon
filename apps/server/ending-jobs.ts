@@ -52,6 +52,7 @@ interface Job {
   before: EndingReference[];
   video: boolean;
   storyReady: boolean;
+  storyErrorCode?: string;
   phase: 'text' | 'video';
   narrative?: EndingNarrative;
   sealedPacket?: EndingPacket;
@@ -66,6 +67,7 @@ export interface EndingJobsOptions {
   graceMs?: number;
   pollMs?: number;
   storyTimeoutMs?: number;
+  evidenceTimeoutMs?: number;
   prepare?: (
     jobId: string,
     packet: EndingPacket,
@@ -127,6 +129,8 @@ export class EndingJobs {
               clearedCount: packet.clearedIds.length,
               actionCount: packet.actions.length,
               failedActionCount: packet.actions.filter((action) => !action.success).length,
+              evidenceRecordCount: packet.evidence.records.length,
+              evidenceBytes: Buffer.byteLength(JSON.stringify(packet.evidence.records)),
               validationFields: endingValidationFields(error),
               ...endingSourceCounts(error),
             }
@@ -315,6 +319,13 @@ export class EndingJobs {
           AbortSignal.any([job.controller.signal, textDeadline]),
           (error) =>
             this.reportFailure(job.playId, 'story_retry', endingFailureCode(error, 'story'), error),
+          {
+            evidenceTimeoutMs: this.options.evidenceTimeoutMs,
+            onEvidenceFallback: (error) =>
+              this.reportFailure(
+                job.playId, 'extraction', endingFailureCode(error, 'extraction'), error,
+              ),
+          },
         );
         textDeadline.throwIfAborted();
         this.publishStory(job, publicEndingStory(narrative));
@@ -324,6 +335,7 @@ export class EndingJobs {
         const errorCode = textDeadline.aborted
           ? 'ENDING_STORY_TIMEOUT'
           : endingFailureCode(error, 'story');
+        job.storyErrorCode = errorCode;
         this.update(job.playId, { storyStatus: 'failed', storyErrorCode: errorCode });
         this.reportFailure(job.playId, 'story', errorCode, error);
       }
@@ -446,6 +458,7 @@ export class EndingJobs {
           }
         : {}),
       storyStatus: job.storyReady ? 'ready' : 'failed',
+      ...(!job.storyReady ? { storyErrorCode: job.storyErrorCode ?? errorCode } : {}),
       errorCode,
       videoPath: null,
     });
@@ -473,6 +486,7 @@ export class EndingJobs {
         ? { status: reason === 'ENDING_TIMEOUT' ? ('expired' as const) : ('failed' as const) }
         : {}),
       storyStatus: job.storyReady ? 'ready' : 'failed',
+      ...(!job.storyReady ? { storyErrorCode: job.storyErrorCode ?? reason } : {}),
       errorCode: reason,
       videoPath: null,
     });

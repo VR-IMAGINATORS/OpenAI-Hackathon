@@ -3,13 +3,14 @@ import { AiServiceError } from '../../packages/server/ai-service.js';
 import { UpstreamError } from '../../packages/server/openai.js';
 import { FalSubmitError, FalTransportError } from '../../packages/server/fal.js';
 import { EndingVideoMediaError } from '../../packages/server/ending-video-media.js';
-import { EndingSourceError } from '../local-server/ending-ai.js';
+import { EndingSourceError, EndingEvidenceError } from '../local-server/ending-ai.js';
 import { EndingRequestError } from '../../packages/server/ending-ai-request.js';
 
 export type EndingStage =
   | 'reference'
   | 'story'
   | 'story_retry'
+  | 'extraction'
   | 'direction'
   | 'start_frame'
   | 'start_inspection'
@@ -26,14 +27,19 @@ export interface EndingFailureContext {
   clearedCount: number;
   actionCount: number;
   failedActionCount: number;
+  evidenceRecordCount?: number;
+  evidenceBytes?: number;
   validationFields?: string;
   invalidSourceCount?: number;
   actionSourceMixupCount?: number;
   eventSourceMixupCount?: number;
+  quoteMismatchCount?: number;
 }
 
 export function endingSourceCounts(error: unknown) {
-  return error instanceof EndingSourceError ? error.counts : {};
+  return error instanceof EndingSourceError || error instanceof EndingEvidenceError
+    ? error.counts
+    : {};
 }
 
 /** Only schema-owned field names; never include issues, inputs or upstream text. */
@@ -99,6 +105,7 @@ export function endingFailureCode(error: unknown, stage: EndingStage): string {
     ENDING_INVALID_EVIDENCE: 'INVALID_EVIDENCE',
     ENDING_INVALID_TAG_EVIDENCE: 'INVALID_TAG_EVIDENCE',
     ENDING_EVIDENCE_TOO_LARGE: 'EVIDENCE_TOO_LARGE',
+    ENDING_EVIDENCE_TIMEOUT: 'TIMEOUT',
     ENDING_INVALID_RESPONSE: 'INVALID_RESPONSE',
     ENDING_RESPONSE_INCOMPLETE: 'RESPONSE_INCOMPLETE',
     ENDING_RESPONSE_REFUSED: 'RESPONSE_REFUSED',

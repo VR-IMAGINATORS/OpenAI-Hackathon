@@ -479,6 +479,19 @@ test('local deadline and late preparation do not submit; result eviction also ab
   await until(() => other.jobs.snapshot().remaining === 0);
   assert.equal(other.counts().submits, 0);
 });
+
+test('expiry during transcript grace records the story error separately from video status', async (t) => {
+  const f = setup(t, { graceMs: 50_000 });
+  const p = f.add();
+  await until(() => p.view().storyStatus === 'generating');
+  f.setNow(60_000);
+  f.jobs.tick();
+  await until(() => f.jobs.snapshot().remaining === 0);
+  assert.equal(p.view().storyStatus, 'failed');
+  assert.equal(p.view().storyErrorCode, 'ENDING_TIMEOUT');
+  assert.equal(p.view().status, 'expired');
+  assert.equal(f.ai.snapshot().responseAttempts, 0);
+});
 test('invalid MP4 is not published, factual outcome survives, and completed provider releases capacity', async (t) => {
   const f = setup(t, {
     fal: {

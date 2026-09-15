@@ -74,6 +74,26 @@ export function validateEndingTag(
   }
 }
 
+/** Exclude mechanically impossible choices before asking the model to classify the method. */
+export function eligibleEndingTags(packet: EndingPacket) {
+  if (!packet.actions.length) return [];
+  return endingTags.filter((tag) => {
+    try {
+      validateEndingTag(
+        {
+          id: tag.id,
+          evidenceActionIds: packet.actions.map((action) => action.actionId),
+          reason: 'Candidate eligibility',
+        },
+        packet,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function publicEndingStory(design: {
   title: string;
   story: string;
