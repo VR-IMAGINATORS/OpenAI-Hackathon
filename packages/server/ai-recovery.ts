@@ -14,10 +14,14 @@ export function recoverableAiError(error: unknown): boolean {
   if (
     error instanceof Error &&
     [
-      'ENDING_RESPONSE_REFUSED', 'INSPECTION_REFUSED', 'ENDING_CANCELLED',
-      'ENDING_EXPIRED', 'ENDING_DRAINING',
+      'ENDING_RESPONSE_REFUSED',
+      'INSPECTION_REFUSED',
+      'ENDING_CANCELLED',
+      'ENDING_EXPIRED',
+      'ENDING_DRAINING',
     ].includes(error.message)
-  ) return false;
+  )
+    return false;
   // Malformed output, unreadable images and network errors can improve on another attempt.
   return error instanceof Error;
 }
@@ -25,7 +29,8 @@ export function recoverableAiError(error: unknown): boolean {
 /** A local direction can also survive exhausted text budget or an oversized AI request. */
 export function canUseAftermathDirection(error: unknown): boolean {
   return (
-    recoverableAiError(error) || error instanceof EndingRequestError ||
+    recoverableAiError(error) ||
+    error instanceof EndingRequestError ||
     (error instanceof AiServiceError && error.code === 'REQUEST_LIMIT')
   );
 }

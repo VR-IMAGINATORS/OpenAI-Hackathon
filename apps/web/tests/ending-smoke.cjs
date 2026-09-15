@@ -104,7 +104,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(await readyNotice.isVisible(), 'completion notice remains until acknowledged');
     assert.equal(gets, readyGets, 'ready should stop polling');
     const dismissNotice = page.getByRole('button', {
-      name: '動画の生成完了を確認して閉じる', exact: true,
+      name: '動画の生成完了を確認して閉じる',
+      exact: true,
     });
     const dismissBounds = await dismissNotice.boundingBox();
     assert(dismissBounds.width >= 44 && dismissBounds.height >= 44, 'check button is touch-sized');
@@ -120,11 +121,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.setViewportSize({ width: 320, height: 568 });
     await page.evaluate((id) => window.renderEnding(id, 'en'), first);
     const englishDismiss = page.getByRole('button', {
-      name: 'Acknowledge video completion and close', exact: true,
+      name: 'Acknowledge video completion and close',
+      exact: true,
     });
     await englishDismiss.waitFor();
     const noticeBounds = await readyNotice.boundingBox();
-    assert(noticeBounds.x >= 0 && noticeBounds.x + noticeBounds.width <= 320, 'notice fits a narrow phone');
+    assert(
+      noticeBounds.x >= 0 && noticeBounds.x + noticeBounds.width <= 320,
+      'notice fits a narrow phone',
+    );
     await englishDismiss.focus();
     await englishDismiss.press('Space');
     assert.equal(await readyNotice.count(), 0, 'check button supports keyboard acknowledgement');

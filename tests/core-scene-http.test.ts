@@ -323,7 +323,9 @@ test('drain aborts an in-flight generation and cannot publish a late image', asy
   const pending = f.pending[0]!;
   await f.hosted.drain();
   assert.equal(pending.signal?.aborted, true);
-  await until(async () => (await f.messages(play)).some((m) => m.imageSlot?.status === 'cancelled'));
+  await until(async () =>
+    (await f.messages(play)).some((m) => m.imageSlot?.status === 'cancelled'),
+  );
   f.resolve();
   await new Promise((r) => setTimeout(r, 40));
   assert.ok((await f.messages(play)).every((m) => m.imageSlot?.status !== 'ready'));

@@ -413,7 +413,10 @@ export class EndingJobs {
             evidenceTimeoutMs: this.options.evidenceTimeoutMs,
             onEvidenceFallback: (error) =>
               this.reportFailure(
-                job.playId, 'extraction', endingFailureCode(error, 'extraction'), error,
+                job.playId,
+                'extraction',
+                endingFailureCode(error, 'extraction'),
+                error,
               ),
           },
         );

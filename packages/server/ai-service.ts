@@ -405,7 +405,11 @@ export class AiService {
       return value;
     } catch (error) {
       if (controller.signal.aborted) {
-        if (!permit.cancelled && permit.cancellationEpoch === epoch && this.now() < permit.expiresAt)
+        if (
+          !permit.cancelled &&
+          permit.cancellationEpoch === epoch &&
+          this.now() < permit.expiresAt
+        )
           throw new AiServiceError(504, 'MEDIA_CALL_TIMEOUT', 'Image call timed out');
         throw new AiServiceError(410, 'MEDIA_EXPIRED', 'Image request expired');
       }

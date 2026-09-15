@@ -167,7 +167,10 @@ export default function EndingVideo({
           <button
             type="button"
             className="ending-ready-dismiss"
-            aria-label={t('動画の生成完了を確認して閉じる', 'Acknowledge video completion and close')}
+            aria-label={t(
+              '動画の生成完了を確認して閉じる',
+              'Acknowledge video completion and close',
+            )}
             onClick={() => setShowReadyNotice(false)}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -298,18 +301,18 @@ export default function EndingVideo({
               onError={() => setMediaFailed(true)}
             />
           )}
-        {ready && mediaFailed && (
-          <div role="status">
-            <p>
-              {t(
-                '動画を再生できません。プレイの結果は上に表示されています。',
-                'The video could not be played. Your game result is shown above.',
-              )}
-            </p>
-            <button type="button" onClick={() => setMediaFailed(false)}>
-              {t('動画を読み直す', 'Reload video')}
-            </button>
-          </div>
+          {ready && mediaFailed && (
+            <div role="status">
+              <p>
+                {t(
+                  '動画を再生できません。プレイの結果は上に表示されています。',
+                  'The video could not be played. Your game result is shown above.',
+                )}
+              </p>
+              <button type="button" onClick={() => setMediaFailed(false)}>
+                {t('動画を読み直す', 'Reload video')}
+              </button>
+            </div>
           )}
         </div>
         <div className="ending-continued">

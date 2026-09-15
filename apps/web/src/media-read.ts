@@ -20,20 +20,29 @@ export async function readImageAsset(
     const current = AbortSignal.any([signal, deadline.signal]);
     try {
       const response = await (options.fetch ?? fetch)(url, {
-        credentials: 'same-origin', cache: 'no-store', headers, signal: current,
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers,
+        signal: current,
       });
       const length = response.headers.get('content-length');
-      if (!response.ok ||
+      if (
+        !response.ok ||
         response.headers.get('content-type')?.split(';')[0] !== 'image/jpeg' ||
-        (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_IMAGE_BYTES))) {
+        (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_IMAGE_BYTES))
+      ) {
         await response.body?.cancel().catch(() => {});
-        throw new MediaReadError(response.status === 408 || response.status === 429 || response.status >= 500);
+        throw new MediaReadError(
+          response.status === 408 || response.status === 429 || response.status >= 500,
+        );
       }
       const reader = response.body?.getReader();
       if (!reader) throw new MediaReadError(true);
       const chunks: Uint8Array<ArrayBuffer>[] = [];
       let size = 0;
-      const abort = () => { void reader.cancel().catch(() => {}); };
+      const abort = () => {
+        void reader.cancel().catch(() => {});
+      };
       current.addEventListener('abort', abort, { once: true });
       try {
         for (;;) {
@@ -58,11 +67,17 @@ export async function readImageAsset(
       clearTimeout(timer);
     }
     await new Promise<void>((resolve, reject) => {
-      const stop = () => { clearTimeout(wait); reject(signal.reason); };
-      const wait = setTimeout(() => {
-        signal.removeEventListener('abort', stop);
-        resolve();
-      }, (options.retryMs ?? 1000) * 2 ** attempt);
+      const stop = () => {
+        clearTimeout(wait);
+        reject(signal.reason);
+      };
+      const wait = setTimeout(
+        () => {
+          signal.removeEventListener('abort', stop);
+          resolve();
+        },
+        (options.retryMs ?? 1000) * 2 ** attempt,
+      );
       signal.addEventListener('abort', stop, { once: true });
       if (signal.aborted) stop();
     });

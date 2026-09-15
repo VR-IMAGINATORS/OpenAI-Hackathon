@@ -220,7 +220,12 @@ for (const variant of [
   { name: 'cancelled final scene at time limit', ready: [0, 1], finalStatus: 'cancelled' },
   { name: 'only opening image at time limit', ready: [0], finalStatus: 'queued' },
   { name: 'images completing after cutoff', ready: [0], finalStatus: 'queued', late: true },
-  { name: 'no completed scene at time limit recovers a late image', ready: [], finalStatus: 'queued', late: true },
+  {
+    name: 'no completed scene at time limit recovers a late image',
+    ready: [],
+    finalStatus: 'queued',
+    late: true,
+  },
   { name: 'no completed image before the bounded wait expires', ready: [], finalStatus: 'queued' },
   {
     name: 'direction timeout after text',

@@ -4,7 +4,11 @@ import { readFileSync } from 'node:fs';
 import sharp from 'sharp';
 import { AiService } from '../packages/server/ai-service.js';
 import { loadAiConfig } from '../packages/server/ai-config.js';
-import { createOpenAITransport, UpstreamError, type OpenAITransport } from '../packages/server/openai.js';
+import {
+  createOpenAITransport,
+  UpstreamError,
+  type OpenAITransport,
+} from '../packages/server/openai.js';
 import { normalizeGeneratedImage, type SceneInput } from '../packages/server/image-service.js';
 import { SceneJobs } from '../apps/server/scene-jobs.js';
 import { parseScenarioV2 } from '../packages/shared/scenario.js';
@@ -444,15 +448,25 @@ test('media configuration rejects unsupported models, too-short deadlines and mi
 
 test('scene failures retain a safe cause and cancellation remains distinct from failure', async () => {
   const reports: { playId: string; stage: string; code: string }[] = [];
-  const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), fake({
-    createImage: async () => { throw new Error('PRIVATE_PROMPT_AND_PHOTO'); },
-  }));
+  const ai = new AiService(
+    loadAiConfig({ AI_MODE: 'mock' }),
+    fake({
+      createImage: async () => {
+        throw new Error('PRIVATE_PROMPT_AND_PHOTO');
+      },
+    }),
+  );
   ai.register('one', performance.now() + 100000);
   const jobs = new SceneJobs(ai, {
     onFailure: (playId, stage, code) => reports.push({ playId, stage, code }),
   });
   let failure: string | undefined;
-  jobs.enqueue(input(), { ready: () => assert.fail('unverified image'), failed: (code) => { failure = code; } });
+  jobs.enqueue(input(), {
+    ready: () => assert.fail('unverified image'),
+    failed: (code) => {
+      failure = code;
+    },
+  });
   await until(() => !!failure);
   assert.equal(failure, 'SCENE_RECEIVE_FAILED');
   assert.equal(reports.length, 1);
@@ -461,29 +475,45 @@ test('scene failures retain a safe cause and cancellation remains distinct from 
   let cancelled: string | undefined;
   jobs.enqueue(input('one', 'cancelled-scene'), {
     ready: () => assert.fail('cancelled image'),
-    failed: (_code, status) => { cancelled = status; },
+    failed: (_code, status) => {
+      cancelled = status;
+    },
   });
   jobs.cancelAll();
   assert.equal(cancelled, 'cancelled');
 });
 
 test('scene inspection outage rechecks the same image, including after the last generation attempt', async () => {
-  let generates = 0, inspections = 0, ready = false;
+  let generates = 0,
+    inspections = 0,
+    ready = false;
   const inspectedImages: string[] = [];
-  const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), fake({
-    createImage: async () => {
-      if (++generates === 1) throw new UpstreamError(502, 503);
-      return generated;
-    },
-    createResponse: async (body) => {
-      inspectedImages.push((body as any).input[0].content[1].image_url);
-      if (++inspections === 1) throw new UpstreamError(502, 503);
-      return { output: [{ content: [{ type: 'output_text', text: '{"verdict":"pass","contradictions":[]}' }] }] };
-    },
-  }));
+  const ai = new AiService(
+    loadAiConfig({ AI_MODE: 'mock' }),
+    fake({
+      createImage: async () => {
+        if (++generates === 1) throw new UpstreamError(502, 503);
+        return generated;
+      },
+      createResponse: async (body) => {
+        inspectedImages.push((body as any).input[0].content[1].image_url);
+        if (++inspections === 1) throw new UpstreamError(502, 503);
+        return {
+          output: [
+            { content: [{ type: 'output_text', text: '{"verdict":"pass","contradictions":[]}' }] },
+          ],
+        };
+      },
+    }),
+  );
   ai.register('one', performance.now() + 100000);
   const jobs = new SceneJobs(ai, { retryDelayMs: 1 });
-  jobs.enqueue(input(), { ready: () => { ready = true; }, failed: () => assert.fail('image should recover') });
+  jobs.enqueue(input(), {
+    ready: () => {
+      ready = true;
+    },
+    failed: () => assert.fail('image should recover'),
+  });
   await until(() => ready);
   assert.equal(generates, 2);
   assert.equal(inspections, 2);
@@ -494,19 +524,33 @@ test('scene inspection outage rechecks the same image, including after the last 
 
 test('scene auth failures stop immediately, and incomplete pass responses cannot publish an image', async () => {
   for (const failure of ['auth', 'incomplete']) {
-    let failed = false, ready = false;
-    const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), fake({
-      createImage: async () => {
-        if (failure === 'auth') throw new UpstreamError(502, 401);
-        return generated;
-      },
-      createResponse: async () => ({ status: 'incomplete', output: [{ content: [
-        { type: 'output_text', text: '{"verdict":"pass","contradictions":[]}' },
-      ] }] }),
-    }));
+    let failed = false,
+      ready = false;
+    const ai = new AiService(
+      loadAiConfig({ AI_MODE: 'mock' }),
+      fake({
+        createImage: async () => {
+          if (failure === 'auth') throw new UpstreamError(502, 401);
+          return generated;
+        },
+        createResponse: async () => ({
+          status: 'incomplete',
+          output: [
+            { content: [{ type: 'output_text', text: '{"verdict":"pass","contradictions":[]}' }] },
+          ],
+        }),
+      }),
+    );
     ai.register('one', performance.now() + 100000);
     const jobs = new SceneJobs(ai, { retryDelayMs: 1 });
-    jobs.enqueue(input(), { ready: () => { ready = true; }, failed: () => { failed = true; } });
+    jobs.enqueue(input(), {
+      ready: () => {
+        ready = true;
+      },
+      failed: () => {
+        failed = true;
+      },
+    });
     await until(() => failed);
     assert.equal(ready, false);
     assert.equal(ai.snapshot().imageAttempts, failure === 'auth' ? 1 : 2);

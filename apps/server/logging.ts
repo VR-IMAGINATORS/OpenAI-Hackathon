@@ -25,7 +25,13 @@ export interface OperationalEvent {
 export function operationalLog(event: OperationalEvent, write = console.log): void {
   const safe: Record<string, string | number> = { event: event.event };
   for (const key of [
-    'correlationId', 'version', 'errorCode', 'validationFields', 'route', 'method', 'stage',
+    'correlationId',
+    'version',
+    'errorCode',
+    'validationFields',
+    'route',
+    'method',
+    'stage',
   ] as const) {
     if (event[key] !== undefined) safe[key] = event[key]!;
   }

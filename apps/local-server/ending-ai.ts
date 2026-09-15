@@ -351,7 +351,10 @@ export async function createEndingText(
   let evidenceIncomplete = packet.evidence.truncated;
   try {
     evidence = await endingClues(
-      ai, jobId, packet, AbortSignal.any([signal, extractionDeadline.signal]),
+      ai,
+      jobId,
+      packet,
+      AbortSignal.any([signal, extractionDeadline.signal]),
     );
     extractionDeadline.signal.throwIfAborted();
   } catch (error) {
@@ -381,12 +384,17 @@ export async function createEndingText(
   };
   // Repeated complete fact snapshots can exceed the 128 KiB request cap even
   // with few actions. Preserve every action and every actual fact transition.
-  if (Buffer.byteLength(JSON.stringify({ ...baseInput, presentedEvidence: evidence })) > 112 * 1024) {
+  if (
+    Buffer.byteLength(JSON.stringify({ ...baseInput, presentedEvidence: evidence })) >
+    112 * 1024
+  ) {
     baseInput.actionFactsAreChanges = true;
     baseInput.actions = packet.actions.map((action) => {
       const changed = new Set(
-        [...Object.keys(action.beforeFacts.values), ...Object.keys(action.afterFacts.values)]
-          .filter((key) => action.beforeFacts.values[key] !== action.afterFacts.values[key]),
+        [
+          ...Object.keys(action.beforeFacts.values),
+          ...Object.keys(action.afterFacts.values),
+        ].filter((key) => action.beforeFacts.values[key] !== action.afterFacts.values[key]),
       );
       return {
         ...action,
@@ -427,7 +435,8 @@ export async function createEndingText(
       actionId: actionRefs.encode(action.actionId),
     })),
     presentedEvidence: evidence.map((record) => ({
-      ...record, sourceId: evidenceRefs.encode(record.sourceId),
+      ...record,
+      sourceId: evidenceRefs.encode(record.sourceId),
     })),
   };
   const schema = endingTextSchema.extend({

@@ -702,7 +702,9 @@ test('persistent unknown inspection, inconsistent pass and network failure exhau
       });
     });
     await assert.rejects(
-      createEndingFrames(f.ai, 'job', packet(), design(), final, before, signal(), undefined, { retryDelayMs: 1 }),
+      createEndingFrames(f.ai, 'job', packet(), design(), final, before, signal(), undefined, {
+        retryDelayMs: 1,
+      }),
     );
     assert.equal(f.calls.filter((call) => call.kind === 'frame').length, 2);
     assert.equal(

@@ -27,42 +27,69 @@ function packet(): EndingPacket {
     coreConfigPath: 'config/game-core.json',
   }).current('ja');
   return {
-    playId: 'recovery-play', snapshot, scenario: localizeScenario(snapshot.scenarioV2, 'ja'),
-    locale: 'ja', outcome: 'bad', endReason: 'time_limit', clearedIds: [],
+    playId: 'recovery-play',
+    snapshot,
+    scenario: localizeScenario(snapshot.scenarioV2, 'ja'),
+    locale: 'ja',
+    outcome: 'bad',
+    endReason: 'time_limit',
+    clearedIds: [],
     remainingObstacles: [{ id: 'door', title: '閉じた扉', situation: 'UNPRESENTED_SECRET' }],
-    facts: { obstacleId: 'door', values: { door: 'closed' } }, inventory: [],
-    endedAt: 0, gameVersion: 1, finalMessageId: null, recentActionScenes: [],
-    actions: [{
-      actionId: 'attempt', order: 1, obstacleId: 'door', usage: 'ひもで引く',
-      items: [{ id: 'rope', name: 'ひも', beforeStatus: 'available', afterStatus: 'available' }],
-      beforeVersion: 0, afterVersion: 1,
-      beforeFacts: { obstacleId: 'door', values: { door: 'closed' } },
-      afterFacts: { obstacleId: 'door', values: { door: 'closed' } },
-      success: false, cleared: false, narrative: '引いたが扉は開かなかった。',
-    }],
+    facts: { obstacleId: 'door', values: { door: 'closed' } },
+    inventory: [],
+    endedAt: 0,
+    gameVersion: 1,
+    finalMessageId: null,
+    recentActionScenes: [],
+    actions: [
+      {
+        actionId: 'attempt',
+        order: 1,
+        obstacleId: 'door',
+        usage: 'ひもで引く',
+        items: [{ id: 'rope', name: 'ひも', beforeStatus: 'available', afterStatus: 'available' }],
+        beforeVersion: 0,
+        afterVersion: 1,
+        beforeFacts: { obstacleId: 'door', values: { door: 'closed' } },
+        afterFacts: { obstacleId: 'door', values: { door: 'closed' } },
+        success: false,
+        cleared: false,
+        narrative: '引いたが扉は開かなかった。',
+      },
+    ],
     evidence: {
       records: Array.from({ length: 80 }, (_, i) => ({
-        sourceId: `clue-${i}`, kind: i === 0 ? 'briefing' as const : 'assistant_transcript' as const,
-        order: i, generation: 1, gameVersion: 0,
+        sourceId: `clue-${i}`,
+        kind: i === 0 ? ('briefing' as const) : ('assistant_transcript' as const),
+        order: i,
+        generation: 1,
+        gameVersion: 0,
         text: `既知の観察${i}。` + '扉は閉じたままです。'.repeat(40),
-      })), truncated: false,
+      })),
+      truncated: false,
     },
   };
 }
 
 function setup(run: (name: string, input: any, body: any, signal?: AbortSignal) => unknown) {
   const calls: { name: string; input: any; body: any }[] = [];
-  const ai = new AiService(loadAiConfig({ AI_MODE: 'mock' }), {
-    async createLiveSession() { throw new Error('Unexpected live request'); },
-    async hangup() {},
-    async createResponse(body, signal) {
-      const b = body as any;
-      const name = b.text.format.name;
-      const input = JSON.parse(b.input[0].content[0].text);
-      calls.push({ name, input, body: b });
-      return run(name, input, b, signal);
+  const ai = new AiService(
+    loadAiConfig({ AI_MODE: 'mock' }),
+    {
+      async createLiveSession() {
+        throw new Error('Unexpected live request');
+      },
+      async hangup() {},
+      async createResponse(body, signal) {
+        const b = body as any;
+        const name = b.text.format.name;
+        const input = JSON.parse(b.input[0].content[0].text);
+        calls.push({ name, input, body: b });
+        return run(name, input, b, signal);
+      },
     },
-  }, () => 0);
+    () => 0,
+  );
   ai.register('recovery-play', 100_000);
   ai.registerEnding('recovery-play', 'ending-job', 100_000);
   return { ai, calls };
@@ -75,11 +102,16 @@ for (const variant of ['quote', 'source', 'incomplete', 'shape', 'json'] as cons
       if (name === 'ending_text') return response(story);
       if (variant === 'incomplete') return { status: 'incomplete', output: [] };
       if (variant === 'shape') return response({ clues: 'PRIVATE_INVALID' });
-      if (variant === 'json') return { output: [{ content: [{ type: 'output_text', text: '{' }] }] };
-      return response({ clues: [{
-        sourceId: variant === 'source' ? 'PRIVATE_UNKNOWN_SOURCE' : 'clue-0',
-        quote: 'PRIVATE_INVENTED_QUOTE',
-      }] });
+      if (variant === 'json')
+        return { output: [{ content: [{ type: 'output_text', text: '{' }] }] };
+      return response({
+        clues: [
+          {
+            sourceId: variant === 'source' ? 'PRIVATE_UNKNOWN_SOURCE' : 'clue-0',
+            quote: 'PRIVATE_INVENTED_QUOTE',
+          },
+        ],
+      });
     });
     const recovered = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
     assert.equal(recovered.story, story.story);
@@ -92,8 +124,13 @@ for (const variant of ['quote', 'source', 'incomplete', 'shape', 'json'] as cons
     assert.doesNotMatch(JSON.stringify(input), /PRIVATE_|UNPRESENTED_SECRET/);
     assert(recovered.presentedEvidence.length > 0);
     for (const record of recovered.presentedEvidence)
-      assert(p.evidence.records.some((original) => original.sourceId === record.sourceId &&
-        original.text === ('text' in record ? record.text : record.quote)));
+      assert(
+        p.evidence.records.some(
+          (original) =>
+            original.sourceId === record.sourceId &&
+            original.text === ('text' in record ? record.text : record.quote),
+        ),
+      );
   });
 }
 
@@ -106,25 +143,48 @@ test('extraction deadline leaves writer capacity and records a safe recovery dia
       return response(story);
     }
     return new Promise((_resolve, reject) => {
-      signal!.addEventListener('abort', () => { aborted = true; reject(signal!.reason); }, { once: true });
+      signal!.addEventListener(
+        'abort',
+        () => {
+          aborted = true;
+          reject(signal!.reason);
+        },
+        { once: true },
+      );
     });
   });
   const diagnostics: string[] = [];
-  const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal, undefined, {
-    evidenceTimeoutMs: 15,
-    onEvidenceFallback: (error) => diagnostics.push(endingFailureCode(error, 'extraction')),
-  });
+  const result = await createEndingText(
+    f.ai,
+    'ending-job',
+    p,
+    new AbortController().signal,
+    undefined,
+    {
+      evidenceTimeoutMs: 15,
+      onEvidenceFallback: (error) => diagnostics.push(endingFailureCode(error, 'extraction')),
+    },
+  );
   assert.equal(result.story, story.story);
   assert.deepEqual(diagnostics, ['ENDING_EXTRACTION_TIMEOUT']);
-  assert.deepEqual(f.calls.map((call) => call.name), ['ending_clues', 'ending_text']);
+  assert.deepEqual(
+    f.calls.map((call) => call.name),
+    ['ending_clues', 'ending_text'],
+  );
   assert.equal(f.ai.snapshot().responseBusy, 0);
 });
 
 test('malformed extraction diagnostics distinguish invalid sources from mismatched quotes without logging data', async () => {
-  const f = setup((name) => name === 'ending_text' ? response(story) : response({ clues: [
-    { sourceId: 'clue-0', quote: 'PRIVATE_QUOTE' },
-    { sourceId: 'PRIVATE_ID', quote: 'PRIVATE_QUOTE' },
-  ] }));
+  const f = setup((name) =>
+    name === 'ending_text'
+      ? response(story)
+      : response({
+          clues: [
+            { sourceId: 'clue-0', quote: 'PRIVATE_QUOTE' },
+            { sourceId: 'PRIVATE_ID', quote: 'PRIVATE_QUOTE' },
+          ],
+        }),
+  );
   const diagnostics: unknown[] = [];
   await createEndingText(f.ai, 'ending-job', packet(), new AbortController().signal, undefined, {
     onEvidenceFallback: (error) => diagnostics.push(endingSourceCounts(error)),
@@ -137,7 +197,10 @@ for (const variant of ['cancel', 'auth', 'network', 'refusal', 'budget'] as cons
   test(`extraction ${variant} does not cause an unauthorized extra writer call`, async () => {
     const controller = new AbortController();
     const f = setup(() => {
-      if (variant === 'cancel') { controller.abort(); throw new Error('cancelled'); }
+      if (variant === 'cancel') {
+        controller.abort();
+        throw new Error('cancelled');
+      }
       if (variant === 'auth') throw new UpstreamError(502, 401);
       if (variant === 'refusal') return { output: [{ content: [{ type: 'refusal' }] }] };
       throw new Error('PRIVATE_NETWORK_FAILURE');
@@ -166,8 +229,11 @@ test('eligible tags and null-only repair prevent repeating an impossible one-act
     assert(!ids.includes('persistent_retry'));
     assert(!ids.includes('combination'));
     assert(ids.includes('brute_force'));
-    return response({ ...story, story: 'PRIVATE_REJECTED_STORY',
-      tag: { id: 'one_tool', evidenceActionIds: ['attempt'], reason: 'PRIVATE_REJECTED_REASON' } });
+    return response({
+      ...story,
+      story: 'PRIVATE_REJECTED_STORY',
+      tag: { id: 'one_tool', evidenceActionIds: ['attempt'], reason: 'PRIVATE_REJECTED_REASON' },
+    });
   });
   const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
   assert.equal(result.tag, null);
@@ -185,7 +251,9 @@ test('many extracted Japanese quotations stay within the real writer request byt
       assert(Buffer.byteLength(JSON.stringify(input)) < 128 * 1024);
       return response(story);
     }
-    const clues = input.slice(0, 24).map((r: { sourceId: string; text: string }) => ({ sourceId: r.sourceId, quote: r.text }));
+    const clues = input
+      .slice(0, 24)
+      .map((r: { sourceId: string; text: string }) => ({ sourceId: r.sourceId, quote: r.text }));
     extractedBytes += Buffer.byteLength(JSON.stringify(clues));
     return response({ clues });
   });
@@ -198,8 +266,13 @@ test('many extracted Japanese quotations stay within the real writer request byt
 test('repeated fact snapshots are compacted without dropping early actions or real changes', async () => {
   const p = packet();
   p.evidence.records = p.evidence.records.slice(0, 2);
-  const unchanged = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`fact${i}`, 'unchanged'.repeat(100)]));
-  p.actions = Array.from({ length: 40 }, (_, i) => ({ ...p.actions[0], actionId: `a${i}`, order: i,
+  const unchanged = Object.fromEntries(
+    Array.from({ length: 30 }, (_, i) => [`fact${i}`, 'unchanged'.repeat(100)]),
+  );
+  p.actions = Array.from({ length: 40 }, (_, i) => ({
+    ...p.actions[0],
+    actionId: `a${i}`,
+    order: i,
     beforeFacts: { obstacleId: 'door', values: { ...unchanged, progress: String(i) } },
     afterFacts: { obstacleId: 'door', values: { ...unchanged, progress: String(i + 1) } },
   }));
@@ -215,12 +288,19 @@ test('repeated fact snapshots are compacted without dropping early actions or re
   const result = await createEndingText(f.ai, 'ending-job', p, new AbortController().signal);
   assert.equal(result.story, story.story);
   assert.equal(f.calls.length, 1);
-  assert.deepEqual(p.actions[0].beforeFacts.values, { ...unchanged, progress: '0' }, 'packet stays immutable');
+  assert.deepEqual(
+    p.actions[0].beforeFacts.values,
+    { ...unchanged, progress: '0' },
+    'packet stays immutable',
+  );
 });
 
 test('bounded evidence preserves whole early and late records, never cuts off a negation', () => {
-  const records = Array.from({ length: 20 }, (_, i) => ({ sourceId: String(i),
-    kind: 'assistant_transcript', text: `観察${i}。` + '赤い印がある。'.repeat(20) + '脱出できたわけではない。' }));
+  const records = Array.from({ length: 20 }, (_, i) => ({
+    sourceId: String(i),
+    kind: 'assistant_transcript',
+    text: `観察${i}。` + '赤い印がある。'.repeat(20) + '脱出できたわけではない。',
+  }));
   const retained = boundedEndingEvidence(records, 2000);
   assert(retained.length < records.length);
   assert(retained.includes(records[0]));

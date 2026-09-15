@@ -201,7 +201,8 @@ for (const variant of [
     if (textFailure === 'evidence') p.evidence.records[0].text = 'x'.repeat(100 * 1024);
     const text = narrative(p);
     const storyFailed = !!textFailure && textFailure !== 'evidence';
-    const availableEvidence = textFailure === 'evidence' ? p.evidence.records.slice(1) : p.evidence.records;
+    const availableEvidence =
+      textFailure === 'evidence' ? p.evidence.records.slice(1) : p.evidence.records;
     if (textFailure === 'evidence') {
       text.story = 'The rope frayed during the attempt, but the exit is still closed.';
       text.usedEvidenceIds = [];

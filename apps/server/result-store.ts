@@ -356,9 +356,12 @@ export class ResultStore {
     const e = this.entry(playId);
     return [...e.messages.values()].some((message) => {
       const version = e.sceneVersions.get(message.id);
-      return version !== undefined && version <= maxGameVersion &&
+      return (
+        version !== undefined &&
+        version <= maxGameVersion &&
         !!message.imageSlot &&
-        ['queued', 'generating', 'checking', 'retrying'].includes(message.imageSlot.status);
+        ['queued', 'generating', 'checking', 'retrying'].includes(message.imageSlot.status)
+      );
     });
   }
 

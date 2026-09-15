@@ -214,7 +214,8 @@ export async function createEndingFrames(
           // Keep the generated image for a second inspection. Only after both fail
           // may the remaining generation attempt make a clearer, fully checked frame.
           if (inspectionAttempt === 1)
-            feedback = 'The previous image could not be assessed. Make the confirmed physical state and required title clearly visible.';
+            feedback =
+              'The previous image could not be assessed. Make the confirmed physical state and required title clearly visible.';
         }
       }
       if (!check) {

@@ -311,12 +311,18 @@ test('ambiguous ending response failure consumes its attempt and is not automati
 
 test('a single call timeout leaves the ending permit usable while whole-job cancellation does not', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const f = fixture({}, {
-    createResponse: async (_body, signal) => new Promise((_resolve, reject) => {
-      signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-    }),
+  const f = fixture(
+    {},
+    {
+      createResponse: async (_body, signal) =>
+        new Promise((_resolve, reject) => {
+          signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+    },
+  );
+  const timedOut = assert.rejects(f.call('direction', responseBody()), {
+    code: 'ENDING_CALL_TIMEOUT',
   });
-  const timedOut = assert.rejects(f.call('direction', responseBody()), { code: 'ENDING_CALL_TIMEOUT' });
   t.mock.timers.tick(30_000);
   await timedOut;
   assert.equal(f.permit.cancelled, false);
