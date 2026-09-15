@@ -1,0 +1,235 @@
+{
+  "runId": "ffeead6b-25e3-4e54-aaf3-a834c3d373ef",
+  "mode": "mock",
+  "stage": "ready_for_adoption",
+  "notice": "Synthetic mock usage is not actual API cost. Reservations use fixed prices, conservative UTF8 input bounds and requested maximum outputs; sums are not simultaneous reservations or a recommended live budget.",
+  "pilot": {
+    "calls": 367,
+    "allCompleted": true,
+    "roles": {
+      "expansion_generator": {
+        "calls": 1,
+        "reservedInputTokens": 64389,
+        "reservedOutputTokens": 12000,
+        "sumReservationUsd": 1.4048625,
+        "maxReservationUsd": 1.4048625
+      },
+      "expansion_player": {
+        "calls": 75,
+        "reservedInputTokens": 713041,
+        "reservedOutputTokens": 37500,
+        "sumReservationUsd": 2.2573580000000004,
+        "maxReservationUsd": 0.069975
+      },
+      "core_intent": {
+        "calls": 75,
+        "reservedInputTokens": 1572648,
+        "reservedOutputTokens": 75000,
+        "sumReservationUsd": 4.831620000000001,
+        "maxReservationUsd": 0.0719425
+      },
+      "knowledge_selection": {
+        "calls": 75,
+        "reservedInputTokens": 236475,
+        "reservedOutputTokens": 75000,
+        "sumReservationUsd": 1.4911875000000014,
+        "maxReservationUsd": 0.0198825
+      },
+      "investigation_reply": {
+        "calls": 75,
+        "reservedInputTokens": 466725,
+        "reservedOutputTokens": 75000,
+        "sumReservationUsd": 2.0668124999999966,
+        "maxReservationUsd": 0.0275575
+      },
+      "expansion_review": {
+        "calls": 48,
+        "reservedInputTokens": 3008454,
+        "reservedOutputTokens": 384000,
+        "sumReservationUsd": 12.0213995,
+        "maxReservationUsd": 0.490495
+      },
+      "expansion_verify": {
+        "calls": 18,
+        "reservedInputTokens": 1148275,
+        "reservedOutputTokens": 216000,
+        "sumReservationUsd": 25.153437499999995,
+        "maxReservationUsd": 1.430825
+      }
+    },
+    "reservationSumUsd": 49.2266775,
+    "maxReservationUsd": 1.430825
+  },
+  "continuation": {
+    "calls": 792,
+    "allCompleted": true,
+    "roles": {
+      "expansion_player": {
+        "calls": 150,
+        "reservedInputTokens": 1426082,
+        "reservedOutputTokens": 75000,
+        "sumReservationUsd": 4.513522250000001,
+        "maxReservationUsd": 0.06995
+      },
+      "core_intent": {
+        "calls": 150,
+        "reservedInputTokens": 3145296,
+        "reservedOutputTokens": 150000,
+        "sumReservationUsd": 9.663239999999998,
+        "maxReservationUsd": 0.0719425
+      },
+      "knowledge_selection": {
+        "calls": 150,
+        "reservedInputTokens": 472950,
+        "reservedOutputTokens": 150000,
+        "sumReservationUsd": 2.9823750000000033,
+        "maxReservationUsd": 0.0198825
+      },
+      "investigation_reply": {
+        "calls": 150,
+        "reservedInputTokens": 933450,
+        "reservedOutputTokens": 150000,
+        "sumReservationUsd": 4.1336249999999914,
+        "maxReservationUsd": 0.0275575
+      },
+      "expansion_review": {
+        "calls": 138,
+        "reservedInputTokens": 8989284,
+        "reservedOutputTokens": 1104000,
+        "sumReservationUsd": 35.43980199999999,
+        "maxReservationUsd": 0.490505
+      },
+      "expansion_verify": {
+        "calls": 54,
+        "reservedInputTokens": 3444825,
+        "reservedOutputTokens": 648000,
+        "sumReservationUsd": 75.46031250000003,
+        "maxReservationUsd": 1.43085
+      }
+    },
+    "reservationSumUsd": 132.19287675000007,
+    "maxReservationUsd": 1.43085
+  },
+  "total": {
+    "calls": 1159,
+    "allCompleted": true,
+    "roles": {
+      "expansion_generator": {
+        "calls": 1,
+        "reservedInputTokens": 64389,
+        "reservedOutputTokens": 12000,
+        "sumReservationUsd": 1.4048625,
+        "maxReservationUsd": 1.4048625
+      },
+      "expansion_player": {
+        "calls": 225,
+        "reservedInputTokens": 2139123,
+        "reservedOutputTokens": 112500,
+        "sumReservationUsd": 6.77088025,
+        "maxReservationUsd": 0.069975
+      },
+      "core_intent": {
+        "calls": 225,
+        "reservedInputTokens": 4717944,
+        "reservedOutputTokens": 225000,
+        "sumReservationUsd": 14.49486,
+        "maxReservationUsd": 0.0719425
+      },
+      "knowledge_selection": {
+        "calls": 225,
+        "reservedInputTokens": 709425,
+        "reservedOutputTokens": 225000,
+        "sumReservationUsd": 4.473562499999995,
+        "maxReservationUsd": 0.0198825
+      },
+      "investigation_reply": {
+        "calls": 225,
+        "reservedInputTokens": 1400175,
+        "reservedOutputTokens": 225000,
+        "sumReservationUsd": 6.200437500000017,
+        "maxReservationUsd": 0.0275575
+      },
+      "expansion_review": {
+        "calls": 186,
+        "reservedInputTokens": 11997738,
+        "reservedOutputTokens": 1488000,
+        "sumReservationUsd": 47.46120149999994,
+        "maxReservationUsd": 0.490505
+      },
+      "expansion_verify": {
+        "calls": 72,
+        "reservedInputTokens": 4593100,
+        "reservedOutputTokens": 864000,
+        "sumReservationUsd": 100.61375000000005,
+        "maxReservationUsd": 1.43085
+      }
+    },
+    "reservationSumUsd": 181.41955424999975,
+    "maxReservationUsd": 1.43085
+  },
+  "plays": [
+    {
+      "playId": "play-0-0",
+      "attemptId": "d3a58bb7-ed69-45f3-9258-fe222a290801",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-1-1",
+      "attemptId": "46cbc6e6-cb93-440e-9f6e-63889c7f8b8b",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-2-2",
+      "attemptId": "c8b7e524-2f80-46b7-8aa8-401127b31466",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-0-1",
+      "attemptId": "82d09183-a5d3-4179-add9-781c58b89c49",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-0-2",
+      "attemptId": "900dae10-5950-4068-b25e-c00466e933f0",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-1-0",
+      "attemptId": "97119267-8299-43e3-9666-dbd53510c4b0",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-1-2",
+      "attemptId": "f398962c-b110-4ff7-9450-2250fe7b2fb3",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-2-0",
+      "attemptId": "682013e9-2dcb-4278-8ed2-f1e9d5556278",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    },
+    {
+      "playId": "play-2-1",
+      "attemptId": "ccaa60ef-413f-4376-9370-6d64b1d6ba6d",
+      "status": "uncleared",
+      "turns": 25,
+      "calls": 100
+    }
+  ]
+}

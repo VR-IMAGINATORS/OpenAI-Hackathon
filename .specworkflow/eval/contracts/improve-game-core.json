@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "id": "improve-game-core",
+  "title": "調査・推理を中心にしたゲームコアとシナリオ拡充",
+  "goal": "元の完成構成と解法を維持して調査情報を拡充し、共通ハーネスの模擬プレイと比較レポートで評価・採用する。",
+  "source": {
+    "type": "spec-workflow",
+    "spec_path": "specs/improve-game-core/spec.md"
+  },
+  "acceptance_criteria": [
+    {
+      "id": "A01",
+      "statement": "既存構成1件の拡充：原資料不変。舞台・障害・元解法を維持し、必要条件を追加しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A02",
+      "statement": "概要依頼／対象を絞った質問：概要と細部が段階的に分かる。具体質問は途中手順なしでも回答可能",
+      "verification": "manual"
+    },
+    {
+      "id": "A03",
+      "statement": "先に解法を見抜いて写真を送る：会話回数の足止めなし。前回の自律実行・危険確認・取消しを維持",
+      "verification": "manual"
+    },
+    {
+      "id": "A04",
+      "statement": "積極性3段階と明示ヒント依頼：設定と依頼に応じた助言。推測は事実にならず、秘密は漏れない",
+      "verification": "manual"
+    },
+    {
+      "id": "A05",
+      "statement": "未定義の棚の色／未定義の鍵の有無を質問：無害な補完のみプレイ内で固定。攻略情報を捏造せず、元設定へ自動保存しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A06",
+      "statement": "共通ハーネスで模擬プレイ：解答・未開示本文をプレイヤーへ渡さず、日用品選択と実ゲームの判断経路を通す",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A07",
+      "statement": "初回3プレイ：使用量と残り6プレイ予測を報告し判断待ち。未実施を完了扱いせず、モデル優劣を断定しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A08",
+      "statement": "9プレイと複数独立評価：モデル×遊び方の対応が追え、他の評価を見せない。積極性は固定",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A09",
+      "statement": "25ターン／通信・予算上限：未クリアと検証未完了を区別し、API速度をゲーム時間の評価にしない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A10",
+      "statement": "模擬プレイヤーの失敗：根拠と反証で具体的な成立性不備を確認。見落としだけで自動修正しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A11",
+      "statement": "設定不備／実装不具合／原因不明：設定不備のみ自動修正。その他は再現情報を報告しコードを変更しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A12",
+      "statement": "修正版の検証：新版を3プレイから検証し、旧版の成功を転用しない。修正上限で停止する",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A13",
+      "statement": "面白さ評価の低点・意見不一致：観点・会話根拠・改善提案・各意見を報告。低点だけで修正・採用しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A14",
+      "statement": "評価済み候補のレポート：元と拡充後のストーリー全文・各ギミック・解法・差分を比較できる",
+      "verification": "manual"
+    },
+    {
+      "id": "A15",
+      "statement": "レポートと人間の採用：対象版と検証範囲が一致。人間の選択前にはゲームへ自動採用しない",
+      "verification": "deterministic"
+    },
+    {
+      "id": "A16",
+      "statement": "画像・実音声・時計：初期画像への秘密先出しなし、調査画像追加なし。実機確認を模擬成功と区別",
+      "verification": "manual"
+    },
+    {
+      "id": "A17",
+      "statement": "既存ツール・ゲームの回帰：オリジナル生成モード、認証、知識境界、送信数、取消し・警告を維持",
+      "verification": "deterministic"
+    }
+  ],
+  "architecture_constraints": [
+    {
+      "id": "AR-1",
+      "statement": "本編と模擬プレイの知識開示・写真受理・行動確定・消費を共通化。音声と実画像認識は模擬対象外。"
+    },
+    {
+      "id": "AR-2",
+      "statement": "未開示本文・解法をLive、回答モデル、模擬プレイヤー、初期画像へ渡さない。"
+    },
+    {
+      "id": "AR-3",
+      "statement": "3プレイで停止。残り6と新版は明示実行。全役割の使用量を記録し、不明をゼロとしない。"
+    },
+    {
+      "id": "AR-4",
+      "statement": "原資料・構成・版・評価条件を固定し、人間の選択前に採用しない。"
+    },
+    {
+      "id": "AR-5",
+      "statement": "GPT-Live、認証、操作権、既存クレジット・難易度・時計・取消しと旧生成を維持する。"
+    }
+  ],
+  "risk": {
+    "level": "medium",
+    "domains": [
+      "ai-quality",
+      "information-disclosure",
+      "api-cost",
+      "concurrency"
+    ]
+  },
+  "out_of_scope": [
+    "自動採用",
+    "面白さによる自動修正",
+    "完全オリジナルへの置換",
+    "調査ごとの画像生成",
+    "クレジットの新規仕様",
+    "AWSリリース"
+  ],
+  "accepted_risks": [
+    "模擬評価は実音声・委譲タイミング・人間の面白さを保証しない。実機確認を別途記録する。",
+    "意味評価と補完には不確実性があるため根拠・反証・不明を保存する。",
+    "初回3プレイではモデルと遊び方が交絡する。モデル順位や9プレイ完了を結論づけない。"
+  ],
+  "created_at": "2026-09-15",
+  "updated_at": "2026-09-15"
+}
