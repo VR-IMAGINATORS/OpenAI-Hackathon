@@ -43,6 +43,7 @@ async function setup(
   recognizeGate?: Promise<void>,
   traceEnabled = false,
   judgeGate?: Promise<void>,
+  locale: 'ja' | 'en' = 'ja',
 ) {
   let now = 1000;
   const calls = { classify: 0, judge: 0, recognize: 0 };
@@ -93,18 +94,18 @@ async function setup(
     new ScenarioCatalog({
       scenarioPath: 'scenarios/mobile-playtest.json',
       coreConfigPath: 'config/game-core.json',
-    }).current('ja'),
+    }).current(locale),
   );
   const queue = new PhotoQueue();
   const notices: string[] = [];
   const scenes: any[] = [];
   const results = new ResultStore();
   const playId = randomUUID();
-  results.create({ playId, ownerDigest: 'test', locale: 'ja' });
+  results.create({ playId, ownerDigest: 'test', locale });
   const runtime = new GameRuntime(
     playId,
     600000,
-    localizeScenario(snapshot.scenarioV2, 'ja'),
+    localizeScenario(snapshot.scenarioV2, locale),
     ai,
     config,
     queue,
@@ -427,7 +428,7 @@ test('diagnostics are absent when not enabled', async (t) => {
   assert.deepEqual(h.runtime.trace(), { entries: [] });
 });
 
-test('time warning uses game time once, includes instruction and survives reconnect without repetition', async (t) => {
+test('time warning sends silent context once and survives reconnect without repetition', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
   h.runtime.game.clock.remainingMs = 60000;
   h.runtime.tick();
@@ -436,19 +437,49 @@ test('time warning uses game time once, includes instruction and survives reconn
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
-  assert.ok(
-    commands.some((c) => c.type === 'session.instructions.append' && c.delegation_id === null),
-  );
-  assert.ok(
-    commands.some((c) => c.type === 'session.commentary.append' && c.content.includes('60秒')),
-  );
+  assert.ok(commands.length > 0);
+  assert.ok(commands.every((c) => c.type === 'session.thinking.append' && c.delegation_id === null));
+  assert.deepEqual(JSON.parse(commands.map((c) => c.content).join('')), {
+    type: 'time_warning',
+    message: 'おっと、残り時間が少なくなってきた。',
+  });
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
   await h.runtime.live(randomUUID(), 'new offer');
   h.runtime.heartbeat('connected');
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
+  assert.equal(h.runtime.pollCommands(h.runtime.game.generation, 0).commands.length, 0);
 });
+
+for (const speaker of ['input', 'output'] as const) {
+  test(`time warning during ${speaker} speech adds no speak-now command or action`, async (t) => {
+    const h = await setup(t, () => ({ kind: 'wait', reason: 'unfinished' }));
+    await h.runtime.event(h.generation, {
+      type: `session.${speaker}_transcript.delta`,
+      event_id: randomUUID(),
+      delta: 'この道具を使うと、',
+      start_ms: 10,
+      end_ms: 20,
+    });
+    h.runtime.game.clock.remainingMs = 59999;
+    h.runtime.tick();
+    const commands = h.runtime.pollCommands(h.generation, 0).commands;
+    assert.ok(commands.length > 0);
+    assert.ok(commands.every((c) => c.type === 'session.thinking.append'));
+    await h.runtime.event(h.generation, {
+      type: `session.${speaker}_transcript.delta`,
+      event_id: randomUUID(),
+      delta: 'まだ続きを話している。',
+      start_ms: 21,
+      end_ms: 30,
+    });
+    h.runtime.tick();
+    assert.deepEqual(h.runtime.pollCommands(h.generation, 0).commands, commands);
+    assert.equal(h.calls.classify, 0);
+    assert.equal(h.calls.judge, 0);
+  });
+}
 
 test('time warning respects pause, disabled setting, configured message and terminal state', async (t) => {
   const h = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
@@ -468,11 +499,41 @@ test('time warning respects pause, disabled setting, configured message and term
   warning.enabled = true;
   h.runtime.tick();
   assert.deepEqual(h.notices, ['あと30秒未満です']);
+  const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.ok(commands.every((c) => c.type === 'session.thinking.append'));
+  assert.equal(JSON.parse(commands.map((c) => c.content).join('')).message, 'あと30秒未満です');
   const ended = await setup(t, () => ({ kind: 'wait', reason: 'none' }));
   ended.runtime.game.clock.remainingMs = 0;
   ended.runtime.tick();
   assert.equal(ended.runtime.state().status, 'lost');
   assert.deepEqual(ended.notices, []);
+});
+
+test('time warning waits for connection recovery and preserves long localized messages', async (t) => {
+  const h = await setup(
+    t,
+    () => ({ kind: 'wait', reason: 'none' }),
+    undefined,
+    false,
+    undefined,
+    'en',
+  );
+  const message = 'We are running short on time. '.repeat(40) + 'Less than {thresholdSeconds}s.';
+  h.snapshot.coreConfig.timeWarning!.message.en = message;
+  h.runtime.game.clock.remainingMs = 59999;
+  h.runtime.heartbeat('disconnected');
+  h.runtime.tick();
+  assert.deepEqual(h.notices, []);
+  h.runtime.heartbeat('connected');
+  h.runtime.tick();
+  const commands = h.runtime.pollCommands(h.generation, 0).commands;
+  assert.ok(commands.length > 1);
+  assert.ok(commands.every((c) => c.type === 'session.thinking.append'));
+  assert.ok(commands.every((c) => Buffer.byteLength(c.content) <= 480));
+  assert.deepEqual(JSON.parse(commands.map((c) => c.content).join('')), {
+    type: 'time_warning',
+    message: message.replaceAll('{thresholdSeconds}', '60'),
+  });
 });
 
 test('consult speaks answer rather than classification reason and action speaks latest situation with image', async (t) => {

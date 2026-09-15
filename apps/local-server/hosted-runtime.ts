@@ -400,9 +400,9 @@ export class GameRuntime {
       '{thresholdSeconds}',
       String(warning.thresholdSeconds),
     );
-    for (const command of factCommands(warning.deliveryInstructions[locale]))
-      this.enqueue({ ...command, type: 'session.instructions.append' });
-    this.speak(text);
+    // Silent context lets Live choose a conversational boundary. Transcript deltas
+    // are not turn-end/playback-complete events, so do not infer one with a timer.
+    this.sendFacts(JSON.stringify({ type: 'time_warning', message: text }));
     this.presentNotice(text);
     this.recordDiagnostic('time_warning');
   }

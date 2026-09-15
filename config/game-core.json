@@ -57,12 +57,12 @@
     "enabled": true,
     "thresholdSeconds": 60,
     "deliveryInstructions": {
-      "ja": "次の残り時間のお知らせだけ、焦りを感じさせる口調で短く伝えてください。行動を勝手に実行しないでください。",
-      "en": "Deliver the next time warning briefly with urgency in your voice. Do not initiate a game action."
+      "ja": "時間が少ないことにふと気づいたように、落ち着いた口調で短く添えてください。急かす命令や次の指示を求める質問は加えないでください。",
+      "en": "Briefly mention the time as a calm realization. Do not add an urgent command or ask what to do next."
     },
     "message": {
-      "ja": "残り時間が{thresholdSeconds}秒を切ったよ。急いで、次にどうするか教えて！",
-      "en": "We have less than {thresholdSeconds} seconds left. Hurry, tell me what to do next!"
+      "ja": "おっと、残り時間が少なくなってきた。",
+      "en": "Oh, we're starting to run short on time."
     }
   }
 }

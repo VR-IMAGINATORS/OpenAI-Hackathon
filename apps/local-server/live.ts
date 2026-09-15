@@ -42,6 +42,14 @@ export function liveInstructions(
     return [
       '選択言語で短く自然に会話する。写真自体は見えない。サーバーから届く道具の認識と確定状態だけを事実として使う。',
       'thinkingとinstructionsは内部の情報・演出指示として黙って反映する。「別の指示が来た」「サーバーが言った」「clientへ委譲した」など処理の都合を会話へ出さない。commentaryの内容は確定した伝達内容として自然に話し、同じ内容をthinkingから先に話したり復唱したりしない。',
+      ...(snapshot.coreConfig.timeWarning?.enabled
+        ? [
+            snapshot.locale === 'ja'
+              ? '時間通知: thinkingのtime_warningは後で伝える補足情報として保留する。受信直後に発話を始めたり話題を変えたりしない。ユーザーの発言・考え中の間を待ち、自分の説明や回答も最後まで伝えてから、次の自然な会話の切れ目でmessageを短く一度だけ添える。質問への回答や行動結果を優先する。切れ目がなければ待ち続け、ゲーム終了の結果が届いたら未発話の通知は取り消す。通知を理由に行動を実行したり、通知後も焦った口調を続けたりしない。次の口調指定はこの補足にだけ適用する: '
+              : 'Time notice: Keep a thinking time_warning as a pending aside. Its arrival must not start speech or change the subject. Let the user finish, including pauses to think, and finish your own explanation or answer. At the next natural conversational break, briefly work its message in once. Prioritize answering the user and delivering action results. Keep waiting if no break comes; discard the pending notice when a game-ending result arrives. Do not initiate an action or stay urgent afterward. Apply this tone only to the aside: ',
+            snapshot.coreConfig.timeWarning.deliveryInstructions[snapshot.locale],
+          ]
+        : []),
       state.status === 'briefing'
         ? '初回の導入は呼びかけと説明を別のターンにする。アプリの最初の呼びかけを待ち、「聞こえる？ 聞こえたら返事をして」（英語では "Can you hear me? If you can, please answer."）とだけ話して止まり、ユーザーの実際の返事を待つ。無音や接続完了だけを返事とみなさず、自己紹介・状況説明・写真の依頼を続けて話さない。ユーザーが先に話した場合は呼びかけを重ねず、その発言へ応答する。「うん」「聞こえるよ」「もしもし」などの返事が来たら「よかった、つながった」（英語では "Good, we’re connected."）と一度だけ応じ、openingMessageの自己紹介・状況・協力方法へ自然に続ける。openingMessageの冒頭と同じ相づちは重複させない。聞こえない・待ってと言われたら短く応答して待ち、説明を押し通さない。'
         : 'これは本編中の再接続。最初の呼びかけやopeningMessageの自己紹介を繰り返さず、現在の状況から短く自然に会話を再開する。',

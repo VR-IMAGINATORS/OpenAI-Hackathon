@@ -118,6 +118,34 @@ test('core Live instructions delegate game questions and gate action claims on a
   assert.match(prompt, /確定した結果のcommentary通知に任せ、それが届く前に結果を告げない/);
 });
 
+test('time notice policy is scoped to a deferred aside in each locale and omitted when disabled', () => {
+  const state = {
+    status: 'playing',
+    title: 'title',
+    briefing: '',
+    situation: '',
+    inventory: [],
+  } as unknown as PublicGameState;
+  for (const locale of ['ja', 'en'] as const) {
+    const localized = { ...structuredClone(snapshot), locale };
+    const prompt = liveInstructions(state, localized);
+    assert.match(prompt, /time_warning/);
+    assert.ok(prompt.includes(localized.coreConfig.timeWarning!.deliveryInstructions[locale]));
+    assert.match(
+      prompt,
+      locale === 'ja' ? /自分の説明や回答も最後まで/ : /finish your own explanation or answer/,
+    );
+    assert.match(
+      prompt,
+      locale === 'ja' ? /ゲーム終了の結果.*取り消す/ : /discard the pending notice.*game-ending/,
+    );
+    localized.coreConfig.timeWarning!.enabled = false;
+    assert.equal(liveInstructions(state, localized).includes('time_warning'), false);
+    delete localized.coreConfig.timeWarning;
+    assert.equal(liveInstructions(state, localized).includes('time_warning'), false);
+  }
+});
+
 test('speech chunks preserve text while keeping complete sentences together', () => {
   const first = 'あ'.repeat(100) + '。';
   const second = 'い'.repeat(90) + '。';
