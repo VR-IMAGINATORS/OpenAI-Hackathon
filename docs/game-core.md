@@ -48,9 +48,9 @@ ENABLE_GAME_TRACE=1はローカル開発専用。自分のプレイのGET /api/p
 
 運営drainは画像待機を破棄し上流通信を中止する。通信中止がAPI提供側の課金停止を保証するものではない。実生成品質、会話テンポ、実スマホ、AWS5人同時の負荷は模擬テストと分けて確認する。
 
-## 仮の導入メディア
+## 導入メディア
 
-- 動画: apps/web/public/media/dummy-opening.mp4（ユーザー提供の仮素材）
+- 動画: apps/web/public/media/Intro_movie.mp4（ユーザー提供の movie/Intro_movie.mp4 を配信用にコピー）
 - 着信SE: apps/web/public/media/incoming-call.mp3（ユーザー提供 Smartphone-Ringtone03-01(Dry).mp3）
 - 画面: apps/web/src/OpeningSequence.tsx。素材を同じパスで差し替え可能。導入案は未確定。
 

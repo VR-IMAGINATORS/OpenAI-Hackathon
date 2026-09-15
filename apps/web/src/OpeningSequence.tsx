@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** Temporary planner media. This screen creates no game or Live connection. */
+/** Opening media. This screen creates no game or Live connection. */
 export default function OpeningSequence({
   locale,
   busy,
@@ -60,7 +60,7 @@ export default function OpeningSequence({
         <section className="opening-movie" aria-label={t('オープニング動画', 'Opening movie')}>
           <video
             ref={video}
-            src="/media/dummy-opening.mp4"
+            src="/media/Intro_movie.mp4"
             playsInline
             preload="auto"
             onEnded={finishMovie}
