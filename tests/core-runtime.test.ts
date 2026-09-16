@@ -63,11 +63,12 @@ async function setup(
     reply: 0,
     schemas: [] as string[],
   };
-  const config = loadAiConfig({ AI_MODE: 'mock' });
+  const config = loadAiConfig({ AI_MODE: 'mock', LIVE_VOICE: 'quartz' });
   const ai = new AiService(
     config,
     {
-      async createLiveSession() {
+      async createLiveSession(body) {
+        assert.deepEqual((body as any).session.audio, { output: { voice: config.liveVoice } });
         return {
           session: { id: 'live_runtime_test' },
           transport: { type: 'webrtc', sdp: 'answer' },

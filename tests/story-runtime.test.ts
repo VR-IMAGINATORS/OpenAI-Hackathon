@@ -1,3 +1,4 @@
+import { liveSpeechText } from '../apps/local-server/live-speech.js';
 import { liveBriefings } from './fixtures/live-briefings.js';
 import test from 'node:test';
 import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
@@ -446,8 +447,11 @@ for (const locale of ['ja', 'en'] as const)
         new KnowledgeStore(snap),
         runtime.game.state(),
       );
-      assert.equal(liveContext.openingMessage, expected);
-      assert.deepEqual(liveContext.currentObstacleGuide, publicContext.currentObstacleGuide);
+      assert.equal(liveContext.openingMessage, liveSpeechText(expected));
+      assert.deepEqual(
+        liveContext.currentObstacleGuide,
+        JSON.parse(liveSpeechText(JSON.stringify(publicContext.currentObstacleGuide))),
+      );
       assert.equal(liveContext.situation, undefined);
       assert.ok(!expected.includes('PRIVATE_MYSTERY_DIRECTION'));
       assert.ok(!expected.includes('PRIVATE_MECHANISM'));

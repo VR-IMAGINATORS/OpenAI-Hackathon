@@ -1,3 +1,4 @@
+import { liveVoices } from '../shared/live-voice.js';
 import { z } from 'zod';
 import { LiveSidebandManager, liveSessionId, type LiveSidebandOptions } from './live-sideband.js';
 export const liveRequest = z
@@ -6,6 +7,10 @@ export const liveRequest = z
       .object({
         model: z.string().max(100),
         instructions: z.string().max(8000),
+        audio: z
+          .object({ output: z.object({ voice: z.enum(liveVoices) }).strict() })
+          .strict()
+          .optional(),
         delegation: z.object({ type: z.literal('client') }).strict(),
         store: z.literal(false),
       })
