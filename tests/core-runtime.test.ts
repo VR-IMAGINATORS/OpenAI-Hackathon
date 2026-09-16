@@ -63,11 +63,12 @@ async function setup(
     reply: 0,
     schemas: [] as string[],
   };
-  const config = loadAiConfig({ AI_MODE: 'mock' });
+  const config = loadAiConfig({ AI_MODE: 'mock', LIVE_VOICE: 'quartz' });
   const ai = new AiService(
     config,
     {
-      async createLiveSession() {
+      async createLiveSession(body) {
+        assert.deepEqual((body as any).session.audio, { output: { voice: config.liveVoice } });
         return {
           session: { id: 'live_runtime_test' },
           transport: { type: 'webrtc', sdp: 'answer' },
@@ -109,6 +110,7 @@ async function setup(
           if (judgeResponse)
             return response({
               creativity: ordinaryCreativity,
+              actionExplanation: { mechanism: 'edge_cut', reason: 'cannot_cut' },
               ...((await judgeResponse(context, signal)) as object),
             });
           await judgeGate;
@@ -120,6 +122,7 @@ async function setup(
             inventoryChanges: [],
             factChanges: [],
             shortReason: '届かなかった',
+            actionExplanation: { mechanism: 'edge_cut', reason: 'cannot_cut' },
           });
         }
         calls.recognize++;
@@ -371,6 +374,7 @@ test('credits: last photo reserves its full cost and completes the winning autom
         inventoryChanges: [],
         factChanges: [],
         shortReason: '解除',
+        actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
       };
     },
     'ja',
@@ -997,7 +1001,7 @@ test('consult speaks answer rather than classification reason and action speaks 
     .find((facts) => facts.type === 'action_result');
   assert.equal(
     actionFacts.situation,
-    `${actionFacts.currentObstacleGuide.explanation}\n\nヒント: ${actionFacts.currentObstacleGuide.hint}`,
+    `${actionFacts.currentObstacleGuide.explanation}\n\n${actionFacts.currentObstacleGuide.hint}`,
   );
   assert.equal(h.scenes.length, 2);
   assert.equal(h.scenes[1].situation, h.runtime.game.situation);
@@ -1043,6 +1047,7 @@ const recoveredJudgment = {
   shortReason: '結び目を動かした',
   inventoryChanges: [],
   factChanges: [{ key: 'wrists', from: 'bound', to: 'loosened' }],
+  actionExplanation: { mechanism: 'rigidity_wedge', reason: 'effective' },
 };
 
 for (const stage of ['recognize', 'photo', 'classify', 'judge'] as const) {
@@ -1392,6 +1397,7 @@ for (const origin of ['photo', 'voice'] as const) {
           narrative: 'PRIVATE_CREATIVE_CANDIDATE',
           situation: 'PRIVATE_CREATIVE_CANDIDATE',
           shortReason: 'PRIVATE_CREATIVE_CANDIDATE',
+          actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
           inventoryChanges: [],
           factChanges: [{ key: 'wrists', from: 'bound', to: 'free' }],
           creativity: {
@@ -1430,10 +1436,11 @@ for (const origin of ['photo', 'voice'] as const) {
       const published = JSON.stringify([scene, commands, h.runtime.game.state()]);
       assert.equal(published.includes('PRIVATE_CREATIVE_CANDIDATE'), false);
       assert.equal(published.includes('equivalentAttemptId'), false);
-      assert.match(scene.text, /思いがけない切れ味/);
+      assert.match(scene.text, /ハサミの刃や縁で対象を切ろうとした/);
+      assert.match(scene.text, /うまくいった/);
       const spoken = liveBriefings(sceneCommands);
       assert.equal(spoken.length, 1);
-      assert.match(spoken[0]!.facts, /思いがけない切れ味/);
+      assert.match(spoken[0]!.facts, /ハサミの刃や縁で対象を切ろうとした/);
       await h.runtime.photos(photoRequest, [h.photo]);
       assert.equal(h.calls.judge, 1);
       assert.equal(h.runtime.game.actionsUsed, 1);

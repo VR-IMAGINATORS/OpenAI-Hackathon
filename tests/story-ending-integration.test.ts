@@ -52,6 +52,7 @@ for (const locale of ['ja', 'en'] as const) {
                           factChanges: [{ key, from: input.facts.values[key], to: value }],
                           inventoryChanges: [],
                           shortReason: 'Fake confirmed judgment',
+                          actionExplanation: { mechanism: 'shape_contact', reason: 'effective' },
                         }),
                       },
                     ],

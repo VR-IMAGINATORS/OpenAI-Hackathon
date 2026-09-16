@@ -1,3 +1,4 @@
+import { liveSpeechText } from '../apps/local-server/live-speech.js';
 import { liveBriefings } from './fixtures/live-briefings.js';
 import test from 'node:test';
 import { ordinaryCreativity } from './fixtures/ordinary-creativity.js';
@@ -200,7 +201,7 @@ test('story clear phases follow committed facts, including the last available ac
   assert.equal(phase(), 'opening');
   assert.equal(game.facts.values['puzzle-0'], 'partial');
   assert.equal(game.inventory[0].id, itemId);
-  assert.equal(game.situation, gimmickGuidance(snap, 0, '変化後の現在状況。')!.text);
+  assert.equal(game.situation, gimmickGuidance(snap, 0, '確定したpartial状態。')!.text);
   await act();
   assert.equal(phase(), 'middle');
   assert.equal(game.situation, gimmickGuidance(snap, 1)!.text);
@@ -446,8 +447,11 @@ for (const locale of ['ja', 'en'] as const)
         new KnowledgeStore(snap),
         runtime.game.state(),
       );
-      assert.equal(liveContext.openingMessage, expected);
-      assert.deepEqual(liveContext.currentObstacleGuide, publicContext.currentObstacleGuide);
+      assert.equal(liveContext.openingMessage, liveSpeechText(expected));
+      assert.deepEqual(
+        liveContext.currentObstacleGuide,
+        JSON.parse(liveSpeechText(JSON.stringify(publicContext.currentObstacleGuide))),
+      );
       assert.equal(liveContext.situation, undefined);
       assert.ok(!expected.includes('PRIVATE_MYSTERY_DIRECTION'));
       assert.ok(!expected.includes('PRIVATE_MECHANISM'));
@@ -586,8 +590,7 @@ test('lore and ordinary consultation receive only public story; hints are opt-in
   });
   assert.equal(calls, 2, 'the guarantee adds no third AI call');
   assert.equal(decision.kind, 'consult');
-  if (decision.kind === 'consult')
-    assert.match(decision.answer ?? '', /説明だけの応答。\n\nヒント: HINT_0_1/);
+  if (decision.kind === 'consult') assert.equal(decision.answer, '説明だけの応答。\n\nHINT_0_1');
 });
 
 test('judgment receives current mechanism and completion but no future facts or mystery instructions', async () => {
@@ -609,6 +612,7 @@ test('judgment receives current mechanism and completion but no future facts or 
           narrative: 'partial',
           situation: 'partial',
           shortReason: 'partial',
+          actionExplanation: { mechanism: 'length_reach', reason: 'insufficient_reach' },
           factChanges: [],
           inventoryChanges: [],
         });
@@ -830,6 +834,7 @@ test('runtime advances requested hint levels across partial progress and resets 
           narrative: '確定した変化。',
           situation: '部分変化。',
           shortReason: '通常の物性。',
+          actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
           inventoryChanges: [],
         });
       },
@@ -921,7 +926,7 @@ test('runtime advances requested hint levels across partial progress and resets 
   assert.ok(scenes[2].text.includes('HINT_1_1'));
   assert.equal(scenes[0].action, null);
   assert.equal(scenes[1].action?.success, false);
-  assert.ok(scenes[1].text.includes('確定したpartial状態。\n\nヒント: HINT_0_1'));
+  assert.ok(scenes[1].text.includes('確定したpartial状態。\n\nHINT_0_1'));
   assert.equal(scenes[1].action?.afterFacts.values['puzzle-0'], 'partial');
   assert.equal(scenes[2].action?.success, true);
   assert.equal(scenes[2].action?.obstacleId, snap.scenarioV2.obstacles[0].id);

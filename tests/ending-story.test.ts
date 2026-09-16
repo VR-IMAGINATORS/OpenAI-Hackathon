@@ -123,7 +123,12 @@ async function runtimeFixture(t: TestContext, core = true, photoBudget = 3) {
             situation: '道具はまだ手元にある。',
             inventoryChanges: [],
             ...(core
-              ? { factChanges: [], shortReason: 'うまく使えた', creativity: ordinaryCreativity }
+              ? {
+                  factChanges: [],
+                  shortReason: 'うまく使えた',
+                  actionExplanation: { mechanism: 'grip_pull', reason: 'effective' },
+                  creativity: ordinaryCreativity,
+                }
               : {}),
           });
         return response({

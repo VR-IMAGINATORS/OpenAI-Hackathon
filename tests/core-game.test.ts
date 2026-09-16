@@ -127,6 +127,24 @@ test('core reservation rejects stale context/game/action/controller, unavailable
   assert.equal(f.calls(), 0);
 });
 
+test('legacy adapter explanations cannot publish private prose or invent a cause', async () => {
+  const secret = 'PRIVATE_CAUSE_CANARY';
+  const f = await fixture(async () => ({
+    ...partial,
+    narrative: secret,
+    situation: secret,
+    shortReason: secret,
+  }));
+  const result = await f.game.judgeAction(f.reserve());
+  assert.match(result.narrative, /性質がどう働いたかは、まだ特定できていない/);
+  assert.match(result.narrative, /少し進んだよ/);
+  assert.equal(
+    JSON.stringify([result, f.game.state(), f.game.committedActions]).includes(secret),
+    false,
+  );
+  assert.equal(f.calls(), 1);
+});
+
 test('core reservation is atomic and same evidence cannot retry after technical failure', async () => {
   let reject!: (error: Error) => void;
   const f = await fixture(
@@ -263,7 +281,18 @@ test('core AI sends fact constraints and locale, with correct photo bytes and st
         request = body;
         return {
           output: [
-            { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(partial) }] },
+            {
+              type: 'message',
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    ...partial,
+                    actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
+                  }),
+                },
+              ],
+            },
           ],
         };
       },
@@ -295,6 +324,7 @@ test('core AI sends fact constraints and locale, with correct photo bytes and st
   );
   assert.ok(request.text.format.schema.required.includes('factChanges'));
   assert.ok(request.text.format.schema.required.includes('shortReason'));
+  assert.ok(request.text.format.schema.required.includes('actionExplanation'));
 });
 
 for (const failure of ['format', 'completion'] as const)

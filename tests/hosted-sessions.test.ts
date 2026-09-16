@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { SessionStore } from '../apps/server/session-store.js';
 import { PlayRegistry } from '../apps/server/play-registry.js';
-function fixture(close = async () => true) {
+function fixture(close = async () => true, closeConfirmed?: (playId: string) => boolean) {
   let now = 0;
   let factories = 0;
   const registry = new PlayRegistry({
@@ -21,6 +21,7 @@ function fixture(close = async () => true) {
       r.secret = '';
     },
     transferControl: async () => true,
+    closeConfirmed,
   });
   const sessions = new SessionStore({
     now: () => now,
@@ -138,6 +139,68 @@ test('unknown close quarantines slot and forbids drain resume', async () => {
   f.time(1_000_000);
   await f.registry.sweep();
   assert.equal(f.registry.occupied, 1);
+});
+test('late provider confirmation reconciles a disposed quarantine without reviving it', async () => {
+  let confirmed = false;
+  const f = fixture(
+    async () => false,
+    () => confirmed,
+  );
+  const p = f.create();
+  const runtime = p.runtime!;
+  await f.registry.end(p);
+  assert.equal(p.lifecycle, 'quarantined');
+  assert.equal(p.runtime, null);
+  assert.equal(runtime.secret, '');
+  assert.equal(f.registry.occupied, 1);
+  confirmed = true;
+  await f.registry.sweep();
+  assert.equal(p.lifecycle, 'terminal');
+  assert.equal(p.runtime, null);
+  assert.equal(f.registry.occupied, 0);
+});
+test('late close reconciliation releases a completed but unconfirmed control cleanup', async () => {
+  let confirmed = false;
+  const registry = new PlayRegistry({
+    now: () => 0,
+    factory: () => ({}),
+    expire: () => {},
+    close: async () => true,
+    snapshot: () => ({}),
+    dispose: () => {},
+    transferControl: async () => false,
+    closeConfirmed: () => confirmed,
+  });
+  const owner = new SessionStore({}).createSession().session;
+  const p = registry.create(owner, { requestId: 'r', clientId: 'first' }).play;
+  await assert.rejects(registry.control(owner, p.id, 'second', true), /PLAY_EXPIRED/);
+  assert.equal(p.lifecycle, 'quarantined');
+  confirmed = true;
+  registry.reconcileConfirmedClosures();
+  assert.equal(p.lifecycle, 'terminal');
+  assert.equal(p.runtime, null);
+  assert.equal(registry.occupied, 0);
+});
+test('late close reconciliation does not release a thrown control cleanup', async () => {
+  const registry = new PlayRegistry({
+    now: () => 0,
+    factory: () => ({}),
+    expire: () => {},
+    close: async () => true,
+    snapshot: () => ({}),
+    dispose: () => {},
+    transferControl: async () => {
+      throw new Error('unknown cleanup');
+    },
+    closeConfirmed: () => true,
+  });
+  const owner = new SessionStore({}).createSession().session;
+  const p = registry.create(owner, { requestId: 'r', clientId: 'first' }).play;
+  await assert.rejects(registry.control(owner, p.id, 'second', true), /PLAY_EXPIRED/);
+  assert.equal(p.lifecycle, 'quarantined');
+  registry.reconcileConfirmedClosures();
+  assert.equal(p.lifecycle, 'quarantined');
+  assert.equal(registry.occupied, 1);
 });
 test('pending close retains slot and repeated end shares promise', async () => {
   let resolve!: (v: boolean) => void;

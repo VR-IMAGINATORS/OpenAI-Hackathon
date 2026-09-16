@@ -100,24 +100,31 @@ test('hosted public URL and host/origin allowlists reject ambiguous and wildcard
 });
 test('hosted invalid scenario reports the planner field location', (t) => {
   const cwd = fixture(t),
-    path = resolve(cwd, 'scenarios/playtest/warehouse-expanded-r1.json');
+    path = resolve(cwd, 'scenarios/story-catalog.json');
   const scenario = JSON.parse(readFileSync(path, 'utf8'));
   scenario.rules.initialCredits = 0;
   writeFileSync(path, JSON.stringify(scenario));
   assert.throws(() => loadHostedConfig(base, cwd), /"rules"[\s\S]*"initialCredits"/);
 });
 
-test('default hosted scenario includes expanded knowledge; explicit catalog selection still works', (t) => {
+test('default hosted scenario uses the random catalog; explicit expanded selection still works', (t) => {
   const cwd = fixture(t);
   for (const overrides of [
     {},
     { NODE_ENV: 'production', PUBLIC_APP_URL: 'https://game.example', OPS_TOKEN: 'a'.repeat(32) },
   ]) {
     const config = loadHostedConfig({ ...base, ...overrides }, cwd);
-    assert.equal(config.scenario.id, 'scene-echo-platform-1');
-    const snapshot = config.scenarioCatalog!.current('ja');
-    assert(snapshot.scenarioV2.knowledge.some((entry) => entry.id === 'connection-background'));
+    assert.equal(config.scenarioCatalog!.preview('ja').id, 'call-to-the-past-stories');
+    assert.match(config.scenarioCatalog!.current('ja').scenarioV2.id, /^scene-.+-[1-3]$/);
   }
-  const catalog = loadHostedConfig({ ...base, SCENARIO_PATH: 'scenarios/story-catalog.json' }, cwd);
-  assert.notEqual(catalog.scenarioCatalog!.preview('ja').id, 'scene-echo-platform-1');
+  const expanded = loadHostedConfig(
+    { ...base, SCENARIO_PATH: 'scenarios/playtest/warehouse-expanded-r1.json' },
+    cwd,
+  );
+  assert.equal(expanded.scenarioCatalog!.preview('ja').id, 'scene-echo-platform-1');
+  assert(
+    expanded
+      .scenarioCatalog!.current('ja')
+      .scenarioV2.knowledge.some((entry) => entry.id === 'connection-background'),
+  );
 });

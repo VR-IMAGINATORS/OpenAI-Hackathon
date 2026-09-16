@@ -14,6 +14,10 @@ import { companionResultFacts } from '../apps/local-server/companion-response.js
 import type { CompanionContext } from '../apps/local-server/companion-knowledge.js';
 import type { ScenarioSnapshot } from '../apps/server/scenario-catalog.js';
 import { aiFailureCode } from '../apps/local-server/ai-failure.js';
+import {
+  actionExplanationSchema,
+  supportedActionExplanation,
+} from '../apps/local-server/action-explanation.js';
 
 const privateText = 'HIDDEN_CULPRIT_CANARY';
 const snapshot: ScenarioSnapshot = {
@@ -62,6 +66,7 @@ const judged: CoreJudgment = {
   narrative: privateText,
   situation: privateText,
   shortReason: privateText,
+  actionExplanation: { mechanism: 'edge_cut', reason: 'effective' },
   inventoryChanges: [
     { id: context.inventory[0]!.id, status: 'available', description: privateText },
   ],
@@ -92,6 +97,81 @@ test('no eligible observation keeps public state and never uses a private explan
   const safe = projectPublicJudgment(snapshot, context, { ...judged, factChanges: [] });
   assert.equal(safe.situation, context.situation);
   assert.equal(JSON.stringify(safe).includes(privateText), false);
+});
+
+test('public result explains the property, interaction and committed outcome without private prose', () => {
+  const proposal = {
+    items: [{ name: 'はさみ', photoId: null, inventoryId: context.inventory[0]!.id }],
+    usage: '縄を切って',
+    summary: '',
+  };
+  const partial = projectPublicJudgment(snapshot, context, judged, proposal);
+  assert.match(partial.narrative, /はさみの刃や縁で対象を切ろう/);
+  assert.match(partial.narrative, /少し進んだよ.*縄が少し緩んだ/);
+  assert.doesNotMatch(partial.narrative, /うまくいった/);
+  assert.equal(JSON.stringify(partial).includes(privateText), false);
+  const failure = projectPublicJudgment(
+    snapshot,
+    context,
+    {
+      ...judged,
+      factChanges: [],
+      actionExplanation: { mechanism: 'edge_cut', reason: 'cannot_cut' },
+    },
+    proposal,
+  );
+  assert.match(failure.narrative, /刃や縁.*切れ味が足りなかった.*まだ解決できていない/);
+  assert.doesNotMatch(failure.narrative, /狙った作用を伝えられた/);
+  const reach = projectPublicJudgment(
+    { ...snapshot, locale: 'en' },
+    context,
+    {
+      ...judged,
+      factChanges: [],
+      actionExplanation: { mechanism: 'length_reach', reason: 'insufficient_reach' },
+    },
+    { ...proposal, items: [{ ...proposal.items[0]!, name: 'short stick' }] },
+  );
+  assert.match(reach.narrative, /short stick.*length.*too short.*not solved yet/);
+});
+
+test('provider requires bounded causal explanation and rejects incompatible result reasons', () => {
+  const schema = judgmentResponseSchema(snapshot, context);
+  assert.equal(schema.safeParse({ ...judged, actionExplanation: undefined }).success, false);
+  assert.equal(
+    actionExplanationSchema.safeParse({ mechanism: privateText, reason: 'effective' }).success,
+    false,
+  );
+  assert.equal(
+    actionExplanationSchema.safeParse({
+      mechanism: 'edge_cut',
+      reason: 'effective',
+      secret: privateText,
+    }).success,
+    false,
+  );
+  for (const actionExplanation of [
+    { mechanism: 'edge_cut', reason: 'effective' },
+    { mechanism: 'light_illuminate', reason: 'cannot_cut' },
+  ])
+    assert.equal(
+      schema.safeParse({ ...judged, factChanges: [], actionExplanation }).success,
+      false,
+    );
+  assert.equal(
+    schema.safeParse({
+      ...judged,
+      success: true,
+      actionExplanation: { mechanism: 'edge_cut', reason: 'cannot_cut' },
+    }).success,
+    false,
+  );
+  assert.equal(supportedActionExplanation(judged.actionExplanation, false, false), undefined);
+  for (const reason of ['no_relevant_effect', 'not_permitted', 'cannot_cut'])
+    assert.equal(
+      schema.safeParse({ ...judged, actionExplanation: { mechanism: 'edge_cut', reason } }).success,
+      false,
+    );
 });
 
 test('createGameAI projects core judgment before returning to GameSession', async () => {
@@ -147,6 +227,32 @@ test('Live result briefing falls back to the committed public situation', () => 
     ),
   );
   assert.equal(facts.situation, '扉は閉じている。');
+});
+
+test('Live keeps the completed attempt separate from the next obstacle and excludes extra private fields', () => {
+  const facts = JSON.parse(
+    companionResultFacts(
+      replyContext,
+      {
+        success: true,
+        narrative: 'はさみの刃が縄を切り、手が自由になった。',
+      },
+      Object.assign(
+        {
+          actionId: 'action-1',
+          target: '手首の縄を外す',
+          usage: '縄を切って',
+          items: ['はさみ'],
+        },
+        { mechanism: privateText, obstacleId: privateText },
+      ),
+    ),
+  );
+  assert.equal(facts.attempt.target, '手首の縄を外す');
+  assert.equal(facts.attempt.usage, '縄を切って');
+  assert.equal(facts.situation, '出口の扉が閉まっている。');
+  assert.match(facts.result, /手が自由/);
+  assert.equal(JSON.stringify(facts).includes(privateText), false);
 });
 
 test('core judgment forwards the cancellation signal through the response client', async () => {

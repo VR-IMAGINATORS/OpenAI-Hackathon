@@ -35,8 +35,8 @@ PCは `npm run dev` → http://127.0.0.1:5173。スマホは `npm run play:mobil
 
 - apps/local-server/story.ts: story付きシナリオの短い導入音声と表示専用の補足文。舞台と初期の公開情報はシナリオから差し込む。追加の文章生成AIは使わない。
 - config/game-core.json: conversation.ja/en.openingMessageでstoryなしの旧V2シナリオの導入説明、liveInstructionsで役割・共通会話指示、分類例、物理判定・画像検査方針、表示グループ間隔。
-- scenarios/playtest/warehouse-expanded-r1.json: 現在のWeb既定の固定V2シナリオ。`obstacles[].title` は現在の目標、`goal` と `constraints` は判定の材料、`mechanism` と `hints` は内部の仕組みと段階ヒント、人物/画風と必須/禁止の画像条件もここで編集する。
-- scenarios/story-catalog.json: `SCENARIO_PATH=scenarios/story-catalog.json` を明示したときに使うV3カタログ。`gimmicks[].objective.ja/en` が現在の目標、`name` は障害名。詳しくは [シナリオの編集](planner-guide.md)。
+- scenarios/playtest/warehouse-expanded-r1.json: 明示指定して使う固定V2シナリオ。`obstacles[].title` は現在の目標、`goal` と `constraints` は判定の材料、`mechanism` と `hints` は内部の仕組みと段階ヒント、人物/画風と必須/禁止の画像条件もここで編集する。
+- scenarios/story-catalog.json: 現在のWeb既定のV3カタログ。新規プレイごとに18構成から抽選する。`gimmicks[].objective.ja/en` が現在の目標、`name` は障害名。詳しくは [シナリオの編集](planner-guide.md)。
 - scenarios/mobile-playtest.json: 明示指定する旧V2シナリオ。
 - apps/local-server/hosted-runtime.ts: 音声受付→分類→一度だけ行動→表示への接続。
 - apps/server/result-store.ts: 履歴・サムネイル・検査済み画像・結果保持。
@@ -71,11 +71,15 @@ ENABLE_GAME_TRACE=1はローカル開発専用。自分のプレイのGET /api/p
 
 ## 目的につながる工夫の許容（2026-09-16）
 
-`config/game-core.json` の `creativity.enabled` で切り替える。抽選は使わない。道具・使い方・現在の目標につながる工夫は、通常の物性を少し越える場合も原則として成立させる。猫の写真から再構成した爪の形と働きで、目隠しの帯を切る案も、この条件を満たせば許容する。設定の変更は新規プレイから反映し、進行中のプレイとその画像ジョブは開始時snapshotを維持する。
+`config/game-core.json` の `creativity.enabled` で切り替える。道具の現実の形・材質・強度・大きさ・到達距離・摩擦・精度と、現在の障害をもとに判定する。`ordinary` は通常の使い方として成功・部分進展・失敗を判定する。`stretch` は「相当難しいが、実際の道具で目標を達成できる具体的な物理手順がある」場合に限る。「理論上ゼロではない」だけでは認めない。試遊方針により、受理した `stretch` は完全成功とし、抽選は使わない。
+
+持つ・当てるなど通常操作の説明省略は補うが、足りない長さ・強度・部品は補わず、道具を勝手に改造しない。提供済みの物を使った明示的な加工・組合せは、接続部が必要な力や動きを伝えられる場合に評価する。猫の爪の再構成も一律成功ではなく、対象の布・帯と実際の作用から判断する。設定の変更は新規プレイから反映し、進行中のプレイとその画像ジョブは開始時snapshotを維持する。
+
+行動の結果では「道具の性質→どう作用したか→確定結果」を必ず説明する。判定AIは `actionExplanation` に有限の性質と作用の組合せ・理由を返し、`game.ts` が状態と成否を検証してから公開文を作る。秘密の仕組みを知る判定AIの自由文は公開しない。Liveには実行した対象・用途・道具と結果を渡し、次の障害の案内と区別して自然に説明させる。追加のAI呼出しはない。旧アダプターで説明が未提供の場合は性質・作用が未特定と明示し、矛盾する候補から理由を推測して埋めない。
 
 写真の文字だけで成功を宣言すること、魔法や恒久的な特殊能力、提供されていない道具、壁・扉・格子の向こうへの直接具現化、現在以外の障害の解除、確定していない進展の宣言は許可しない。相談や写真送信だけでは行動を確定しない。停止するのは明示した「待って」「やめて」のみで、道具の損耗や意外な使い方だけを理由に確認待ちにはしない。
 
-小学校高学年にも分かる説明で現在の目標と状況を伝え、その直後に初級ヒントを一つ必ず添える。追加の段階ヒントは要求時に出す。進行中の画像は現在の未解除対象を主役にし、前の障害の解除描写・使用道具・結果を混ぜない。最終クリア後は確定した出口の開放を描く。
+小学校高学年にも分かる説明で現在の目標と状況を伝え、その直後に初級の手がかりを一つ必ず添える。日英とも「ヒント:」等の見出しは付けず、メイが「〇〇があればなぁ…。それで〇〇できそうだよ」と欲しいものと期待する変化をつぶやく。追加の段階ヒントも要求時に同じ口調で出す。固定V2シナリオでは `obstacles[].hints` と対応する `knowledge[].localizedText` が文面の正本で、表示は `gimmick-guidance.ts` と `investigation.ts`、音声は `live.ts` と調査promptで統一する。進行中の画像は現在の未解除対象を主役にし、前の障害の解除描写・使用道具・結果を混ぜない。最終クリア後は確定した出口の開放を描く。
 
 AIによる物体・行為の関連性の判断、実際の声の自然さ、画像の意味的な正確さ、スマホとAWSでの体験は別途実機で確認する。現行仕様・実装計画は [gimmick-playability](../specs/gimmick-playability/spec.md) を参照する。2026-09-15の抽選方式は [creative-acceptance](../specs/creative-acceptance/spec.md) に履歴として残す。
 

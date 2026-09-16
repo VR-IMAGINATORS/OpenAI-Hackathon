@@ -181,8 +181,13 @@ test('recognized photo executes once without a second dialogue call or acknowled
   assert.equal(f.delivered.length, 1);
   const facts = JSON.parse(f.delivered[0]!);
   assert.equal(facts.type, 'action_result');
-  assert.equal(facts.result, 'public result');
-  assert.match(result.publicReply, /public result/);
+  assert.match(facts.result, /どの性質がどう働いたかは、まだ特定できていない.*少し進んだよ/);
+  assert.match(result.publicReply, /少し進んだよ/);
+  assert.doesNotMatch(result.publicReply, /public result|public situation/);
+  assert.equal(facts.attempt.actionId, f.game.committedActions[0]!.actionId);
+  assert.equal(facts.attempt.usage, 'cut rope');
+  assert.deepEqual(facts.attempt.items, ['scissors']);
+  assert.equal(facts.attempt.obstacleId, undefined);
   assert.doesNotMatch(result.publicReply, /action_result|notificationId/);
   assert.doesNotMatch(f.delivered[0]!, /PRIVATE|shortReason/);
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE|shortReason/);

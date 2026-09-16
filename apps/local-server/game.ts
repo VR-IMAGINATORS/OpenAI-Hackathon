@@ -10,11 +10,7 @@ import {
 } from '../../packages/shared/conversation.js';
 import type { ScenarioSnapshot } from '../server/scenario-catalog.js';
 import { parseCoreJudgment, projectPublicJudgment, type CoreJudgment } from './game-ai.js';
-import {
-  CreativeAttemptLedger,
-  creativeSuccessNarrative,
-  normalizeIdea,
-} from './creative-acceptance.js';
+import { CreativeAttemptLedger, normalizeIdea } from './creative-acceptance.js';
 import type { Scenario } from '../../packages/shared/scenario.js';
 import {
   proposalSchema,
@@ -129,6 +125,7 @@ export class GameSession {
     this.check();
     return structuredClone({
       id: this.id,
+      scenarioId: this.scenario.id,
       ...(this.coreSnapshot?.difficulty ? { difficulty: this.coreSnapshot.difficulty } : {}),
       generation: this.generation,
       status: this.status,
@@ -724,26 +721,13 @@ export class GameSession {
         judgment.creativity,
       );
       if (!decision.allowed || judgment.creativity.kind === 'invalid') {
-        judgment = projectPublicJudgment(this.coreSnapshot!, context, {
-          ...judgment,
-          success: false,
-          factChanges: [],
-          inventoryChanges: [],
-        });
+        judgment = { ...judgment, success: false, factChanges: [], inventoryChanges: [] };
         ({ facts, inventory } = this.validateCoreJudgment(context, judgment));
-      } else if (decision.kind === 'stretch') {
-        if (!judgment.success) throw new Error('INVALID_STRETCH_CANDIDATE');
-        const description = creativeSuccessNarrative(
-          this.coreSnapshot!.locale,
-          judgment.creativity!.effect,
-          proposal.items.map((item) => item.name),
-        );
-        judgment = {
-          ...judgment,
-          narrative: `${description} ${judgment.narrative}`.slice(0, 2000),
-        };
       }
     }
+    // Bind the explanation to the validated, final outcome, before advancing the obstacle.
+    // Missing legacy explanations become explicit uncertainty, never unfiltered model prose.
+    judgment = projectPublicJudgment(this.coreSnapshot!, context, judgment, proposal);
     const result = actionResultSchema.parse({
       actionId: ticket.id,
       beforeVersion: this.gameVersion,

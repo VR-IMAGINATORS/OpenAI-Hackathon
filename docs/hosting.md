@@ -62,6 +62,12 @@
 
 ## 配信失敗からの復旧
 
+Actionsの `drain_progress` と `drain_timeout` に、終了待ちの総数 `remaining` と種類別の `blockers` を記録する。`registryOccupied` は終了前・隔離中のプレイ枠、`liveBusy` は音声、`pendingCreates` / `unknownCreates` は音声の作成待ち・受理不明、`unconfirmedLive` は3回の終了試行後も未確認の音声、`responseBusy` / `imageBusy` / `inspectionBusy` はAI要求、`endingJobs` は停止待ちのエンディング処理。同じ処理が複数の数に含まれるため、内訳は単純に合算しない。内訳を返さない旧版では総数だけ記録する。
+
+再実行時に旧プロセスが `409 DRAIN_ALREADY_STARTED` を返した場合は、同じversion/bootIdの既存drainを監視する。他の409や認証失敗は再試行扱いにしない。120秒以内の `readyToDeploy=true` かつ `remaining=0` が配信条件であり、既存drainへの参加はこの条件を省略しない。
+
+GPT-Live WebRTCは、作成したsession IDへサーバーからsidebandを接続し、`session.close` と `session.closed` で終了を確認する。1回の終了待機は15秒、3回まで試行する。待機が失敗しても最初の終了要求から最大120秒は接続が生きていれば完了イベントを受け取る。完了記録はプレイ管理へ反映するまで保持し、後から終了が確定した隔離枠も解放する。切断や時間経過だけでは終了扱いにしない。会話内容はsidebandのログへ出さない。
+
 自動resumeは行わない。まず対象account/region/serviceを確認し、AWSのcurrent/next deploymentと公開 `/healthz` のversion/bootIdを照合する。終了未確認のLiveがある場合は、予約を強制解放したりプロセスを再起動して隠したりしない。運営が上流の接続状態を確認する。
 
 動画もdrain時に新しい生成を止め、既知のfal要求をキャンセルする。キャンセル応答だけで完了とせず、上流の停止が未確認の動画や受理不明の送信はdrainのremainingに残る。120秒で停止を確認できない場合は配信を止め、運営がfal側の状態を確認する。結果を保持しているだけの状態と、進行中・停止未確認の要求を混同しない。
@@ -97,10 +103,10 @@
 
 ## Game core更新
 
-音声自動実行・会話履歴・検査つき状況画像・終了後結果保持の現在の構成と試遊手順は[ゲームコアの動作確認](game-core.md)を参照。旧手動実行ボタンの説明はv1回帰用の経路にのみ適用する。
+音声自動実行・会話履歴・検査つき状況画像・終了後結果保持の現在の構成と試遊手順は[ゲームコアの動作確認](game-core.md)を参照。本編UIはチャット形式に統一し、旧手動実行画面は削除済み。
 
-## 拡充シナリオの通常起動（2026-09-15）
+## 通常起動のシナリオ（2026-09-16）
 
-SCENARIO_PATH未指定時は `scenarios/playtest/warehouse-expanded-r1.json` を読み込む。mainから配信する統合サーバーは最新の共通ハーネスと、この拡充候補を使用する。元カタログは保持し、ローカルで明示的に `SCENARIO_PATH=scenarios/story-catalog.json` を指定すると従来の抽選に戻せる。
+SCENARIO_PATH未指定時は `scenarios/story-catalog.json` を読み込む。ローカル・公開版ともに、新規プレイごとに18構成から等確率で抽選し、再接続時はそのプレイの選択を維持する。本編の撮影ボタン下に選択済みのシナリオIDを表示する。
 
-既存 `.env.local` に旧SCENARIO_PATHが残っている場合は、拡充版パスへ変更するかその設定行を削除する。APIキーは変更不要。品質評価の未合格・内扉の説明課題は継続中であり、今回の既定変更は自動評価の合格を意味しない。
+既存 `.env.local` に固定シナリオの指定がある場合は、`SCENARIO_PATH=scenarios/story-catalog.json` に変更するか設定行を削除する。固定の拡充候補を試す場合は `npm run play:expanded` または `SCENARIO_PATH=scenarios/playtest/warehouse-expanded-r1.json` を使用する。APIキーは変更不要。

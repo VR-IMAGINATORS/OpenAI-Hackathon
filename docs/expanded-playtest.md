@@ -42,4 +42,4 @@ npm run play:expanded -- --mobile
 - 内扉の「操作窓の隙間から奥の輪を引く」説明が分かりづらいという試遊報告は未修正です。
 - 詳細: [評価結果](../specs/improve-game-core/live-evaluation-result.md)。今回の共有準備で音声・写真・スマホの実機検証を完了扱いにはしていません。
 
-通常起動（npm run dev / npm start）とmainの公開版も、SCENARIO_PATH未指定時はこの拡充版を使用する。既存 `.env.local` に旧カタログの指定がある場合は拡充版パスへ変更するか設定行を削除する。`play:expanded` はその指定にかかわらず拡充版を選ぶ。
+通常起動（npm run dev / npm start）とmainの公開版は、SCENARIO_PATH未指定時は `scenarios/story-catalog.json` から抽選する。`play:expanded` は環境設定にかかわらず拡充版を選ぶ。

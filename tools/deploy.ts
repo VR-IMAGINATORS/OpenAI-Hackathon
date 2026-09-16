@@ -28,7 +28,53 @@ export interface DeployDependencies {
   request(url: string, init?: RequestInit): Promise<Response>;
   now(): number;
   sleep(ms: number): Promise<void>;
-  log(event: string, version: string, image?: string): void;
+  log(event: string, version: string, image?: string, progress?: DrainProgress): void;
+}
+const drainBlockerKeys = [
+  'registryOccupied',
+  'liveBusy',
+  'pendingCreates',
+  'unknownCreates',
+  'unconfirmedLive',
+  'responseBusy',
+  'imageBusy',
+  'inspectionBusy',
+  'endingJobs',
+] as const;
+interface DrainProgress {
+  remaining: number;
+  elapsedSeconds: number;
+  blockers?: Partial<Record<(typeof drainBlockerKeys)[number], number>>;
+}
+interface DrainStatus {
+  version: string;
+  bootId: string;
+  readyToDeploy: boolean;
+  remaining: number;
+  blockers?: DrainProgress['blockers'];
+}
+function drainStatus(value: any): DrainStatus {
+  if (
+    !value ||
+    typeof value.version !== 'string' ||
+    typeof value.bootId !== 'string' ||
+    typeof value.readyToDeploy !== 'boolean' ||
+    !Number.isSafeInteger(value.remaining) ||
+    value.remaining < 0
+  )
+    throw new Error('Drain status invalid');
+  const blockers: NonNullable<DrainProgress['blockers']> = {};
+  for (const key of drainBlockerKeys) {
+    const count = value.blockers?.[key];
+    if (Number.isSafeInteger(count) && count >= 0) blockers[key] = count;
+  }
+  return {
+    version: value.version,
+    bootId: value.bootId,
+    readyToDeploy: value.readyToDeploy,
+    remaining: value.remaining,
+    ...(Object.keys(blockers).length ? { blockers } : {}),
+  };
 }
 
 export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
@@ -81,6 +127,7 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     AI_GLOBAL_LIVE_ATTEMPTS: required('AI_GLOBAL_LIVE_ATTEMPTS'),
     AI_GLOBAL_RESPONSE_ATTEMPTS: required('AI_GLOBAL_RESPONSE_ATTEMPTS'),
     LIVE_MODEL: env.LIVE_MODEL || 'gpt-live-1',
+    LIVE_VOICE: env.LIVE_VOICE || 'gleam',
     RESPONSE_MODEL: env.RESPONSE_MODEL || 'gpt-5.6-terra',
     GAME_MODEL: env.GAME_MODEL || 'gpt-5.6-sol',
     IMAGE_MODEL: env.IMAGE_MODEL || 'gpt-image-2.5-flare',
@@ -207,9 +254,11 @@ async function service(config: DeployConfig, deps: DeployDependencies): Promise<
 }
 class ApplicationRequestError extends Error {
   readonly status: number;
-  constructor(status: number) {
+  readonly code?: string;
+  constructor(status: number, code?: string) {
     super('Application request failed');
     this.status = status;
+    this.code = code;
   }
 }
 function retryableHealthFailure(error: unknown): boolean {
@@ -230,9 +279,18 @@ async function jsonRequest(
     redirect: 'error',
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new ApplicationRequestError(response.status);
   const text = await response.text();
   if (Buffer.byteLength(text) > 16384) throw new Error('Application response too large');
+  if (!response.ok) {
+    let code: string | undefined;
+    try {
+      // Retain only the one protocol code needed for safe retry; never log response bodies.
+      if (JSON.parse(text)?.error?.code === 'DRAIN_ALREADY_STARTED') code = 'DRAIN_ALREADY_STARTED';
+    } catch {
+      /* Non-JSON error bodies still remain ordinary request failures. */
+    }
+    throw new ApplicationRequestError(response.status, code);
+  }
   return JSON.parse(text);
 }
 
@@ -270,18 +328,52 @@ export async function deploy(config: DeployConfig, deps: DeployDependencies): Pr
       'Content-Type': 'application/json',
     };
     const started = deps.now();
-    let status = await jsonRequest(deps, config.publicUrl + '/api/ops/drain', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ requestId: randomUUID(), expectedVersion: health.version }),
-    });
+    let status: DrainStatus;
+    try {
+      status = drainStatus(
+        await jsonRequest(deps, config.publicUrl + '/api/ops/drain', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ requestId: randomUUID(), expectedVersion: health.version }),
+        }),
+      );
+    } catch (error) {
+      if (
+        !(error instanceof ApplicationRequestError) ||
+        error.status !== 409 ||
+        error.code !== 'DRAIN_ALREADY_STARTED'
+      )
+        throw error;
+      // A previous workflow may have timed out while this same instance kept draining.
+      status = drainStatus(
+        await jsonRequest(deps, config.publicUrl + '/api/ops/drain', { headers }),
+      );
+    }
+    let previousProgress = '';
     for (;;) {
       if (status.version !== health.version || status.bootId !== health.bootId)
         throw new Error('Drain instance changed');
+      const progress = { remaining: status.remaining, blockers: status.blockers };
+      const fingerprint = JSON.stringify(progress);
+      if (fingerprint !== previousProgress) {
+        deps.log('drain_progress', health.version, undefined, {
+          ...progress,
+          elapsedSeconds: Math.floor((deps.now() - started) / 1000),
+        });
+        previousProgress = fingerprint;
+      }
       if (status.readyToDeploy === true && status.remaining === 0) break;
-      if (deps.now() - started >= 120000) throw new Error('Drain unconfirmed; deployment stopped');
+      if (deps.now() - started >= 120000) {
+        deps.log('drain_timeout', health.version, undefined, {
+          ...progress,
+          elapsedSeconds: Math.floor((deps.now() - started) / 1000),
+        });
+        throw new Error('Drain unconfirmed; deployment stopped');
+      }
       await deps.sleep(2000);
-      status = await jsonRequest(deps, config.publicUrl + '/api/ops/drain', { headers });
+      status = drainStatus(
+        await jsonRequest(deps, config.publicUrl + '/api/ops/drain', { headers }),
+      );
     }
     deps.log('drain_confirmed', health.version);
   }
@@ -334,7 +426,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     request: fetch,
     now: Date.now,
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    log: (event, version, image) => console.log(JSON.stringify({ event, version, image })),
+    log: (event, version, image, progress) =>
+      console.log(JSON.stringify({ event, version, image, ...progress })),
   }).catch((error: unknown) => {
     const safeMessages = new Set([
       'AWS command failed',
@@ -349,6 +442,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       'Application response too large',
       'Old version unavailable',
       'Drain instance changed',
+      'Drain status invalid',
       'Drain unconfirmed; deployment stopped',
       'Deployment failed; verify old version before resume',
       'Deployment verification timed out; no automatic resume',

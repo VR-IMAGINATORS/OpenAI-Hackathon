@@ -24,6 +24,7 @@ export interface PlayRuntime<T, R = unknown> extends Controller {
   result?: R;
   terminalUntil?: number;
   closingPromise?: Promise<void>;
+  closeUnconfirmed?: boolean;
   controlPromise?: Promise<void>;
   controlPending?: boolean;
 }
@@ -40,6 +41,7 @@ export interface PlayRegistryOptions<T, R> {
   snapshot: (runtime: T) => R;
   dispose: (runtime: T) => void;
   transferControl: (runtime: T) => Promise<boolean>;
+  closeConfirmed?: (playId: string) => boolean;
   now?: () => number;
   wallNow?: () => number;
   capacity?: number;
@@ -171,12 +173,15 @@ export class PlayRegistry<T, R = unknown> {
       play.controlPending = true;
       play.controlPromise = (async () => {
         let confirmed = false;
+        let closeAttemptCompleted = false;
         try {
           confirmed = await this.options.transferControl(runtime);
+          closeAttemptCompleted = true;
         } catch {
           /* Keep the slot on unknown cleanup. */
         }
-        if (!confirmed && play.lifecycle !== 'terminal') await this.quarantine(play);
+        if (!confirmed && play.lifecycle !== 'terminal')
+          await this.quarantine(play, closeAttemptCompleted);
         if (play.controllerEpoch === transferEpoch) play.controlPending = false;
       })();
     }
@@ -211,14 +216,34 @@ export class PlayRegistry<T, R = unknown> {
     return play;
   }
 
-  private async quarantine(play: PlayRuntime<T, R>): Promise<void> {
+  private async quarantine(play: PlayRuntime<T, R>, closeAttemptCompleted = false): Promise<void> {
     if (play.runtime) {
       this.options.expire(play.runtime);
       play.result = this.options.snapshot(play.runtime);
       this.options.dispose(play.runtime);
       play.runtime = null;
     }
+    play.closeUnconfirmed = closeAttemptCompleted;
     play.lifecycle = 'quarantined';
+  }
+
+  private markTerminal(play: PlayRuntime<T, R>): void {
+    play.closeUnconfirmed = false;
+    play.lifecycle = 'terminal';
+    play.terminalUntil = this.now() + (this.options.resultTtlMs ?? 120_000);
+  }
+
+  /** Reconcile only provider-confirmed closes after their runtime has been discarded. */
+  reconcileConfirmedClosures(): void {
+    if (!this.options.closeConfirmed) return;
+    for (const play of this.plays.values()) {
+      if (play.lifecycle !== 'quarantined' || !play.closeUnconfirmed) continue;
+      try {
+        if (this.options.closeConfirmed(play.id)) this.markTerminal(play);
+      } catch {
+        /* A failed confirmation check leaves the quarantined admission slot intact. */
+      }
+    }
   }
 
   end(play: PlayRuntime<T, R>): Promise<void> {
@@ -233,19 +258,27 @@ export class PlayRegistry<T, R = unknown> {
     }
     play.closingPromise = (async () => {
       let confirmed = !runtime;
+      let closeAttemptCompleted = false;
       try {
-        if (runtime) confirmed = await this.options.close(runtime);
+        if (runtime) {
+          confirmed = await this.options.close(runtime);
+          closeAttemptCompleted = true;
+        }
       } catch {
         /* Unknown provider close retains admission. */
       }
       play.runtime = null;
-      play.lifecycle = confirmed ? 'terminal' : 'quarantined';
-      if (confirmed) play.terminalUntil = this.now() + (this.options.resultTtlMs ?? 120_000);
+      if (confirmed) this.markTerminal(play);
+      else {
+        play.closeUnconfirmed = closeAttemptCompleted;
+        play.lifecycle = 'quarantined';
+      }
     })();
     return play.closingPromise;
   }
 
   async sweep(waitForClose = true): Promise<void> {
+    this.reconcileConfirmedClosures();
     const now = this.now();
     const closing: Promise<void>[] = [];
     for (const play of this.plays.values()) {
@@ -269,6 +302,7 @@ export class PlayRegistry<T, R = unknown> {
   async drain(): Promise<void> {
     this.admission = 'draining';
     await Promise.all([...this.plays.values()].map((play) => this.end(play)));
+    this.reconcileConfirmedClosures();
   }
   resume(): void {
     if (this.occupied !== 0) throw new SessionError('DRAIN_INCOMPLETE', 409);

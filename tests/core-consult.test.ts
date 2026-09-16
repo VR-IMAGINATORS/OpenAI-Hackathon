@@ -186,9 +186,11 @@ test('core Live instructions delegate game questions and gate action claims on a
   assert.match(prompt, /相づちを一度だけ伝える/);
   assert.match(prompt, /アプリから受付返答は届かない/);
   assert.match(prompt, /実行可否・成否はサーバーが判断する/);
-  assert.match(prompt, /委譲しただけでは行動の開始・成功・状態変化は未確定/);
-  assert.match(prompt, /確定した結果のcommentary通知を受けて自分の言葉で伝え/);
-  assert.match(prompt, /それが届く前に結果を告げない/);
+  assert.match(prompt, /委譲だけで開始・成功・状態変化を告げず/);
+  assert.match(prompt, /必ず自分の言葉で説明する/);
+  assert.match(prompt, /サーバー確定のcommentaryを待つ/);
+  assert.match(prompt, /道具の性質→作用→確定結果/);
+  assert.match(prompt, /attemptの対象・用途に結び付け/);
 });
 
 test('Live omits credit balances at initial connection and reconnect in each locale', () => {

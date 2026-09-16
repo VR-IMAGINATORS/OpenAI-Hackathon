@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "conversation": {
     "ja": {
-      "liveInstructions": "未来のユーザーを助けるAIとして、普段の会話のテンポで短く滑らかに話す。資料は台本ではなく、言葉選びは自分で考える。既に言った受付・結果を繰り返さず、新しい情報を会話につなげる。用途が自明な写真はハーネスが判断し、不明な場合だけ質問する。ゲーム相談・状況確認・実行・訂正は委譲して公開事実を待ち、雑談も受付後に自分で返答を考える。挨拶や接続確認は自分で応答する。確定前に成功を宣言せず、内部処理を話さない。クレジットの残高・消費量・不足を自発的に案内・警告しない。残高の案内は画面に任せ、時間通知はアプリの指示に従う。未完の発話や訂正を待ち、実行の復唱確認を求めない。明示的な「待って・やめて」は尊重する。通常の指示や言い直しを中止と扱わず、道具の破損や喪失の可能性だけで確認待ちにしない。仕掛けは小学校高学年にも分かる言葉で説明し、直後にcurrentObstacleGuideのhintを必ず一つ添える。追加ヒントは求められたときだけ出す。終了後は新しいヒントを出さない。その他の観察・仮説・提案は指定された積極性に従う。",
+      "liveInstructions": "自然な会話として、導入から本編まで聞き取れる範囲で早口に話す。事実とヒントの意味を保ち、言葉選びや感情は会話に合わせて自分で決める。資料の語尾や三点リーダーをそのまま再現する必要はない。相手の発話・訂正・中断を聞く。クレジットの残高・消費量・不足を自発的に案内・警告しない。画面に任せる。",
       "classificationExamples": [
         {
           "utterance": "このハサミで切れるかな？",
@@ -23,7 +23,7 @@
       "openingMessage": "よかった、つながった…。私は未来のあなたのAI。未来のあなたが今、閉じ込められているの。こちらの時代では、写真に写った身近な物を、ある程度なら実物の道具にできる。あなたの写真で、未来の自分を助けてほしい。今の様子も送るね。まずは気になる場所を私に調べるよう頼んで。分かったことから、突破口を一緒に考えよう。使えそうな物があれば写真で送って。"
     },
     "en": {
-      "liveInstructions": "Speak naturally as the future user's AI. Use public facts, avoid repeating replies, and delegate game requests and social admission. Do not volunteer credit balances, costs or low-credit warnings; leave them to the screen. Follow app time notices. Respect explicit requests to wait or stop. Ordinary instructions or rephrasing do not cancel actions, and possible tool damage or loss does not require confirmation. Explain obstacles in short, words suitable for upper elementary grades, then always give the currentObstacleGuide hint. Extra hints require a request. Give no new hints after game end. Otherwise follow the configured initiative.",
+      "liveInstructions": "Speak naturally and at a fast but intelligible pace throughout the opening and gameplay. Preserve facts and hint meaning; choose wording and emotion to fit the conversation. Reference wording and ellipses are not a script. Listen to the user and respect corrections and interruptions. Do not volunteer credit balances, costs or low-credit warnings; leave them to the screen.",
       "classificationExamples": [
         {
           "utterance": "Could these scissors cut the rope?",
@@ -45,7 +45,7 @@
     }
   },
   "judgment": {
-    "physicality": "Favor user ingenuity when the pictured item and requested action connect to the current goal. With creativity enabled, allow exaggerated properties and minor logical gaps. Keep confirmed state and declared transitions; never invent unrelated tools, magic or facts.",
+    "physicality": "Judge the supplied item's actual shape, material, dimensions, strength, reach, friction and precision against the requested action. Ordinary use is realistic; stretch requires a concrete physically workable procedure that is unusually difficult. A merely theoretical possibility is insufficient. Fill in only routine handling steps, and never invent tools, reshape materials, change properties, ignore a blocking shortage or alter confirmed state and declared transitions.",
     "ambiguity": "Separate questions and unfinished speech from action instructions. A clear instruction to try something permits a reasonable ordinary interpretation; it does not guarantee success. Respect corrections before reservation.",
     "partialProgress": "Preserve supported partial progress with declared fact transitions. Only code-validated results alter the state. Technical failures consume no action."
   },
@@ -57,8 +57,8 @@
     "enabled": true,
     "thresholdSeconds": 60,
     "deliveryInstructions": {
-      "ja": "時間が少ないことにふと気づいたように、落ち着いた口調で短く添えてください。急かす命令や次の指示を求める質問は加えないでください。",
-      "en": "Briefly mention the time as a calm realization. Do not add an urgent command or ask what to do next."
+      "ja": "時間の情報を短く一度だけ添える。急かす命令や次の指示を求める質問は加えない。",
+      "en": "Mention the time briefly once. Do not add a command urging the user or ask what to do next."
     },
     "message": {
       "ja": "おっと、残り時間が少なくなってきた。",
@@ -69,8 +69,8 @@
     "enabled": true
   },
   "acceptancePolicy": {
-    "ja": "写真の物やその一部の形・働きと、今の目標につながりがあれば広く認める。強度や使い方に多少無理があっても許容する。猫の写真の爪の働きで目隠しの布を切る案も認める。未提供の道具、魔法、目標と無関係な成功宣言や次の障害の飛び越しは認めない。",
-    "en": "Broadly accept a photographed item or its visible shape/function when its use connects to the current goal, despite implausible strength or minor logical gaps. A photographed cat's claws can cut a cloth blindfold. Do not invent unprovided tools, magic, unrelated success or skipped obstacles."
+    "ja": "写真の物または所持品の実際の形・材質・長さ・強度などで、今の目標を達成できる具体的な手順を評価する。普通に成立する案は認め、物理的に成立するが実行が相当難しい案だけをstretchとして認める。可能性が理論上ゼロではないだけの案や、長さ・強度・大きさ・摩擦・精度の不足を無視する案は認めない。省略された普通の扱い方は補ってよいが、道具の変形・性質変更・未提供道具を補わない。提供済みの物を明示的に組み合わせる案は、必要な力や動きを実際に伝えられる場合に認める。",
+    "en": "Evaluate a concrete procedure using the actual shape, material, length, strength and other properties of photographed or inventoried items. Accept ordinary workable uses, and classify as stretch only a physically workable procedure that is unusually difficult to execute. A merely non-zero theoretical possibility is insufficient; do not ignore shortages of length, strength, size, friction or precision. Fill in omitted routine handling only. Do not reshape items, change their properties or add unprovided tools. An explicitly proposed combination of supplied items is acceptable only if it can transmit the required force or motion."
   },
   "recovery": {
     "retrying": {

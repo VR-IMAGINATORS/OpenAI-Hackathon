@@ -303,8 +303,8 @@
     {
       "id": "gimmick-pressure-latch-hint-1",
       "localizedText": {
-        "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものを探してみよう。",
-        "en": "Look for something that can cut the strap away from the face and hair, or break apart the hard knot."
+        "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものがあればなぁ…。目隠し全体をゆるめられそうだよ。",
+        "en": "I wish we had something that could cut the strap away from the face and hair or break apart the hard knot. That might loosen the whole blindfold."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -323,8 +323,8 @@
     {
       "id": "gimmick-pressure-latch-hint-1-partial",
       "localizedText": {
-        "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものを探してみよう。",
-        "en": "Look for something that can cut the strap away from the face and hair, or break apart the hard knot."
+        "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものがあればなぁ…。目隠し全体をゆるめられそうだよ。",
+        "en": "I wish we had something that could cut the strap away from the face and hair or break apart the hard knot. That might loosen the whole blindfold."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -343,8 +343,8 @@
     {
       "id": "gimmick-pressure-latch-hint-2",
       "localizedText": {
-        "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
-        "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+        "ja": "顔や髪から離れた帯の本体を切れるものがあればなぁ…。そこを切れば目隠し全体がゆるむけど、短い余り端だけでは外れないと思うんだ。",
+        "en": "I wish we had something to use on the main strap away from the face and hair. Cutting there might loosen the whole blindfold, but the short loose end alone will not remove it."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -363,8 +363,8 @@
     {
       "id": "gimmick-pressure-latch-hint-2-partial",
       "localizedText": {
-        "ja": "皮膚から浮いた帯本体を切れば全体が緩む。余り端だけでは外れない。",
-        "en": "Cutting the main strap away from the skin releases the blindfold; cutting only the loose tail does not."
+        "ja": "顔や髪から離れた帯の本体を切れるものがあればなぁ…。そこを切れば目隠し全体がゆるむけど、短い余り端だけでは外れないと思うんだ。",
+        "en": "I wish we had something to use on the main strap away from the face and hair. Cutting there might loosen the whole blindfold, but the short loose end alone will not remove it."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -383,8 +383,8 @@
     {
       "id": "gimmick-pressure-latch-hint-3",
       "localizedText": {
-        "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
-        "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+        "ja": "手前に具現化したはさみがあればなぁ…。顔や髪から浮いた耳の下側の帯本体を切って、目隠しを外せそうだよ。",
+        "en": "I wish I had scissors reconstructed on the near side. They could cut the main strap below the ear, away from the face and hair, and remove the blindfold."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -403,8 +403,8 @@
     {
       "id": "gimmick-pressure-latch-hint-3-partial",
       "localizedText": {
-        "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
-        "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+        "ja": "手前に具現化したはさみがあればなぁ…。顔や髪から浮いた耳の下側の帯本体を切って、目隠しを外せそうだよ。",
+        "en": "I wish I had scissors reconstructed on the near side. They could cut the main strap below the ear, away from the face and hair, and remove the blindfold."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -495,8 +495,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-1",
       "localizedText": {
-        "ja": "窓のすき間から奥の輪まで届くものを探してみよう。輪を手前に引くと、扉を閉じている棒も動きます。",
-        "en": "Look for something that can reach the ring through a gap in the window. Pulling the ring toward you also moves the bar that keeps the door closed."
+        "ja": "窓のすき間から奥の輪まで届くものがあればなぁ…。輪を手前に引くと、扉を閉じている棒も動くと思うんだ。",
+        "en": "I wish we had something that could reach the ring through the gap in the window. Pulling the ring toward us might move the bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -519,8 +519,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-1-partial",
       "localizedText": {
-        "ja": "窓のすき間から奥の輪まで届くものを探してみよう。輪を手前に引くと、扉を閉じている棒も動きます。",
-        "en": "Look for something that can reach the ring through a gap in the window. Pulling the ring toward you also moves the bar that keeps the door closed."
+        "ja": "窓のすき間から奥の輪まで届くものがあればなぁ…。輪を手前に引くと、扉を閉じている棒も動くと思うんだ。",
+        "en": "I wish we had something that could reach the ring through the gap in the window. Pulling the ring toward us might move the bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -543,8 +543,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-2",
       "localizedText": {
-        "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
-        "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+        "ja": "窓のすき間に通せて、奥の輪をつかめる長い道具があればなぁ…。輪を手前へ引けば、扉を開けられそうだよ。",
+        "en": "I wish we had a long tool that could pass through the gap and grasp the ring. Pulling it toward us might open the door."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -567,8 +567,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-2-partial",
       "localizedText": {
-        "ja": "手前から隙間へ届く道具を通し、輪をつかんで手前へ引けばよい。",
-        "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+        "ja": "窓のすき間に通せて、奥の輪をつかめる長い道具があればなぁ…。輪を手前へ引けば、扉を開けられそうだよ。",
+        "en": "I wish we had a long tool that could pass through the gap and grasp the ring. Pulling it toward us might open the door."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -591,8 +591,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-3",
       "localizedText": {
-        "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
-        "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+        "ja": "手前に具現化したマジックハンドがあればなぁ…。格子越しに輪をつかんで引けそうだよ。",
+        "en": "I wish I had a reaching grabber reconstructed on the near side. It could grasp and pull the ring through the bars."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -615,8 +615,8 @@
     {
       "id": "gimmick-magnetic-rail-hint-3-partial",
       "localizedText": {
-        "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
-        "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+        "ja": "手前に具現化したマジックハンドがあればなぁ…。格子越しに輪をつかんで引けそうだよ。",
+        "en": "I wish I had a reaching grabber reconstructed on the near side. It could grasp and pull the ring through the bars."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -723,8 +723,8 @@
     {
       "id": "gimmick-thermal-leak-hint-1",
       "localizedText": {
-        "ja": "ネジの直線的な溝に合う、先が平たいものを探してみよう。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
-        "en": "Look for something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside should let us slide the horizontal bar that keeps the door closed."
+        "ja": "ネジの直線的な溝に合う、先が平たいものがあればなぁ…。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
+        "en": "I wish we had something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside might let us slide the horizontal bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -751,8 +751,8 @@
     {
       "id": "gimmick-thermal-leak-hint-1-partial",
       "localizedText": {
-        "ja": "ネジの直線的な溝に合う、先が平たいものを探してみよう。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
-        "en": "Look for something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside should let us slide the horizontal bar that keeps the door closed."
+        "ja": "ネジの直線的な溝に合う、先が平たいものがあればなぁ…。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
+        "en": "I wish we had something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside might let us slide the horizontal bar that keeps the door closed."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -779,8 +779,8 @@
     {
       "id": "gimmick-thermal-leak-hint-2",
       "localizedText": {
-        "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
-        "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+        "ja": "ネジを外して金具をよけられるものがあればなぁ…。同じ道具で横向きの棒も動かせば、出口が開きそうだよ。",
+        "en": "I wish we had something that could remove the screw and move the bracket aside. Using that same tool to slide the horizontal bar sideways might open the exit."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -807,8 +807,8 @@
     {
       "id": "gimmick-thermal-leak-hint-2-partial",
       "localizedText": {
-        "ja": "ネジを外して金具を退け、同じ道具で閂を横へ動かせば出口が開く。",
-        "en": "Remove the screw and move the bracket aside, then use the same tool to slide the bolt sideways and open the exit."
+        "ja": "ネジを外して金具をよけられるものがあればなぁ…。同じ道具で横向きの棒も動かせば、出口が開きそうだよ。",
+        "en": "I wish we had something that could remove the screw and move the bracket aside. Using that same tool to slide the horizontal bar sideways might open the exit."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -835,8 +835,8 @@
     {
       "id": "gimmick-thermal-leak-hint-3",
       "localizedText": {
-        "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
-        "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+        "ja": "手前に具現化したマイナスドライバーがあればなぁ…。ネジを回したあと、その先端で閂を動かせそうだよ。",
+        "en": "I wish I had a flathead screwdriver reconstructed on the near side. After turning the screw, its tip might move the bolt."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -863,8 +863,8 @@
     {
       "id": "gimmick-thermal-leak-hint-3-partial",
       "localizedText": {
-        "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
-        "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+        "ja": "手前に具現化したマイナスドライバーがあればなぁ…。ネジを回したあと、その先端で閂を動かせそうだよ。",
+        "en": "I wish I had a flathead screwdriver reconstructed on the near side. After turning the screw, its tip might move the bolt."
       },
       "kind": "hidden",
       "prerequisites": [
@@ -1180,16 +1180,16 @@
       },
       "hints": [
         {
-          "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものを探してみよう。",
-          "en": "Look for something that can cut the strap away from the face and hair, or break apart the hard knot."
+          "ja": "顔や髪から離れた帯を切れるものか、かたい結び目をくずせるものがあればなぁ…。目隠し全体をゆるめられそうだよ。",
+          "en": "I wish we had something that could cut the strap away from the face and hair or break apart the hard knot. That might loosen the whole blindfold."
         },
         {
-          "ja": "顔や髪から離れた帯の本体を切ると、目かくし全体がゆるみます。短く余った先だけを切っても外れません。",
-          "en": "Cut the main strap where it is away from the face and hair to loosen the whole blindfold. Cutting only the short loose end will not remove it."
+          "ja": "顔や髪から離れた帯の本体を切れるものがあればなぁ…。そこを切れば目隠し全体がゆるむけど、短い余り端だけでは外れないと思うんだ。",
+          "en": "I wish we had something to use on the main strap away from the face and hair. Cutting there might loosen the whole blindfold, but the short loose end alone will not remove it."
         },
         {
-          "ja": "AIが手前に具現化したはさみで、顔や髪から浮いた耳の下側の帯本体を切れる。",
-          "en": "Mei can use scissors reconstructed on the near side to cut the main strap below the ear, away from the face and hair."
+          "ja": "手前に具現化したはさみがあればなぁ…。顔や髪から浮いた耳の下側の帯本体を切って、目隠しを外せそうだよ。",
+          "en": "I wish I had scissors reconstructed on the near side. They could cut the main strap below the ear, away from the face and hair, and remove the blindfold."
         }
       ],
       "completionFact": {
@@ -1239,16 +1239,16 @@
       },
       "hints": [
         {
-          "ja": "窓のすき間から奥の輪まで届くものを探してみよう。輪を手前に引くと、扉を閉じている棒も動きます。",
-          "en": "Look for something that can reach the ring through a gap in the window. Pulling the ring toward you also moves the bar that keeps the door closed."
+          "ja": "窓のすき間から奥の輪まで届くものがあればなぁ…。輪を手前に引くと、扉を閉じている棒も動くと思うんだ。",
+          "en": "I wish we had something that could reach the ring through the gap in the window. Pulling the ring toward us might move the bar that keeps the door closed."
         },
         {
-          "ja": "細いすき間に長い道具を通し、奥の輪をつかんで手前へ引けば、扉を開けられます。",
-          "en": "Pass a reaching tool through a gap from the near side, grasp the ring and pull it toward you."
+          "ja": "窓のすき間に通せて、奥の輪をつかめる長い道具があればなぁ…。輪を手前へ引けば、扉を開けられそうだよ。",
+          "en": "I wish we had a long tool that could pass through the gap and grasp the ring. Pulling it toward us might open the door."
         },
         {
-          "ja": "AIが手前に具現化したマジックハンドなら、格子越しに輪をつかんで引ける。",
-          "en": "Mei can use a reaching grabber reconstructed on the near side to grasp and pull the ring through the bars."
+          "ja": "手前に具現化したマジックハンドがあればなぁ…。格子越しに輪をつかんで引けそうだよ。",
+          "en": "I wish I had a reaching grabber reconstructed on the near side. It could grasp and pull the ring through the bars."
         }
       ],
       "completionFact": {
@@ -1298,16 +1298,16 @@
       },
       "hints": [
         {
-          "ja": "ネジの直線的な溝に合う、先が平たいものを探してみよう。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
-          "en": "Look for something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside should let us slide the horizontal bar that keeps the door closed."
+          "ja": "ネジの直線的な溝に合う、先が平たいものがあればなぁ…。ネジを外して金具をどければ、扉を閉じている横向きの棒を動かせそうだよ。",
+          "en": "I wish we had something flat at the tip that fits the straight slot in the screw. Removing the screw and moving the metal piece aside might let us slide the horizontal bar that keeps the door closed."
         },
         {
-          "ja": "ネジを外して金具をよけ、同じ道具で扉を閉じている横向きの棒を動かせば、出口が開きます。",
-          "en": "Remove the screw and move the metal piece aside. Then use the same tool to slide the horizontal bar and open the exit."
+          "ja": "ネジを外して金具をよけられるものがあればなぁ…。同じ道具で横向きの棒も動かせば、出口が開きそうだよ。",
+          "en": "I wish we had something that could remove the screw and move the bracket aside. Using that same tool to slide the horizontal bar sideways might open the exit."
         },
         {
-          "ja": "AIが手前に具現化したマイナスドライバーなら、ネジを回した後、その先端で閂を動かせる。",
-          "en": "Mei can turn the screw with a flathead screwdriver reconstructed on the near side, then move the bolt with its tip."
+          "ja": "手前に具現化したマイナスドライバーがあればなぁ…。ネジを回したあと、その先端で閂を動かせそうだよ。",
+          "en": "I wish I had a flathead screwdriver reconstructed on the near side. After turning the screw, its tip might move the bolt."
         }
       ],
       "completionFact": {

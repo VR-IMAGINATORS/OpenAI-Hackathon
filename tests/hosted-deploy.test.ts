@@ -37,6 +37,8 @@ function harness(
     healthStatus?: number;
     healthFailures?: number;
     healthNetworkFailure?: boolean;
+    drainConflict?: string;
+    drainStatus?: Record<string, unknown>;
   } = {},
 ) {
   let time = 0,
@@ -107,13 +109,20 @@ function harness(
         'Bearer ' + env.OPS_TOKEN,
       );
       assert.equal((init?.headers as Record<string, string>).Origin, undefined);
-      if (init?.method === 'POST')
+      if (init?.method === 'POST') {
         assert.equal(JSON.parse(init.body as string).expectedVersion, oldSha);
+        if (options.drainConflict)
+          return json(
+            { error: { code: options.drainConflict, message: 'sentinel-private-body' } },
+            409,
+          );
+      }
       return json({
         version: oldSha,
         bootId: options.mismatchedBoot ? 'different' : 'old-boot',
         readyToDeploy: !options.stuck,
         remaining: options.stuck ? 1 : 0,
+        ...options.drainStatus,
       });
     },
   };
@@ -206,6 +215,79 @@ test('hosted deploy rejects a different boot during drain', async () => {
   const h = harness({ mismatchedBoot: true });
   await assert.rejects(deploy(config(), h.deps), /Drain instance changed/);
   assert.equal(h.events.includes('create-container-service-deployment'), false);
+});
+
+test('deployment retry joins the existing drain of the same version and boot', async () => {
+  const h = harness({ drainConflict: 'DRAIN_ALREADY_STARTED' });
+  await deploy(config(), h.deps);
+  assert.equal(h.events.filter((event) => event === 'POST/api/ops/drain').length, 1);
+  assert.equal(h.events.filter((event) => event === 'GET/api/ops/drain').length, 1);
+  assert.equal(
+    h.events.filter((event) => event === 'create-container-service-deployment').length,
+    1,
+  );
+  assert.ok(
+    h.events.indexOf('GET/api/ops/drain') < h.events.indexOf('create-container-service-deployment'),
+  );
+  assert.doesNotMatch(JSON.stringify(h.logs), /sentinel-private-body|resume/);
+});
+
+test('joining an existing drain retains timeout and instance checks', async () => {
+  for (const options of [
+    { stuck: true },
+    { mismatchedBoot: true },
+    { drainStatus: { version: 'c'.repeat(40) } },
+  ]) {
+    const h = harness({ drainConflict: 'DRAIN_ALREADY_STARTED', ...options });
+    await assert.rejects(deploy(config(), h.deps), /Drain unconfirmed|Drain instance changed/);
+    assert.equal(h.events.includes('create-container-service-deployment'), false);
+    assert.equal(
+      h.events.some((event) => event.includes('resume')),
+      false,
+    );
+  }
+  const otherConflict = harness({ drainConflict: 'VERSION_MISMATCH' });
+  await assert.rejects(deploy(config(), otherConflict.deps), /Application request failed/);
+  assert.equal(otherConflict.events.includes('GET/api/ops/drain'), false);
+});
+
+test('drain diagnostics contain only approved numeric counts, never response bodies or IDs', async () => {
+  const h = harness({
+    stuck: true,
+    drainStatus: {
+      privateData: 'sentinel-private-body',
+      blockers: {
+        registryOccupied: 1,
+        liveBusy: 1,
+        unconfirmedLive: 1,
+        token: 'sentinel-private-token',
+        sessionId: 'sentinel-session-id',
+        responseBusy: 'sentinel-invalid-count',
+        pendingCreates: -1,
+      },
+    },
+  });
+  await assert.rejects(deploy(config(), h.deps), /Drain unconfirmed/);
+  const timeout = h.logs.find((entry) => (entry as unknown[])[0] === 'drain_timeout') as unknown[];
+  assert.deepEqual(timeout[3], {
+    remaining: 1,
+    elapsedSeconds: 120,
+    blockers: { registryOccupied: 1, liveBusy: 1, unconfirmedLive: 1 },
+  });
+  assert.doesNotMatch(JSON.stringify(h.logs), /sentinel|old-boot/);
+});
+
+test('invalid or contradictory drain status never authorizes deployment', async () => {
+  for (const drainStatus of [
+    { remaining: -1 },
+    { remaining: '0' },
+    { readyToDeploy: 'true' },
+    { readyToDeploy: true, remaining: 1 },
+  ]) {
+    const h = harness({ drainStatus });
+    await assert.rejects(deploy(config(), h.deps), /Drain status invalid|Drain unconfirmed/);
+    assert.equal(h.events.includes('create-container-service-deployment'), false);
+  }
 });
 
 test('hosted deployment failure deletes temporary secrets without automatic resume', async () => {

@@ -1,3 +1,4 @@
+import { liveVoices, defaultLiveVoice, type LiveVoice } from '../shared/live-voice.js';
 import { positiveInteger } from './config.js';
 
 // Presentation budget retained independently of the game's photo-send allowance.
@@ -7,6 +8,7 @@ export interface AiConfig {
   mode: 'mock' | 'live';
   apiKey?: string;
   liveModel: string;
+  liveVoice: LiveVoice;
   responseModel: string;
   gameModel: string;
   liveModels: string[];
@@ -54,6 +56,8 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
     if (!/^[-a-zA-Z0-9.]+$/.test(value)) throw new Error(name + ' invalid');
     return value;
   }
+  const liveVoice = values.LIVE_VOICE ?? defaultLiveVoice;
+  if (!(liveVoices as readonly string[]).includes(liveVoice)) throw new Error('LIVE_VOICE invalid');
   const liveModel = model('LIVE_MODEL', 'gpt-live-1');
   const responseModel = model('RESPONSE_MODEL', 'gpt-5.6-terra');
   const gameModel = model('GAME_MODEL', 'gpt-5.6-sol');
@@ -75,6 +79,7 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
     mode,
     apiKey: mode === 'live' ? values.OPENAI_API_KEY : undefined,
     liveModel,
+    liveVoice: liveVoice as LiveVoice,
     responseModel,
     gameModel,
     liveModels: [liveModel],

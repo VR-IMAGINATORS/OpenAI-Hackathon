@@ -312,6 +312,7 @@ export function createHostedApp(
     snapshot: (r) => r.state(),
     dispose: (r) => r.dispose(),
     transferControl: (r) => r.transferControl(),
+    closeConfirmed: (playId) => ai.isLiveCloseConfirmed(playId),
   });
   const sessions = new SessionStore({
     now,
@@ -325,22 +326,36 @@ export function createHostedApp(
   let disposed = false;
   const liveRequests = new WeakMap<GameRuntime, Set<string>>();
   function status() {
+    registry.reconcileConfirmedClosures();
     const counts = ai.snapshot();
+    const ending = endingJobs.snapshot();
+    const blockers = {
+      registryOccupied: registry.occupied,
+      liveBusy: counts.liveBusy,
+      pendingCreates: counts.pendingCreates,
+      unknownCreates: counts.unknownCreates,
+      unconfirmedLive: counts.unconfirmedLive,
+      responseBusy: counts.responseBusy,
+      imageBusy: counts.imageBusy ?? 0,
+      inspectionBusy: counts.inspectionBusy ?? 0,
+      endingJobs: ending.remaining,
+    };
     const remaining =
       Math.max(
-        registry.occupied,
-        counts.liveBusy +
-          counts.pendingCreates +
-          counts.responseBusy +
-          counts.unknownCreates +
-          (counts.imageBusy ?? 0) +
-          (counts.inspectionBusy ?? 0),
-      ) + endingJobs.snapshot().remaining;
+        blockers.registryOccupied,
+        blockers.liveBusy +
+          blockers.pendingCreates +
+          blockers.responseBusy +
+          blockers.unknownCreates +
+          blockers.imageBusy +
+          blockers.inspectionBusy,
+      ) + blockers.endingJobs;
     return {
       readyToDeploy: registry.admission === 'draining' && remaining === 0,
       version: config.version,
       bootId,
       remaining,
+      blockers,
     };
   }
   function drain(): Promise<void> {

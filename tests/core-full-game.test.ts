@@ -99,6 +99,7 @@ test('core voice instructions execute once through HTTP and deliver final-genera
             inventoryChanges: [],
             factChanges: [],
             shortReason: '物理的に成立する',
+            actionExplanation: { mechanism: 'rigidity_wedge', reason: 'effective' },
           };
         } else {
           recognitionCalls++;

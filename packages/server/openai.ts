@@ -1,11 +1,16 @@
+import { liveVoices } from '../shared/live-voice.js';
 import { z } from 'zod';
-const liveId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+import { LiveSidebandManager, liveSessionId, type LiveSidebandOptions } from './live-sideband.js';
 export const liveRequest = z
   .object({
     session: z
       .object({
         model: z.string().max(100),
         instructions: z.string().max(8000),
+        audio: z
+          .object({ output: z.object({ voice: z.enum(liveVoices) }).strict() })
+          .strict()
+          .optional(),
         delegation: z.object({ type: z.literal('client') }).strict(),
         store: z.literal(false),
       })
@@ -15,7 +20,7 @@ export const liveRequest = z
   .strict();
 export const liveAnswer = z
   .object({
-    session: z.object({ id: liveId }).passthrough(),
+    session: z.object({ id: liveSessionId }).passthrough(),
     transport: z
       .object({ type: z.literal('webrtc'), sdp: z.string().min(1).max(200000) })
       .passthrough(),
@@ -92,6 +97,8 @@ export interface OpenAITransport {
   createImage?(body: unknown, signal?: AbortSignal): Promise<unknown>;
   createImageEdit?(body: ImageEditRequest, signal?: AbortSignal): Promise<unknown>;
   hangup(id: string): Promise<void>;
+  isLiveSessionClosed?(id: string): boolean;
+  releaseClosedLiveSession?(id: string): void;
 }
 export interface ImageEditRequest {
   model: string;
@@ -113,7 +120,9 @@ export class UpstreamError extends Error {
 export function createOpenAITransport(
   apiKey: string,
   request: typeof fetch = fetch,
+  sidebandOptions: LiveSidebandOptions = {},
 ): OpenAITransport {
+  const sideband = new LiveSidebandManager(apiKey, sidebandOptions);
   async function post(
     path: string,
     body: unknown,
@@ -162,7 +171,17 @@ export function createOpenAITransport(
     }
   }
   return {
-    createLiveSession: async (body) => liveAnswer.parse(await post('live/sessions', body)),
+    createLiveSession: async (body) => {
+      const reservation = sideband.reserve();
+      try {
+        const answer = liveAnswer.parse(await post('live/sessions', body));
+        reservation.track(answer.session.id);
+        return answer;
+      } catch (error) {
+        reservation.release();
+        throw error;
+      }
+    },
     createResponse: (body, signal) => post('responses', body, false, signal),
     createImage: (body, signal) => post('images/generations', body, false, signal, 8 * 1024 * 1024),
     createImageEdit: (body, signal) => {
@@ -178,8 +197,9 @@ export function createOpenAITransport(
       return post('images/edits', form, false, signal, 8 * 1024 * 1024);
     },
     hangup: async (id) => {
-      liveId.parse(id);
-      await post('live/sessions/' + encodeURIComponent(id) + '/hangup', {}, true);
+      await sideband.hangup(id);
     },
+    isLiveSessionClosed: (id) => sideband.isClosed(id),
+    releaseClosedLiveSession: (id) => sideband.releaseClosed(id),
   };
 }
