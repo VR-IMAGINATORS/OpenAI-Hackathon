@@ -28,7 +28,7 @@ import {
 } from '../../packages/shared/core-config.js';
 
 const MAX_CONFIG_BYTES = 256 * 1024;
-export const DEFAULT_SCENARIO_PATH = 'scenarios/playtest/warehouse-expanded-r1.json';
+export const DEFAULT_SCENARIO_PATH = 'scenarios/story-catalog.json';
 export function parseScenarioSource(value: unknown): ScenarioV2 | StoryCatalog {
   return (value as { version?: unknown } | null)?.version === 3
     ? parseStoryCatalog(value)

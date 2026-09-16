@@ -103,10 +103,10 @@ GPT-Live WebRTCは、作成したsession IDへサーバーからsidebandを接�
 
 ## Game core更新
 
-音声自動実行・会話履歴・検査つき状況画像・終了後結果保持の現在の構成と試遊手順は[ゲームコアの動作確認](game-core.md)を参照。旧手動実行ボタンの説明はv1回帰用の経路にのみ適用する。
+音声自動実行・会話履歴・検査つき状況画像・終了後結果保持の現在の構成と試遊手順は[ゲームコアの動作確認](game-core.md)を参照。本編UIはチャット形式に統一し、旧手動実行画面は削除済み。
 
-## 拡充シナリオの通常起動（2026-09-15）
+## 通常起動のシナリオ（2026-09-16）
 
-SCENARIO_PATH未指定時は `scenarios/playtest/warehouse-expanded-r1.json` を読み込む。mainから配信する統合サーバーは最新の共通ハーネスと、この拡充候補を使用する。元カタログは保持し、ローカルで明示的に `SCENARIO_PATH=scenarios/story-catalog.json` を指定すると従来の抽選に戻せる。
+SCENARIO_PATH未指定時は `scenarios/story-catalog.json` を読み込む。ローカル・公開版ともに、新規プレイごとに18構成から等確率で抽選し、再接続時はそのプレイの選択を維持する。本編の撮影ボタン下に選択済みのシナリオIDを表示する。
 
-既存 `.env.local` に旧SCENARIO_PATHが残っている場合は、拡充版パスへ変更するかその設定行を削除する。APIキーは変更不要。品質評価の未合格・内扉の説明課題は継続中であり、今回の既定変更は自動評価の合格を意味しない。
+既存 `.env.local` に固定シナリオの指定がある場合は、`SCENARIO_PATH=scenarios/story-catalog.json` に変更するか設定行を削除する。固定の拡充候補を試す場合は `npm run play:expanded` または `SCENARIO_PATH=scenarios/playtest/warehouse-expanded-r1.json` を使用する。APIキーは変更不要。

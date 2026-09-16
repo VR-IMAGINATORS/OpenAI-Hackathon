@@ -12,6 +12,8 @@ async function setup(t: TestContext, withLive = false) {
   let now = 0;
   const config = loadHostedConfig({
     HOSTED_NO_ENV_FILE: '1',
+    // This suite checks the expanded scenario's specific opening hint wording.
+    SCENARIO_PATH: 'scenarios/playtest/warehouse-expanded-r1.json',
 
     AI_MODE: 'mock',
   });
