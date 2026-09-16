@@ -18,7 +18,7 @@ export const scenarioSchema = z
     playerBriefing: text,
     rules: z
       .object({
-        initialCredits: z.number().int().min(20).max(100000).multipleOf(20),
+        initialCredits: z.number().int().min(30).max(100000).multipleOf(10),
         maxPhotosPerSend: z.number().int().min(1).max(2),
         totalTimeSeconds: z.number().int().min(30).max(3600),
       })

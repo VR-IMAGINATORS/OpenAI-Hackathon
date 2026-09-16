@@ -203,7 +203,7 @@ test('photo selection reaches common action judge without image bytes and includ
     assert.equal(a.game.actionsUsed, 1);
     assert.equal(
       result.publicStateAfter.creditsRemaining,
-      result.publicStateBefore.creditsRemaining - 100,
+      result.publicStateBefore.creditsRemaining - 150,
     );
     assert.equal(seen.filter((b) => b.text.format.name === 'game_result').length, 1);
     assert.doesNotMatch(JSON.stringify(seen), /input_image|data:image/);
@@ -328,7 +328,7 @@ test('photo use reaches the action judge without a risk confirmation turn', asyn
     });
     assert.equal(judges, 1);
     assert.equal(a.game.actionsUsed, 1);
-    assert.equal(a.game.credits.remaining, 900);
+    assert.equal(a.game.credits.remaining, 850);
   } finally {
     a.close();
   }

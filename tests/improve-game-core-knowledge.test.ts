@@ -218,7 +218,7 @@ test('a concrete paraphrased question directly reveals its detail in one finite 
   assert.doesNotMatch(f.briefings[0]!, /OVERVIEW_CANARY|STAGED_HINT_CANARY|PRIVATE/);
   assert.match(f.calls.at(-1)!.instructions, /public factual briefing/);
   assert.equal(f.game.actionsUsed, 0);
-  assert.equal(f.game.credits.remaining, 980);
+  assert.equal(f.game.credits.remaining, 970);
   const selected = f.calls.find((call) => call.schema === 'knowledge_selection')!;
   assert.doesNotMatch(
     JSON.stringify(selected.data),

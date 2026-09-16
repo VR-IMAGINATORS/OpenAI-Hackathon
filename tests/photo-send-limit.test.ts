@@ -118,8 +118,8 @@ async function setup(t: TestContext) {
     })
   ).json();
   playId = created.playId;
-  assert.equal(created.state.creditsRemaining, 400);
-  assert.equal(created.state.initialCredits, 400);
+  assert.equal(created.state.creditsRemaining, 500);
+  assert.equal(created.state.initialCredits, 500);
   const runtime = hosted.registry.plays.get(playId)!.runtime!;
   runtime.game.heartbeat('connected');
   runtime.game.start();
@@ -187,7 +187,7 @@ async function setup(t: TestContext) {
         ).status,
         202,
       );
-      await until(() => runtime.state().creditsRemaining === before - 20);
+      await until(() => runtime.state().creditsRemaining === before - 30);
     },
   };
 }
@@ -200,30 +200,28 @@ test('HELL HTTP charges each photo, keeps retries free and preserves insufficien
       .status,
     422,
   );
-  assert.equal(runtime.state().creditsRemaining, 400);
+  assert.equal(runtime.state().creditsRemaining, 500);
   const clear = await request('/api/play/photos', { requestId: randomUUID(), images: [] }, 'PUT');
   assert.equal(clear.status, 200);
-  assert.equal(runtime.state().creditsRemaining, 400);
+  assert.equal(runtime.state().creditsRemaining, 500);
   h.failRecognition();
   await request('/api/play/photos', { requestId: randomUUID(), images: [png] }, 'PUT');
   assert.equal(
     runtime.state().creditsRemaining,
-    400,
+    500,
     'recognition failure refunds its reservation',
   );
   await h.upload([png, png]);
   const firstState = runtime.state();
-  assert.equal(firstState.creditsRemaining, 200, 'two photos cost 200 even in one batch');
+  assert.equal(firstState.creditsRemaining, 200, 'two photos cost 300 even in one batch');
   assert.equal(firstState.photoCount, 2);
   assert.equal(firstState.actionsUsed, 0);
   const second = await h.upload([png]);
   const calls = h.recognitions();
   const duplicate = await request('/api/play/photos', second, 'PUT');
   assert.equal(duplicate.status, 200);
-  assert.equal((await duplicate.json()).state.creditsRemaining, 100);
+  assert.equal((await duplicate.json()).state.creditsRemaining, 50);
   assert.equal(h.recognitions(), calls);
-  await h.converse();
-  assert.equal(runtime.state().creditsRemaining, 80);
   const rejected = await request(
     '/api/play/photos',
     { requestId: randomUUID(), images: [png] },
@@ -234,13 +232,13 @@ test('HELL HTTP charges each photo, keeps retries free and preserves insufficien
   assert.equal(h.recognitions(), calls, 'unaffordable photos never reach AI');
   await h.takeover();
   const restored = await (await request('/api/play/state', undefined, 'GET')).json();
-  assert.equal(restored.state.creditsRemaining, 80);
+  assert.equal(restored.state.creditsRemaining, 50);
   assert.equal(restored.state.status, 'playing');
   assert.equal(restored.state.endReason, null);
   assert.ok(restored.state.remainingMs > 0);
-  for (let turn = 0; turn < 4; turn++) await h.converse();
+  await h.converse();
   await until(() => runtime.state().status === 'lost');
-  assert.equal(runtime.state().creditsRemaining, 0);
+  assert.equal(runtime.state().creditsRemaining, 20);
   assert.equal(runtime.state().endReason, 'credits_exhausted');
   assert.equal(
     (await request('/api/play/photos', { requestId: randomUUID(), images: [png] }, 'PUT')).status,
@@ -251,7 +249,7 @@ test('HELL HTTP charges each photo, keeps retries free and preserves insufficien
 test('last photo spends the remaining credits once and finishes its explanation before ending', async (t) => {
   const h = await setup(t);
   await h.upload([h.png, h.png]);
-  await h.upload([h.png]);
+  await h.converse();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -260,7 +258,7 @@ test('last photo spends the remaining credits once and finishes its explanation 
   h.holdPhoto(gate);
   const last = { requestId: randomUUID(), images: [h.png] };
   assert.equal((await h.request('/api/play/photos', last, 'PUT')).status, 200);
-  assert.equal(h.runtime.state().creditsRemaining, 0);
+  assert.equal(h.runtime.state().creditsRemaining, 20);
   assert.equal(h.runtime.state().status, 'playing');
   const calls = h.recognitions();
   assert.equal((await h.request('/api/play/photos', last, 'PUT')).status, 200);
@@ -277,7 +275,7 @@ test('credit budgets are valid for three obstacles and obsolete limits are rejec
     scenarioPath: 'scenarios/story-catalog.json',
     coreConfigPath: 'config/game-core.json',
   }).current('en', 'nightmare');
-  assert.equal(parseScenarioV2(snapshot.scenarioV2).rules.initialCredits, 400);
+  assert.equal(parseScenarioV2(snapshot.scenarioV2).rules.initialCredits, 500);
   assert.equal(snapshot.scenarioV2.obstacles.length, 3);
   const legacy = structuredClone(snapshot.scenarioV2) as any;
   for (const field of ['maxActions', 'maxPhotoSends']) {

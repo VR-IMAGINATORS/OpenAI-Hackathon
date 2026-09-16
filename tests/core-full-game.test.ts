@@ -219,7 +219,7 @@ test('core voice instructions execute once through HTTP and deliver final-genera
       if (final!.actionsUsed === obstacle + 1) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    assert.equal(final!.creditsRemaining, 1000 - (obstacle + 1) * 120, JSON.stringify(final));
+    assert.equal(final!.creditsRemaining, 1000 - (obstacle + 1) * 180, JSON.stringify(final));
     assert.equal(final!.inventory.length, obstacle + 1);
     const duplicate = await request('/api/play/events', {
       generation,

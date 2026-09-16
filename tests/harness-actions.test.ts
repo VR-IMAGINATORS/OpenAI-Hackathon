@@ -101,7 +101,7 @@ test('explicit cancellation before commit drops the old result and preserves rec
   assert.equal(f.game.gameVersion, 0);
   assert.equal(f.game.inventory.length, 0);
   assert.equal(f.game.photos.length, 1);
-  assert.equal(f.game.credits.remaining, 900);
+  assert.equal(f.game.credits.remaining, 850);
   assert.equal(f.game.committedActions.length, 0);
 });
 
@@ -141,7 +141,7 @@ test('one transport retry reuses ticket and materialization IDs without another 
   assert.equal(f.calls(), 2);
   assert.equal(ids[0], ids[1]);
   assert.equal(f.game.inventory[0]!.id, ids[0]);
-  assert.equal(f.game.credits.remaining, 900);
+  assert.equal(f.game.credits.remaining, 850);
   assert.equal(f.game.gameVersion, 1);
   await f.game.judgeAction(ticket);
   assert.equal(f.calls(), 2);
@@ -226,7 +226,7 @@ test('photo origin requires the exact recognized owned batch and input revision'
     );
   const result = await f.game.judgeAction(f.reserve({ ...f.intent(), evidenceSeq: [], origin }));
   assert.equal(result.afterVersion, 1);
-  assert.equal(f.game.credits.remaining, 900);
+  assert.equal(f.game.credits.remaining, 850);
 });
 
 test('environment action needs a current declared target, carries its mode to judgment, and creates no inventory', async () => {

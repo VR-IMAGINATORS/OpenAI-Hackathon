@@ -5,7 +5,7 @@ export function setApiLocale(locale: 'ja' | 'en') {
   apiLocale = locale;
 }
 const englishMessages: Record<string, string> = {
-  INSUFFICIENT_CREDITS: 'Not enough credits. A conversation costs 20; each photo costs 100.',
+  INSUFFICIENT_CREDITS: 'Not enough credits. A conversation costs 30; each photo costs 150.',
   AUTH_REQUIRED: 'Please join from the start screen.',
   AUTH_RATE_LIMIT: 'Too many attempts. Wait a moment and try again.',
   SESSION_EXPIRED: 'Your session expired. Please join again.',
@@ -28,7 +28,7 @@ export function controlHeaders(control: PlayControl | { playId: string }) {
   };
 }
 const publicMessages: Record<string, string> = {
-  INSUFFICIENT_CREDITS: 'クレジットが不足しています。会話は20、写真は1枚100必要です。',
+  INSUFFICIENT_CREDITS: 'クレジットが不足しています。会話は30、写真は1枚150必要です。',
   AUTH_REQUIRED: '開始画面から参加してください。',
   AUTH_RATE_LIMIT: '参加リクエストの回数が上限に達しました。しばらく待って再試行してください。',
   AUTH_CAPACITY: '現在参加を受け付けられません。しばらく待って再試行してください。',

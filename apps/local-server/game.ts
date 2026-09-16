@@ -226,7 +226,7 @@ export class GameSession {
       !this.terminal &&
       this.status === 'playing' &&
       !this.credits.pending &&
-      this.credits.remaining === 0 &&
+      this.credits.remaining < creditCosts.conversation &&
       !this.pending &&
       !this.recognizing &&
       !this.photoBusy

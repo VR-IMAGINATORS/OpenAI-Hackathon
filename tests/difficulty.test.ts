@@ -9,11 +9,12 @@ import { createHostedApp } from '../apps/server/app.js';
 import { GameSession } from '../apps/local-server/game.js';
 import { localizeScenario } from '../packages/shared/scenario.js';
 import type { Difficulty } from '../packages/shared/difficulty.js';
+import { creditCosts } from '../packages/shared/credits.js';
 
 const cases = [
   ['normal', 300, 1000],
-  ['hard', 240, 700],
-  ['nightmare', 180, 400],
+  ['hard', 240, 750],
+  ['nightmare', 180, 500],
 ] as const;
 const catalog = () =>
   new ScenarioCatalog({
@@ -147,7 +148,7 @@ function gameFor(difficulty: Difficulty) {
       if (!reuse)
         await game.finishPhotos([{ id: photoId, jpeg: Buffer.from('test') }], game.beginPhotos());
       const creditId = randomUUID();
-      game.reserveCredits(creditId, 'conversation', 20);
+      game.reserveCredits(creditId, 'conversation', creditCosts.conversation);
       const ticket = game.reserveAction(
         {
           kind: 'execute',
@@ -182,13 +183,22 @@ for (const [difficulty, seconds, credits] of cases) {
   });
   test(`${difficulty}: photos can exceed the former send limit and exhaustion ends play`, async () => {
     const f = gameFor(difficulty);
-    for (let sent = 1; sent <= credits / 100; sent++) {
+    const affordablePhotos = Math.floor(credits / creditCosts.photo);
+    for (let sent = 1; sent <= affordablePhotos; sent++) {
       await f.game.finishPhotos(
         [{ id: randomUUID(), jpeg: Buffer.from('test') }],
         f.game.beginPhotos(1),
       );
-      assert.equal(f.game.state().creditsRemaining, credits - sent * 100);
-      assert.equal(f.game.status, sent * 100 === credits ? 'lost' : 'playing');
+      assert.equal(f.game.state().creditsRemaining, credits - sent * creditCosts.photo);
+      assert.equal(
+        f.game.status,
+        f.game.credits.remaining < creditCosts.conversation ? 'lost' : 'playing',
+      );
+    }
+    while (f.game.credits.remaining >= creditCosts.conversation) {
+      const creditId = randomUUID();
+      f.game.reserveCredits(creditId, 'conversation', creditCosts.conversation);
+      f.game.settleCredits(creditId);
     }
     assert.equal(f.game.endReason, 'credits_exhausted');
     assert.ok(f.game.state().remainingMs > 0);
@@ -198,30 +208,39 @@ for (const [difficulty, seconds, credits] of cases) {
     const f = gameFor(difficulty);
     f.fail();
     await f.act();
-    assert.equal(f.game.state().creditsRemaining, credits - 120);
+    assert.equal(
+      f.game.state().creditsRemaining,
+      credits - creditCosts.photo - creditCosts.conversation,
+    );
     await f.act(true);
     assert.equal(f.game.actionsUsed, 2);
-    assert.equal(f.game.state().creditsRemaining, credits - 140);
+    assert.equal(
+      f.game.state().creditsRemaining,
+      credits - creditCosts.photo - creditCosts.conversation * 2,
+    );
     assert.equal(f.game.state().status, 'playing');
   });
   test(`${difficulty}: three successful actions permit complete escape`, async () => {
     const f = gameFor(difficulty);
-    for (let i = 0; i < 3; i++) await f.act();
+    for (let i = 0; i < 3; i++) await f.act(i > 0);
     assert.equal(f.game.state().status, 'won');
     assert.equal(f.game.state().endingOutcome, 'happy');
-    assert.equal(f.game.state().creditsRemaining, credits - 360);
+    assert.equal(
+      f.game.state().creditsRemaining,
+      credits - creditCosts.photo - creditCosts.conversation * 3,
+    );
   });
   test(`${difficulty}: escaping with the last conversation credits takes priority over exhaustion`, async () => {
     const f = gameFor(difficulty);
     await f.act();
     await f.act(true);
-    while (f.game.credits.remaining > 20) {
+    while (f.game.credits.remaining >= creditCosts.conversation * 2) {
       const creditId = randomUUID();
-      f.game.reserveCredits(creditId, 'conversation', 20);
+      f.game.reserveCredits(creditId, 'conversation', creditCosts.conversation);
       f.game.settleCredits(creditId);
     }
     await f.act(true);
-    assert.equal(f.game.state().creditsRemaining, 0);
+    assert.ok(f.game.state().creditsRemaining < creditCosts.conversation);
     assert.equal(f.game.state().status, 'won');
     assert.equal(f.game.state().endReason, 'escaped');
     assert.equal(f.game.state().endingOutcome, 'happy');

@@ -288,11 +288,11 @@ const selectedDifficulty = process.env.TEST_DIFFICULTY || 'nightmare';
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
         if (body.images.length) {
-          state.creditsRemaining -= body.images.length * 100;
+          state.creditsRemaining -= body.images.length * 150;
           state.lastCreditCharge = {
             sequence: (state.lastCreditCharge?.sequence ?? 0) + 1,
             kind: 'photo',
-            amount: body.images.length * 100,
+            amount: body.images.length * 150,
           };
         }
         state.inputRevision++;
