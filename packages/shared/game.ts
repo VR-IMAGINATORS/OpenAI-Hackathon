@@ -54,6 +54,7 @@ export interface LiveCommand {
   content: string;
 }
 export interface PublicGameState {
+  scenarioId?: string;
   difficulty?: Difficulty;
   endingOutcome?: EndingOutcome | null;
   endReason?: GameEndReason | null;

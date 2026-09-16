@@ -127,6 +127,7 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     AI_GLOBAL_LIVE_ATTEMPTS: required('AI_GLOBAL_LIVE_ATTEMPTS'),
     AI_GLOBAL_RESPONSE_ATTEMPTS: required('AI_GLOBAL_RESPONSE_ATTEMPTS'),
     LIVE_MODEL: env.LIVE_MODEL || 'gpt-live-1',
+    LIVE_VOICE: env.LIVE_VOICE || 'gleam',
     RESPONSE_MODEL: env.RESPONSE_MODEL || 'gpt-5.6-terra',
     GAME_MODEL: env.GAME_MODEL || 'gpt-5.6-sol',
     IMAGE_MODEL: env.IMAGE_MODEL || 'gpt-image-2.5-flare',

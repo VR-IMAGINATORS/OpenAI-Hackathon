@@ -1,5 +1,6 @@
 import { GameHarness } from './game-harness.js';
 import { aiFailureCode } from './ai-failure.js';
+import { defaultLiveVoice, type LiveVoice } from '../../packages/shared/live-voice.js';
 import { VoiceNotificationScheduler } from './voice-notifications.js';
 import { OpeningBriefingDelivery } from './opening-briefing.js';
 import { FinalVoicePlayback } from './final-voice-playback.js';
@@ -132,7 +133,7 @@ export class GameRuntime {
     readonly deadline: number,
     scenario: Scenario,
     private ai: AiService,
-    private models: { liveModel: string; gameModel: string },
+    private models: { liveModel: string; gameModel: string; liveVoice?: LiveVoice },
     private queue: PhotoQueue,
     private now = () => performance.now(),
     readonly coreSnapshot?: ScenarioSnapshot,
@@ -739,6 +740,7 @@ export class GameRuntime {
         const answer = await this.ai.createLive(this.id, {
           session: {
             model: this.models.liveModel,
+            audio: { output: { voice: this.models.liveVoice ?? defaultLiveVoice } },
             instructions: liveInstructions(
               this.game.state(),
               this.coreSnapshot,

@@ -143,6 +143,7 @@ const scenario = {
     let state = {
       id: 'test',
       automaticActions: true,
+      scenarioId: `${catalog.scenes[1].id}-1`,
       generation: 0,
       status: 'briefing',
       title: '閉ざされた研究室',
@@ -404,6 +405,13 @@ const scenario = {
     await page.waitForFunction(() => window.__sent.some((e) => e.event_id === 'opening-1'));
     assert.equal(state.status, 'playing');
     async function assertMessengerLayout() {
+      const scenarioId = page.locator('.messenger-composer .scenario-id');
+      assert.equal(await scenarioId.isVisible(), true);
+      assert.ok((await scenarioId.innerText()).includes(state.scenarioId));
+      const idBounds = await scenarioId.boundingBox();
+      assert.ok(
+        idBounds && idBounds.y >= 0 && idBounds.y + idBounds.height <= page.viewportSize().height,
+      );
       assert.equal(await page.locator('main').count(), 1);
       assert.equal(await page.locator('.play-actions, .play-header, .play-story').count(), 0);
       const layout = await page.evaluate(() => {
