@@ -1,6 +1,6 @@
 # データ契約
 
-- `Scenario.rules.initialCredits`: 20〜100000の整数、20の倍数。旧 `maxPhotoSends` は拒否。
+- `Scenario.rules.initialCredits`: 30〜100000の整数、10の倍数。旧 `maxPhotoSends` は拒否。
 - `PublicGameState.creditsRemaining`: 初期値から確定消費と未確定予約を引いた利用可能残高。
 - `PublicGameState.initialCredits`: プレイ作成時に固定した初期値。
 - `PublicGameState.lastCreditCharge`: null、または `{ sequence, kind: 'conversation' | 'photo', amount }`。直近の確定消費のメタデータ。画面上の消費通知やリザルトの内訳には使用しない。

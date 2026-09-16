@@ -305,16 +305,16 @@ test('credits: transcript fragments and duplicate delegations form one paid cons
   await h.say('どんな状況？');
   const delegation = randomUUID();
   await h.delegate(delegation);
-  await until(() => h.runtime.state().creditsRemaining === 980);
+  await until(() => h.runtime.state().creditsRemaining === 970);
   await h.delegate(delegation);
   await tick();
-  assert.equal(h.runtime.state().creditsRemaining, 980);
-  assert.equal(h.runtime.state().lastCreditCharge?.amount, 20);
+  assert.equal(h.runtime.state().creditsRemaining, 970);
+  assert.equal(h.runtime.state().lastCreditCharge?.amount, 30);
   await h.say('今のは聞き間違いです');
   await h.delegate();
   await until(() => h.calls.classify >= 2);
   await tick();
-  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.runtime.state().creditsRemaining, 970);
 });
 
 test('credits: final consultation ends through existing result outcome with the exact exhaustion notice', async (t) => {
@@ -332,7 +332,7 @@ test('credits: final consultation ends through existing result outcome with the 
     undefined,
     undefined,
     'ja',
-    20,
+    30,
   );
   await h.say('何がある？');
   await h.delegate();
@@ -378,7 +378,7 @@ test('credits: last photo reserves its full cost and completes the winning autom
       };
     },
     'ja',
-    100,
+    150,
   );
   h.runtime.game.obstacleIndex = 2;
   h.runtime.game.facts.obstacleId = h.runtime.game.scenario.obstacles[2].id;
@@ -411,11 +411,11 @@ test('credits: failed photo processing releases the reservation without ending o
     },
     undefined,
     'ja',
-    100,
+    150,
   );
   await h.runtime.photos(randomUUID(), [h.photo]);
   await until(() => !h.runtime.game.credits.pending);
-  assert.equal(h.runtime.state().creditsRemaining, 100);
+  assert.equal(h.runtime.state().creditsRemaining, 150);
   assert.equal(h.runtime.state().status, 'playing');
   assert.equal(h.runtime.state().lastCreditCharge, null);
 });
@@ -430,10 +430,10 @@ test('credits: missing-delegation consultation and a later real delegation never
   await h.say('応援して');
   h.setNow(5000);
   h.runtime.tick();
-  await until(() => h.runtime.state().creditsRemaining === 980);
+  await until(() => h.runtime.state().creditsRemaining === 970);
   await h.delegate();
   await tick();
-  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.runtime.state().creditsRemaining, 970);
   assert.equal(h.runtime.state().lastCreditCharge?.sequence, 1);
 });
 
@@ -448,7 +448,7 @@ test('social admission lets Live compose its reply and charges once, including r
   await h.say('応援して');
   h.setNow(5000);
   h.runtime.tick();
-  await until(() => h.runtime.state().creditsRemaining === 980);
+  await until(() => h.runtime.state().creditsRemaining === 970);
   const before = h.runtime.pollCommands(h.generation, 0).commands;
   assert.equal(before.length, 1);
   assert.deepEqual(
@@ -460,13 +460,13 @@ test('social admission lets Live compose its reply and charges once, including r
   await h.delegate(id);
   await tick();
   assert.deepEqual(h.runtime.pollCommands(h.generation, 0).commands, before);
-  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.runtime.state().creditsRemaining, 970);
   assert.equal(h.calls.reply, 0);
   assert.equal(h.calls.judge, 0);
   // A later request is a new conversation, even with identical wording.
   await h.say('応援して');
   await h.delegate();
-  await until(() => h.runtime.state().creditsRemaining === 960);
+  await until(() => h.runtime.state().creditsRemaining === 940);
   const after = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands);
   assert.equal(after.length, 2);
   assert.notEqual(after[0]!.notificationId, after[1]!.notificationId);
@@ -483,7 +483,7 @@ test('long consultation produces one complete briefing and one speech trigger wi
   await h.say('今の状態を教えて');
   const id = randomUUID();
   await h.delegate(id);
-  await until(() => h.runtime.state().creditsRemaining === 980);
+  await until(() => h.runtime.state().creditsRemaining === 970);
   const commands = h.runtime.pollCommands(h.generation, 0).commands;
   assert.ok(commands.length > 2);
   assert.equal(commands.filter((c) => c.type === 'session.commentary.append').length, 1);
@@ -503,7 +503,7 @@ test('long consultation produces one complete briefing and one speech trigger wi
   await h.delegate(id);
   await tick();
   assert.deepEqual(h.runtime.pollCommands(h.generation, 0).commands, commands);
-  assert.equal(h.runtime.state().creditsRemaining, 980);
+  assert.equal(h.runtime.state().creditsRemaining, 970);
 });
 
 test('partially queued facts never trigger speech or charge the failed consultation', async (t) => {
@@ -531,17 +531,17 @@ test('partially queued facts never trigger speech or charge the failed consultat
   assert.equal(h.calls.judge, 0);
 });
 
-test('credits: Pro permits fifty short exchanges and keeps its credit notices out of Live', async (t) => {
+test('credits: Pro permits thirty-three short exchanges and keeps its credit notices out of Live', async (t) => {
   const h = await setup(t, (context) => ({
     kind: 'consult',
     evidenceSeq: context.conversation.eligibleEvidenceSeq,
     reason: 'Small talk',
     answer: '聞いているよ。',
   }));
-  for (let i = 1; i <= 50; i++) {
+  for (let i = 1; i <= 33; i++) {
     await h.say('応援して');
     await h.delegate();
-    await until(() => h.runtime.state().creditsRemaining === 1000 - i * 20);
+    await until(() => h.runtime.state().creditsRemaining === 1000 - i * 30);
     const commands = h.runtime.pollCommands(h.generation, 0).commands;
     assert.doesNotMatch(
       commands.map((c) => c.content).join(''),
@@ -551,7 +551,8 @@ test('credits: Pro permits fifty short exchanges and keeps its credit notices ou
   }
   assert.equal(h.runtime.state().status, 'lost');
   assert.equal(h.runtime.state().endReason, 'credits_exhausted');
-  assert.equal(h.runtime.state().lastCreditCharge?.sequence, 50);
+  assert.equal(h.runtime.state().creditsRemaining, 10);
+  assert.equal(h.runtime.state().lastCreditCharge?.sequence, 33);
   assert.deepEqual(h.notices, [
     'ご利用可能クレジットが残りわずかです',
     'クレジットを使い切りました。',
@@ -605,7 +606,7 @@ test('runtime accepts correction while classification is pending and discards th
   );
   assert.equal(contexts.length, 2);
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().creditsRemaining, 880);
+  assert.equal(h.runtime.state().creditsRemaining, 820);
 });
 
 test('runtime consult consumes no action and a subsequent directive executes once', async (t) => {
@@ -630,7 +631,7 @@ test('runtime consult consumes no action and a subsequent directive executes onc
       .commands.some((c) => c.content.includes('切れるか相談中')),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().creditsRemaining, 880);
+  assert.equal(h.runtime.state().creditsRemaining, 820);
   await h.say('実行して');
   const id = randomUUID();
   await h.delegate(id);
@@ -638,7 +639,7 @@ test('runtime consult consumes no action and a subsequent directive executes onc
   await h.delegate(id);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().creditsRemaining, 860);
+  assert.equal(h.runtime.state().creditsRemaining, 790);
 });
 
 test('execution adds no server acknowledgement while judging and still delivers its result once', async (t) => {
@@ -672,7 +673,7 @@ test('execution adds no server acknowledgement while judging and still delivers 
   await h.delegate(delegationId);
   for (let i = 0; i < 3; i++) await tick();
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().creditsRemaining, 880);
+  assert.equal(h.runtime.state().creditsRemaining, 820);
   const briefings = liveBriefings(newCommands());
   assert.equal(briefings.length, 1);
   assert.equal(newCommands().filter((c) => c.type === 'session.commentary.append').length, 1);
@@ -1025,7 +1026,7 @@ test('runtime missing delegation requests recovery but never judges, then announ
       .commands.some((c) => c.type === 'session.instructions.append'),
   );
   assert.equal(h.calls.judge, 0);
-  assert.equal(h.runtime.state().creditsRemaining, 900);
+  assert.equal(h.runtime.state().creditsRemaining, 850);
   h.setNow(24002);
   h.runtime.tick();
   assert.equal(h.notices.length, 1);
@@ -1099,7 +1100,7 @@ for (const stage of ['recognize', 'photo', 'classify', 'judge'] as const) {
     await h.delegate();
     await until(() => h.runtime.game.actionsUsed === 1 && h.scenes.length === 2);
     assert.equal(attempts[stage], 2);
-    assert.equal(h.runtime.game.credits.remaining, 880);
+    assert.equal(h.runtime.game.credits.remaining, 820);
     assert.equal(h.runtime.game.inventory.length, 1);
     assert.equal(h.runtime.game.error, null);
     assert.equal(h.runtime.game.retainedRequest, null);
@@ -1128,7 +1129,7 @@ test('runtime repairs malformed judgment silently, then publishes and charges on
   await h.delegate(delegation);
   await tick();
   assert.equal(h.calls.judge, 2);
-  assert.equal(h.runtime.game.credits.remaining, 880);
+  assert.equal(h.runtime.game.credits.remaining, 820);
   assert.equal(h.runtime.game.retainedRequest, null);
   assert.equal(h.runtime.game.error, null);
   assert.deepEqual(judgments[0].proposal, judgments[1].proposal);
@@ -1163,7 +1164,7 @@ test('exhausted classification reports once, preserves user evidence and does no
   await h.delegate();
   await until(() => h.runtime.game.actionsUsed === 1);
   assert.equal(h.calls.classify, 3);
-  assert.equal(h.runtime.game.credits.remaining, 880);
+  assert.equal(h.runtime.game.credits.remaining, 820);
 });
 
 for (const origin of ['photo', 'voice'] as const) {
@@ -1204,7 +1205,7 @@ for (const origin of ['photo', 'voice'] as const) {
     const retained = h.runtime.game.retainedRequest!;
     assert.equal(h.calls.judge, 2);
     assert.equal(h.runtime.game.actionsUsed, 0);
-    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 1000 : 900);
+    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 1000 : 850);
     assert.equal(h.runtime.game.inventory.length, 0);
     assert.equal(h.runtime.game.photos.length, 1);
     const notices = liveBriefings(h.runtime.pollCommands(h.generation, 0).commands)
@@ -1224,7 +1225,7 @@ for (const origin of ['photo', 'voice'] as const) {
     assert.equal(h.calls.recognize, 1);
     assert.equal(h.calls.photo, 1);
     assert.equal(h.runtime.game.inventory.length, 1);
-    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 900 : 880);
+    assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 850 : 820);
     assert.equal(h.runtime.game.retainedRequest, null);
     assert.equal(h.runtime.game.error, null);
     assert.equal(judgments[2].proposal.usage, judgments[0].proposal.usage);
@@ -1272,7 +1273,7 @@ test('obvious photo starts one action without a usage question or fabricated del
   assert.equal(h.calls.photo, 1);
   assert.equal(h.calls.classify, 0);
   assert.equal(h.calls.judge, 1);
-  assert.equal(h.runtime.state().creditsRemaining, 900);
+  assert.equal(h.runtime.state().creditsRemaining, 850);
   const spoken = h.runtime
     .pollCommands(h.generation, 0)
     .commands.filter((c) => c.type === 'session.commentary.append');
@@ -1297,7 +1298,7 @@ test('split explicit stop cancels an automatic photo action without a control mo
   assert.equal(h.runtime.state().actionsUsed, 0);
   assert.equal(h.runtime.game.gameVersion, 0);
   assert.equal(h.scenes.length, 1);
-  assert.equal(h.runtime.state().creditsRemaining, 900);
+  assert.equal(h.runtime.state().creditsRemaining, 850);
   assert.equal(h.calls.schemas.includes('harness_control'), false);
   assert.ok(
     h.runtime
@@ -1379,7 +1380,7 @@ test('a correction during judgment does not abort or replace the reserved action
   assert.equal(h.runtime.game.actionsUsed, 1);
   assert.equal(h.runtime.game.committedActions.length, 1);
   assert.equal(h.runtime.game.committedActions[0]!.usage, 'ハサミでロープを切って');
-  assert.equal(h.runtime.game.credits.remaining, 900);
+  assert.equal(h.runtime.game.credits.remaining, 850);
 });
 
 for (const origin of ['photo', 'voice'] as const) {
@@ -1424,7 +1425,7 @@ for (const origin of ['photo', 'voice'] as const) {
       assert.equal(h.runtime.game.obstacleIndex, 1);
       assert.equal(h.runtime.game.facts.values.wrists, 'free');
       assert.equal(h.runtime.game.lastResult!.success, true);
-      assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 900 : 880);
+      assert.equal(h.runtime.game.credits.remaining, origin === 'photo' ? 850 : 820);
       const scene = h.scenes[1]!;
       const sceneCommands = h.runtime
         .pollCommands(h.generation, 0)

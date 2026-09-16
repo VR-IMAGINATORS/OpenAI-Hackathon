@@ -297,11 +297,11 @@ const scenario = {
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
         if (body.images.length) {
-          state.creditsRemaining -= body.images.length * 100;
+          state.creditsRemaining -= body.images.length * 150;
           state.lastCreditCharge = {
             sequence: (state.lastCreditCharge?.sequence ?? 0) + 1,
             kind: 'photo',
-            amount: body.images.length * 100,
+            amount: body.images.length * 150,
           };
         }
         state.inputRevision++;
@@ -450,7 +450,7 @@ const scenario = {
     await page.getByText('現在の目標', { exact: true }).waitFor();
     await page.getByText('残り時間', { exact: true }).waitFor();
     await page.getByText('残りクレジット', { exact: true }).waitFor();
-    assert.equal(await page.getByText('会話 20 · 写真 100/枚', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('会話 30 · 写真 150/枚', { exact: true }).count(), 0);
     assert.equal(await page.locator('.game-credit-notice').count(), 0);
     assert.equal(await page.locator('.messenger-credit-count strong').innerText(), '1,000');
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '05:00');
@@ -522,22 +522,22 @@ const scenario = {
     await page.getByRole('button', { name: '写真の送信を再試行', exact: true }).click();
     await page.waitForTimeout(500);
     assert.equal(photoIds.length, 2);
-    assert.equal(state.creditsRemaining, 900, 'a retried photo consumes credits once');
+    assert.equal(state.creditsRemaining, 850, 'a retried photo consumes credits once');
     await page
       .locator('.messenger-credit-count strong')
-      .getByText('900', { exact: true })
+      .getByText('850', { exact: true })
       .waitFor();
-    assert.equal(await page.getByText('画像認識 −100', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('画像認識 −150', { exact: true }).count(), 0);
     assert.equal(await page.locator('.game-credit-notice').count(), 0);
-    // The existing photo is included in the next submission, so adding a second costs 200.
-    state.creditsRemaining = 100;
+    // The existing photo is included in the next submission, so adding a second costs 300.
+    state.creditsRemaining = 150;
     await page
       .locator('.messenger-credit-count strong')
-      .getByText('100', { exact: true })
+      .getByText('150', { exact: true })
       .waitFor();
     await page.getByText('ご利用可能クレジットが残りわずかです', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '撮影', exact: true }).isDisabled(), true);
-    state.creditsRemaining = 200;
+    state.creditsRemaining = 300;
     await page
       .getByRole('button', { name: '撮影', exact: true })
       .and(page.locator(':enabled'))
@@ -545,17 +545,17 @@ const scenario = {
     const secondChoice = page.waitForEvent('filechooser');
     await page.getByRole('button', { name: '撮影', exact: true }).click();
     await (await secondChoice).setFiles({ name: 'second.png', mimeType: 'image/png', buffer: png });
-    await page.getByText('消費クレジット: 200', { exact: true }).waitFor();
-    state.creditsRemaining = 100;
+    await page.getByText('消費クレジット: 300', { exact: true }).waitFor();
+    state.creditsRemaining = 150;
     await page
       .getByRole('button', { name: 'この写真を送信', exact: true })
       .and(page.locator(':disabled'))
       .waitFor();
     await page.getByRole('button', { name: '撮り直す・取り消す', exact: true }).click();
-    state.creditsRemaining = 900;
+    state.creditsRemaining = 850;
     await page
       .locator('.messenger-credit-count strong')
-      .getByText('900', { exact: true })
+      .getByText('850', { exact: true })
       .waitFor();
     assert.equal(
       await page.locator('.messenger-composer img').count(),
@@ -762,7 +762,7 @@ const scenario = {
     await page.getByText('Time left', { exact: true }).waitFor();
     await page.getByText('Credits left', { exact: true }).waitFor();
     assert.equal(
-      await page.getByText('Conversation 20 · Photo 100 each', { exact: true }).count(),
+      await page.getByText('Conversation 30 · Photo 150 each', { exact: true }).count(),
       0,
     );
     assert.equal(
@@ -824,11 +824,11 @@ const scenario = {
     assert.equal(await page.getByRole('button', { name: 'Camera', exact: true }).isEnabled(), true);
     state.remainingMs = 60_000;
     state.creditsRemaining = 200;
-    state.lastCreditCharge = { sequence: 1, kind: 'conversation', amount: 20 };
+    state.lastCreditCharge = { sequence: 1, kind: 'conversation', amount: 30 };
     await page.locator('.messenger-clock.is-urgent').waitFor();
     await page.locator('.messenger-credit-count.is-caution').waitFor();
     await page.getByText('Your available credits are running low.', { exact: true }).waitFor();
-    assert.equal(await page.getByText('Voice conversation −20', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('Voice conversation −30', { exact: true }).count(), 0);
     assert.equal(await page.locator('.game-credit-charge').count(), 0);
     await page.waitForFunction(() => window.__clockWarnings === 1);
     assert.equal(await page.locator('.messenger-clock strong').innerText(), '01:00');
@@ -899,7 +899,7 @@ const scenario = {
       await page.getByRole('status').filter({ hasText: 'One minute' }).innerText(),
       /One minute or less/,
     );
-    state.creditsRemaining = 0;
+    state.creditsRemaining = 20;
     state.busy = true;
     await page.getByText('You have used all your credits.', { exact: true }).waitFor();
     assert.equal(

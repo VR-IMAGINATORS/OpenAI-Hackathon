@@ -90,7 +90,7 @@ async function runtimeFixture(t: TestContext, core = true, photoBudget = 3) {
       coreConfigPath: 'config/game-core.json',
     }).current('ja'),
   );
-  snapshot.scenarioV2.rules.initialCredits = photoBudget * 100 + 100;
+  snapshot.scenarioV2.rules.initialCredits = photoBudget * 150 + 150;
   const response = (value: unknown) => ({
     output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
   });

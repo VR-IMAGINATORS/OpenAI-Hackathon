@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { creditCosts } from '../../../packages/shared/credits.js';
 
 export default function GameStatusSummary({
   title,
@@ -78,7 +79,11 @@ export function GameResourceCounters({
       <span
         className={
           'messenger-resource messenger-credit-count' +
-          (creditsRemaining <= 0 ? ' is-urgent' : lowCredits ? ' is-caution' : '')
+          (creditsRemaining < creditCosts.conversation
+            ? ' is-urgent'
+            : lowCredits
+              ? ' is-caution'
+              : '')
         }
       >
         <span className="messenger-resource-label">{t('残りクレジット', 'Credits left')}</span>
@@ -109,7 +114,7 @@ export function GameCreditNotice({
   return (
     <div className="game-credit-notice">
       <p className="game-credit-warning" role="status">
-        {creditsRemaining <= 0
+        {creditsRemaining < creditCosts.conversation
           ? t('クレジットを使い切りました。', 'You have used all your credits.')
           : t('ご利用可能クレジットが残りわずかです', 'Your available credits are running low.')}
       </p>

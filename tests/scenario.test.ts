@@ -77,8 +77,8 @@ test('planner can tune values, replace scenario and disable an event', () => {
   assert.equal(scenario.events[0].mode, 'disabled');
 });
 
-test('initial credit configuration accepts the minimum and maximum multiples of twenty', () => {
-  for (const initialCredits of [20, 100000]) {
+test('initial credit configuration accepts the minimum and maximum multiples of ten', () => {
+  for (const initialCredits of [30, 100000]) {
     const value = sample();
     value.rules.initialCredits = initialCredits;
     assert.equal(parseScenario(value).rules.initialCredits, initialCredits);

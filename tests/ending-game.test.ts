@@ -16,7 +16,7 @@ function fixture(core: boolean, photoBudget = 4, judgment?: GameAI['judge']) {
       coreConfigPath: 'config/game-core.json',
     }).current('ja'),
   );
-  snapshot.scenarioV2.rules.initialCredits = photoBudget * 100 + 100;
+  snapshot.scenarioV2.rules.initialCredits = photoBudget * 150 + 150;
   const scenario = localizeScenario(snapshot.scenarioV2, 'ja');
   const endingStates: unknown[] = [];
   const game = new GameSession(
@@ -129,7 +129,7 @@ for (const core of [true, false]) {
     assert.deepEqual(await repeat(), result);
     assert.equal(f.calls(), 3);
     assert.equal(f.game.state().status, 'playing');
-    assert.equal(f.game.state().creditsRemaining, 100);
+    assert.equal(f.game.state().creditsRemaining, 150);
     f.advance(1_000_000);
     assert.equal(f.game.state().endingOutcome, 'normal');
     assert.equal(f.game.endReason, 'time_limit');

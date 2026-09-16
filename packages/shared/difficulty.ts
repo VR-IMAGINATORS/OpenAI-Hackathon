@@ -12,13 +12,13 @@ export const difficultyPresets = {
   },
   hard: {
     totalTimeSeconds: 240,
-    initialCredits: 700,
+    initialCredits: 750,
     label: { ja: 'ハード', en: 'Hard' },
     planLabel: { ja: 'Plusプラン', en: 'Plus Plan' },
   },
   nightmare: {
     totalTimeSeconds: 180,
-    initialCredits: 400,
+    initialCredits: 500,
     label: { ja: 'ヘル', en: 'HELL' },
     planLabel: { ja: '無料プラン', en: 'Free Plan' },
   },

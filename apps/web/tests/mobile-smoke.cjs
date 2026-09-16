@@ -239,11 +239,11 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.no
         assert.ok(body.images[0].startsWith('/9j/'), 'Canvas emits JPEG base64');
         state.photoCount = body.images.length;
         if (body.images.length) {
-          state.creditsRemaining -= body.images.length * 100;
+          state.creditsRemaining -= body.images.length * 150;
           state.lastCreditCharge = {
             sequence: (state.lastCreditCharge?.sequence ?? 0) + 1,
             kind: 'photo',
-            amount: body.images.length * 100,
+            amount: body.images.length * 150,
           };
         }
         state.inputRevision++;
@@ -413,7 +413,7 @@ const artifactDir = process.env.SMOKE_ARTIFACT_DIR || `artifacts/smoke-${Date.no
     await page.getByText('吸盤はしっかり張りついた。扉を開けて、次の部屋へ進めた！').waitFor();
     assert.equal(actionIds.length, 2);
     assert.equal(actionIds[0], actionIds[1], 'unknown transport result reuses action ID');
-    assert.equal(state.creditsRemaining, 900);
+    assert.equal(state.creditsRemaining, 850);
     assert.ok(
       (await page.evaluate(() => window.__sent)).some(
         (event) => event.type === 'session.commentary.append',

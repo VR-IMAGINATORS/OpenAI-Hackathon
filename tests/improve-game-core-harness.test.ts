@@ -144,12 +144,12 @@ test('shared consultation returns public text without scene, and evidence charge
     const result = await f.harness.handleRequest(context);
     assert.equal(result.publicReply, 'I am listening.');
     assert.deepEqual(result.committedPublicEvents, []);
-    assert.equal(result.publicState.creditsRemaining, 980);
+    assert.equal(result.publicState.creditsRemaining, 970);
     assert.equal(f.game.actionsUsed, 0);
     assert.doesNotMatch(JSON.stringify(result), /PRIVATE|shortReason|mechanism|requestCue/);
     const retry = await f.harness.handleRequest(f.harness.ledger.captureUnconsumedContext());
     assert.equal(retry.publicReply, '');
-    assert.equal(f.game.credits.remaining, 980);
+    assert.equal(f.game.credits.remaining, 970);
     assert.deepEqual(
       f.delivered.map((text) => JSON.parse(text)),
       hooks
@@ -175,7 +175,7 @@ test('recognized photo executes once without a second dialogue call or acknowled
   assert.equal(f.judged(), 1);
   assert.equal(f.game.gameVersion, 1);
   assert.equal(f.game.actionsUsed, 1);
-  assert.equal(result.publicState.creditsRemaining, 900);
+  assert.equal(result.publicState.creditsRemaining, 850);
   assert.equal(result.committedPublicEvents.length, 1);
   assert.equal(f.called(), 1, 'photo routing only; Live composes its own result reply');
   assert.equal(f.delivered.length, 1);
@@ -195,7 +195,7 @@ test('recognized photo executes once without a second dialogue call or acknowled
   assert.equal(retry.publicReply, '');
   assert.deepEqual(retry.committedPublicEvents, []);
   assert.equal(f.judged(), 1);
-  assert.equal(f.game.credits.remaining, 900);
+  assert.equal(f.game.credits.remaining, 850);
 });
 
 test('stale context is rejected before AI and stale async classification cannot settle credits', async () => {
