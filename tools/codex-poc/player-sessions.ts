@@ -134,6 +134,7 @@ export class CodexPlayerSessions implements PlayerJudgments {
       report?: (entry: { status: string; durationMs: number; playId?: string }) => void;
       reportVoice?: (entry: GameVoiceReport) => void;
       reportImage?: (entry: { status: string; durationMs: number; code?: string }) => void;
+      reportLogin?: (entry: { stage: string; code: string }) => void;
     },
   ) {
     this.now = options.now ?? Date.now;
@@ -144,7 +145,7 @@ export class CodexPlayerSessions implements PlayerJudgments {
     if (!e) return { status: 'disconnected' };
     if ((!e.playId && this.now() >= e.deadline) || (e.worker && !e.worker.isUsable())) {
       void this.close(e).catch(() => {});
-      return { status: 'failed' };
+      return { ...e.view };
     }
     return { ...e.view };
   }
@@ -166,12 +167,14 @@ export class CodexPlayerSessions implements PlayerJudgments {
   }
 
   private async connect(e: Entry) {
+    let stage: 'worker' | 'device_login' | 'model' = 'worker';
     try {
       e.worker = await (this.options.factory ?? startWorker)();
       if (e.cancelled) {
         await e.worker.close();
         return;
       }
+      stage = 'device_login';
       await e.worker.authenticate('device', ({ url, code }) => {
         if (e.cancelled) return;
         const parsed = new URL(url);
@@ -190,6 +193,7 @@ export class CodexPlayerSessions implements PlayerJudgments {
         };
       });
       if (e.cancelled || this.now() >= e.deadline) throw new Error('LOGIN_EXPIRED');
+      stage = 'model';
       await (this.options.checkModel ?? requireModel)(e.worker, this.options.model);
       if (e.cancelled) return;
       e.worker.rpc.clearEvents();
@@ -200,8 +204,13 @@ export class CodexPlayerSessions implements PlayerJudgments {
       );
       e.deadline = this.now() + 600_000;
       e.view = { status: 'ready', model: this.options.model, expiresAt: e.deadline };
-    } catch {
-      e.view = { status: 'failed' };
+    } catch (error) {
+      const code =
+        error instanceof PocError && /^[A-Z][A-Z0-9_-]{0,80}$/.test(error.code)
+          ? error.code
+          : 'LOGIN_FAILED';
+      e.view = { status: 'failed', errorCode: code, errorStage: stage };
+      this.options.reportLogin?.({ stage, code });
       await this.close(e).catch(() => {});
     }
   }
@@ -209,7 +218,10 @@ export class CodexPlayerSessions implements PlayerJudgments {
   private close(e: Entry): Promise<void> {
     e.cancelled = true;
     e.playAbort?.abort();
-    e.view = { status: 'failed' }; // Erase the code before waiting for provider cleanup.
+    e.view = {
+      status: 'failed',
+      ...(e.view.errorCode ? { errorCode: e.view.errorCode, errorStage: e.view.errorStage } : {}),
+    }; // Erase the device code before cleanup.
     e.responder = undefined;
     if (!e.closing)
       e.closing = (async () => {

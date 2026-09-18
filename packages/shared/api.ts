@@ -24,6 +24,8 @@ export interface CodexLoginStatus {
   userCode?: string;
   expiresAt?: number;
   model?: string;
+  errorCode?: string;
+  errorStage?: 'worker' | 'device_login' | 'model';
 }
 export interface HostedSession {
   authenticated: true;

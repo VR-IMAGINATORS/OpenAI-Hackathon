@@ -181,7 +181,11 @@ test('pending timeout, capacity and failed login cannot authorize a play', async
     await flush();
     f.workers[1].login.reject(new Error('private error'));
     await flush();
-    assert.deepEqual(f.manager.status('b'), { status: 'failed' });
+    assert.deepEqual(f.manager.status('b'), {
+      status: 'failed',
+      errorCode: 'LOGIN_FAILED',
+      errorStage: 'device_login',
+    });
     assert.throws(() => f.manager.bind('b', 'pb'), /CODEX_LOGIN_REQUIRED/);
     await f.manager.logout('b');
   } finally {

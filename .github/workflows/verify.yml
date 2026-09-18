@@ -28,3 +28,4 @@ jobs:
         run: |
           docker build --platform linux/amd64 -t call-to-the-past:verify .
           docker run --rm --entrypoint node call-to-the-past:verify --input-type=module -e "import { codexPreflight } from './dist/server/apps/server/codex-preflight.js'; await codexPreflight(); console.log('Codex Linux preflight OK');"
+          docker run --rm --entrypoint node call-to-the-past:verify --input-type=module -e "import fs from 'node:fs'; console.log('OS CA bundle present:', fs.existsSync('/etc/ssl/certs/ca-certificates.crt')); import { codexDeviceLoginPreflight } from './dist/server/apps/server/codex-preflight.js'; await codexDeviceLoginPreflight(); console.log('Codex device login start/cancel OK');"

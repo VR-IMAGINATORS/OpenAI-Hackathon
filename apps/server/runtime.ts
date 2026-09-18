@@ -7,6 +7,7 @@ export function createServerRuntime(config: HostedConfig) {
   const players = new CodexPlayerSessions({
     model: config.ai.gameModel,
     capacity: config.capacity,
+    reportLogin: ({ stage, code }) => console.log(`Codexログイン: failed / ${stage} / ${code}`),
     report: ({ status, durationMs }) => console.log(`Codex判断: ${status} / ${durationMs}ms`),
     reportVoice: ({ status, code }) =>
       console.log(`Codex音声: ${status}${code ? ' / ' + code : ''}`),
