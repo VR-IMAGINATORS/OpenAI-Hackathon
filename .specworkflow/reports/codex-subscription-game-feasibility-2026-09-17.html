@@ -1,0 +1,300 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Codexサブスクによるゲーム費用移転 — 調査レポート</title><style>
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-inset: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #9da7b3;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --cyan: #39c5cf;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.75;
+    padding: 0 16px 80px;
+  }
+  .container { max-width: 880px; margin: 0 auto; }
+  header {
+    padding: 56px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  h1 { font-size: 30px; line-height: 1.35; margin: 10px 0 14px; }
+  .meta { color: var(--text-dim); font-size: 14px; }
+  .meta a { color: var(--accent); text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+  h2 {
+    font-size: 22px;
+    margin: 52px 0 18px;
+    padding-left: 14px;
+    border-left: 4px solid var(--accent);
+  }
+  h3 { font-size: 17px; margin: 30px 0 12px; color: var(--accent); }
+  p { margin: 12px 0; }
+  .dim { color: var(--text-dim); }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 18px 0;
+  }
+  .card.green { border-left: 4px solid var(--green); }
+  .card.orange { border-left: 4px solid var(--orange); }
+  .card.purple { border-left: 4px solid var(--purple); }
+  .card.cyan { border-left: 4px solid var(--cyan); }
+  .card.red { border-left: 4px solid var(--red); }
+  .card h4 { font-size: 15px; margin-bottom: 8px; }
+  code {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    color: var(--cyan);
+    word-break: break-all;
+  }
+  pre {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 14px 0;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 13px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 9px 13px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-inset); font-weight: 600; white-space: nowrap; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .badge.green { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.4); }
+  .badge.red { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.4); }
+  .badge.orange { background: rgba(210,153,34,0.15); color: var(--orange); border: 1px solid rgba(210,153,34,0.4); }
+  .badge.blue { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.4); }
+  .badge.purple { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.4); }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .flow .step {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+  }
+  .flow .arrow { color: var(--text-dim); }
+  .timeline { margin: 20px 0; padding-left: 24px; border-left: 2px solid var(--border); }
+  .timeline .tl-item { position: relative; padding: 0 0 22px 18px; }
+  .timeline .tl-item::before {
+    content: "";
+    position: absolute;
+    left: -31px;
+    top: 7px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--bg);
+  }
+  .timeline .tl-item.red::before { background: var(--red); }
+  .timeline .tl-item.green::before { background: var(--green); }
+  .timeline .tl-title { font-weight: 600; }
+  .callout {
+    background: rgba(88,166,255,0.07);
+    border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14.5px;
+  }
+  .callout.warn { background: rgba(210,153,34,0.07); border-color: rgba(210,153,34,0.35); }
+  /* ---- Quiz ---- */
+  .quiz {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 26px 28px;
+    margin-top: 24px;
+  }
+  .q { margin: 26px 0; padding-bottom: 22px; border-bottom: 1px dashed var(--border); }
+  .q:last-of-type { border-bottom: none; }
+  .q-title { font-weight: 600; margin-bottom: 10px; }
+  .q-num { color: var(--accent); font-weight: 700; margin-right: 6px; }
+  .q label {
+    display: block;
+    padding: 9px 14px;
+    margin: 7px 0;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14.5px;
+    transition: border-color 0.15s;
+  }
+  .q label:hover { border-color: var(--accent); }
+  .q input { margin-right: 9px; accent-color: var(--accent); }
+  .q .fb { display: none; margin-top: 10px; padding: 11px 15px; border-radius: 8px; font-size: 14px; }
+  .q.correct .fb.ok { display: block; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.4); }
+  .q.wrong .fb.ng { display: block; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.4); }
+  .q.correct > .q-title::after { content: " ✅"; }
+  .q.wrong > .q-title::after { content: " ❌"; }
+  #grade-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #1f6feb, #388bfd);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  #grade-btn:hover { filter: brightness(1.15); }
+  #result { display: none; margin-top: 22px; padding: 22px; border-radius: 12px; text-align: center; }
+  #result.pass { display: block; background: rgba(63,185,80,0.1); border: 2px solid var(--green); }
+  #result.fail { display: block; background: rgba(210,153,34,0.08); border: 2px solid var(--orange); }
+  #result .score { font-size: 34px; font-weight: 800; }
+  #result .verdict { font-size: 19px; font-weight: 700; margin-top: 6px; }
+  #result.pass .verdict { color: var(--green); }
+  #result.fail .verdict { color: var(--orange); }
+  footer { margin-top: 60px; color: var(--text-dim); font-size: 13px; text-align: center; }
+</style></head><body><main class="container"><header><div class="eyebrow">Feasibility Research · 2026-09-17</div><h1>プレイヤーのCodexサブスクで<br>このゲームを動かせるか</h1><div class="meta">対象：現行Webゲーム ／ 調査・実装方針のみ ／ 実接続・課金検証は未実施</div></header>
+<div class="card green"><h4>結論：部分移行は技術的に有望。全費用のサブスク化は未確認</h4><p><strong>まず、写真認識・意図分類・ゲーム判断をプレイヤー自身のCodexへ委譲する小規模PoCを推奨します。</strong>GPT-Live音声、現行の画像生成、fal動画、ホスティングは、初期案では運営負担として残します。</p><p>「自分のCodexを独自UIで使う」構成と、「一般公開ゲームが多数の人のアカウントを預かって動く」構成では、運用と認証の難しさが違います。社内のダッシュボード事例は前者の参考になりますが、後者の成立をそのまま保証しません。</p></div>
+<div class="card orange"><h4>採用判断を変える重要な制約</h4><p>公式App Server資料には <strong>“experimental and aren't supported for production workloads”</strong> との記載があります。現時点では公開版の基盤を全面置換する判断は勧めません。これは技術的に接続できないという意味ではなく、安定運用の保証を前提にできないという意味です。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server">[1]</a></p></div>
+<h2>1. 背景と仕組み</h2>
+<p>目的は、運営が全員分の従量課金を負担する構成から、本人の利用枠を使う構成へ移し、運営費の変動を抑えることです。App ServerはCodexを外部UIから操作するインターフェースであり、APIの請求先を切り替える汎用プロキシではありません。</p>
+<div class="flow"><span class="step">スマホ／Web UI</span><span class="arrow">→</span><span class="step">ゲームサーバー</span><span class="arrow">→</span><span class="step">本人専用Codex</span><span class="arrow">→</span><span class="step">本人の利用枠</span></div>
+<p>CodexにはChatGPTログインによるサブスク利用と、APIキーによる従量利用があります。後者でApp Serverを動かしても費用移転にはなりません。ChatGPTのログイン情報を、既存のResponses／Live APIのBearer値へ差し替える方式も採用しません。認証方式ごとに利用する製品と請求経路が異なります。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/auth">[2]</a></p>
+<p>プレイヤー側も無制限ではありません。Codexの利用枠は普段の利用と共有され、モデル・文脈・ツール利用で消費量が変わります。契約によって追加クレジットや組織課金もあり、「本人に追加請求が絶対にない」とは約束できません。利用可能プラン、残量、所属組織の設定を開始時に確認する設計が必要です。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/pricing">[3]</a></p>
+<h2>2. 現行コードとの照合：何を移せるか</h2>
+<p class="dim">モデル名はソースの既定値です。秘密設定・本番環境は読んでいないため、実稼働モデルや機能の有効状態を断定しません。</p>
+<div class="table-wrap"><table><thead><tr><th>処理</th><th>現行の接続・既定値</th><th>サブスク移行の判定</th></tr></thead><tbody>
+<tr><td>写真理解、相談、意図分類、ゲーム判断</td><td>Responses／Sol・Terra。game-ai.ts、core-intent-ai.tsなど</td><td><span class="badge green">PoC候補</span>写真と指示から構造化結果を受け取るアダプターを作る。品質・速度・利用枠は実測が必要。</td></tr>
+<tr><td>生成画像の整合性検査、エンディング文章・設計</td><td>Responses／検査はLuna</td><td><span class="badge green">次の候補</span>同じく判断処理として委譲可能性が高い。初期の移行範囲に含めるかを明示する。</td></tr>
+<tr><td>リアルタイム音声</td><td>live/sessions／gpt-live-1</td><td><span class="badge orange">初期案はAPI維持</span>既存Web音声をサブスク認証で作成・制御する公開手順は今回確認できず。</td></tr>
+<tr><td>場面画像・エンディング静止画</td><td>images/generations・images/edits／gpt-image-2.5-flare</td><td><span class="badge orange">追加検証候補</span>Codex内蔵画像生成は存在。ただし現行モデル・APIと同じ契約ではない。</td></tr>
+<tr><td>H3エンディング動画</td><td>fal／minimax/h3-max-turbo/image-to-video</td><td><span class="badge red">現行経路は削減なし</span>別事業者のFAL_KEYを使用。Codexにツールとして呼ばせてもfal側の費用は残る。</td></tr>
+<tr><td>サーバー、保存、配信</td><td>統合サーバーとホスティング</td><td><span class="badge red">残る／増える可能性</span>利用者別Codex実行環境のCPU・メモリ・保守が追加される。</td></tr>
+</tbody></table></div>
+<p>現行のGPT-Liveは <code>delegation: { type: 'client' }</code> を使っています。音声を維持したまま、委譲先の判断処理をCodexへ置き換える境界がある点は有利です。公式Live資料でも、クライアント委譲は任意のバックエンドを接続する方式として説明されています。<a style="color:var(--accent)" href="https://developers.openai.com/api/docs/guides/live">[4]</a></p>
+<h3>音声と画像を「不可能」と断定しない理由</h3>
+<p>公式のChatGPT VoiceはGPT-Liveを使い、対応プランとデスクトップ／ペアリングしたiOSで提供されています。ただし、その製品機能の存在は、独自Webゲームに同じ接続を埋め込める根拠にはなりません。音声入出力だけでなく、割り込み、委譲、サーバーからの事実注入、終了処理まで互換性を確認する必要があります。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/features/voice">[5]</a></p>
+<p>内蔵画像生成は公式にCodex利用枠を消費する機能として説明されています。資料上はgpt-image-2で、現行のFlareと相違します。App Server単体での利用可否、結果ファイルの受け取り、参照画像編集、サイズ、生成時間、枠消費を確認できれば削減範囲を広げられます。現段階の確実な削減額には算入しません。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/image-generation">[6]</a></p>
+<h2>3. 構成案の比較</h2>
+<div class="table-wrap"><table><thead><tr><th>案</th><th>プレイヤー体験</th><th>利点／課題</th><th>判断</th></tr></thead><tbody>
+<tr><td>A. 本人PCでCodexを起動</td><td>PCでログイン・専用ブリッジを起動。スマホはゲーム画面を操作</td><td>運営がChatGPT資格情報を預からず検証できる。PC常時稼働とセットアップが必要。本人PC上の結果は改変可能。</td><td>最初の技術PoC向け</td></tr>
+<tr><td>B. 運営側で本人専用ワーカーを起動</td><td>スマホでゲームに入り、OpenAI側のログインを完了して開始</td><td>スマホ単独のUIを維持できる設計候補。利用者ごとの認証保存・隔離・廃棄、追加サーバー費が必要。</td><td>ユーザーの希望に最も近いが、認証PoCと提供条件確認が先</td></tr>
+<tr><td>C. Codex／ChatGPT内でゲームを実行</td><td>公式アプリ内の会話・写真・音声を使う</td><td>内蔵機能を活用する余地が大きい。現在の独自Web UI、時計、音声演出と同じ体験にはならない。</td><td>別モードとして検討</td></tr>
+<tr><td>D. 運営の1アカウントを全員で共用</td><td>ログイン不要</td><td>運営の利用枠へ集中するため、本人負担という目的を満たさない。利用者の分離も解決しない。</td><td>不採用</td></tr>
+</tbody></table></div>
+<p>Aでは、本人PCのブリッジから運営へ外向きの認証済み接続を張り、プレイ専用の短期ペアリングで結び付ける設計を推奨します。スマホからPCのlocalhostは参照できないため、localhost接続だけでは成立しません。Bでは、ブラウザからApp Serverの全RPCを直接公開せず、ゲームサーバーが必要な処理だけを中継します。</p>
+<div class="callout warn">Bの前提確認：公開サービスが各利用者のCodexログインを受け付ける提供形態について、今回の公式技術資料だけでは許諾・本番サポートを確定できません。「禁止されている」とも断定しません。一般公開前に、第三者ゲーム用途、ホスト側のトークン保持、許容されるログイン方式、アカウント別課金の扱いをOpenAIへ具体的に確認する項目です。今回、問い合わせやログイン操作は行っていません。</div>
+<h2>4. 認証と実行の実装方針</h2>
+<p>以下は提案であり、実装済みではありません。公式RPCにはログイン、アカウント確認、利用枠取得、スレッド／ターン操作、画像入力、構造化出力があります。外部トークン方式は認証ライフサイクルを既に管理するホスト向けの実験的機能で、誰でも使えるOAuth登録手段の保証ではありません。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server">[1]</a></p>
+<div class="timeline">
+<div class="tl-item"><div class="tl-title">① 利用者と専用ワーカーを結ぶ</div><p>ゲーム用Cookieとランダムなログイン試行IDを結び付ける。本人専用プロセス・CODEX_HOME・一時ディレクトリを用意し、他人の認証／履歴／写真を共有しない。スレッドを分けるだけでアカウント分離できると仮定しない。</p></div>
+<div class="tl-item"><div class="tl-title">② 公式ログインフローを完了</div><p><code>initialize</code> → <code>initialized</code> → <code>account/login/start</code>。PoCでは <code>chatgptDeviceCode</code> を候補にし、利用資格や組織設定で使えるか確認。パスワードはOpenAI側に入力する。PCで成功したlocalhostコールバックがスマホでも成立すると考えない。</p></div>
+<div class="tl-item"><div class="tl-title">③ 本人確認・モデル・利用枠を検査</div><p><code>account/read</code>、<code>account/rateLimits/read</code>、<code>model/list</code> を用いて実際のログイン状態と利用可能モデルを確認。APIキーモードを誤使用していないか確認。開始時の残量だけでプレイ完走は保証せず、途中の枯渇も扱う。</p></div>
+<div class="tl-item"><div class="tl-title">④ 判断要求だけを変換</div><p><code>thread/start</code> と <code>turn/start</code> に、必要最小限の確定状態・会話・写真を渡し、<code>outputSchema</code> で既存の結果形式を要求する。最終応答と完了を待ち、既存スキーマで再検証してゲーム状態へ適用する。途中の自然文を判定結果にしない。</p></div>
+<div class="tl-item"><div class="tl-title">⑤ 終了・切断・枠切れを処理</div><p>requestId／playId／状態バージョンを保持し、重複と遅延結果を除外。タイムアウト時は中断し、失敗時に無断で運営APIへ切り替えない。ログアウト後はワーカー、認証、履歴、写真を廃棄。追加クレジット購入やリセットを自動実行しない。</p></div>
+</div>
+<p>ワーカーは固定バージョンから型定義を生成し、まずサーバー内部のstdioで接続する案です。不要なシェル・ネットワーク・MCP・プラグインは無効化し、ゲームデータだけを渡します。単なるread-only設定では広い読取権限が残り得るため、コンテナ境界と読取範囲も制限します。これは本番サポートの問題を解消する措置ではありません。</p>
+<h3>変更する境界</h3>
+<div class="table-wrap"><table><thead><tr><th>対象</th><th>提案する変更</th></tr></thead><tbody>
+<tr><td>packages/server/openai.ts・ai-service.ts</td><td>現行のLive／画像経路を維持し、判断処理の呼び出し先をプレイ単位で選択できるようにする。利用上限・Abort・再試行の管理を残す。</td></tr>
+<tr><td>新規Codexアダプター</td><td>JSON-RPC要求ID、通知、最終JSON抽出、型検証、プロセス寿命、枠切れのエラー変換を担当。</td></tr>
+<tr><td>apps/local-server/hosted-runtime.ts・game-ai.ts・core-intent-ai.ts</td><td>クライアント委譲先にアダプターを注入。正本となるゲーム状態とルールはサーバーで保持。Codexに直接クリア状態を書かせない。</td></tr>
+<tr><td>apps/server・apps/web</td><td>ログイン・ペアリング・残量不足・接続待ち・終了の画面とAPIを追加。一般のゲーム認証とCodex認証を分離。</td></tr>
+<tr><td>specs/hosted-multiplayer</td><td>現在の匿名参加・アカウント不要という要件を改訂する必要がある。新モードとして追加するか、公開版の必須条件にするかを仕様化。</td></tr>
+</tbody></table></div>
+<p>A案では本人PCが返す結果を暗号化通信だけで信用できるようにはなりません。カジュアルな個人プレイならサーバー側のルール検証で始められますが、厳密なランキングや不正防止は別課題です。B案でも写真や会話の指示文を信頼せず、既存の検証境界を維持します。</p>
+<h2>5. どれだけ削減できるか</h2>
+<p><strong>実測の費用内訳がないため、削減率を数値で断定できません。</strong>API呼び出し回数の上限とドル建て費用は別です。ゲーム内の「クレジット」もCodex／ChatGPTの課金クレジットとは別物です。</p>
+<div class="card cyan"><h4>月間の損益モデル</h4><pre><code>現状 = N × (J + L + I + V) + H
+移行後 = N × ((1 − r) × J + L + I + V + W) + H + ΔH
+運営の削減額 = N × (r × J − W) − ΔH
+導入費の回収月数 = 導入費 ÷ 月間削減額（削減額が正の場合）</code></pre><p>N：月間プレイ数、J：移行対象の判断API費、L：Live費、I：画像生成費、V：動画費、H：現状のホスト費。r：判断処理の移行割合、W：1プレイ当たりの追加ワーカー費、ΔH：固定の追加運用費。再試行・失敗分も各費用に含めます。</p></div>
+<div class="table-wrap"><table><thead><tr><th>仮の内訳：1プレイ100単位</th><th>判断費</th><th>その他AI費</th><th>判断を全移行した場合</th></tr></thead><tbody><tr><td>メディア中心</td><td>10</td><td>90</td><td>最大10%削減（追加費用を引く前）</td></tr><tr><td>中間</td><td>30</td><td>70</td><td>最大30%削減（同上）</td></tr><tr><td>判断中心</td><td>60</td><td>40</td><td>最大60%削減（同上）</td></tr></tbody></table></div>
+<p class="dim">この表は感度分析用の仮定であり、実測値・価格表・予測ではありません。画像を移せた場合は移行した画像費も加算できます。H3動画は現行fal経路のままなら加算できません。</p>
+<p>本人の既存サブスク枠内に収まるなら、本人の追加支払いなしで運営の対象API費を減らせる可能性があります。しかし、仕事で使う枠の消費、ログインの手間、PC起動の手間がプレイヤー側へ移ります。新規加入を必要とする人には、少額のゲームAPI費を運営が負担する方が利用者全体として安い場合もあります。</p>
+<h3>先に測る項目</h3>
+<p>playIdごとに、モデル・処理種別・入力／出力／キャッシュ使用量・画像回数・Live利用量・動画課金対象・再試行を集計し、請求明細と照合します。本文・写真・認証情報は収集しません。代表的な難易度とプレイ時間で、平均だけでなく高コスト側も見ます。Codex側は利用前後の残量と失敗率を記録し、通常作業との共有枠を含めた実用性を評価します。</p>
+<p>運営費の予測可能性だけが目的なら、Codex移行と並行して、永続的な日次／月次予算台帳、処理前の予算予約、生成回数制限、期限時のLive終了、許可した再試行だけの実行を検討すべきです。現状のメモリ上限は再起動で戻るため、金額の絶対上限ではありません。画像頻度や動画有効化の変更は体験要件として別途判断します。</p>
+<h2>6. 実装順序と採否基準</h2>
+<div class="timeline">
+<div class="tl-item"><div class="tl-title">Phase 0 — 費用を分解する</div><p>代表プレイの実課金内訳を採取。移行対象費が追加運用費より十分大きいか確認。小さい場合は移行を止め、予算制御を優先。</p></div>
+<div class="tl-item"><div class="tl-title">Phase 1 — 本人アカウント1名で判断PoC</div><p>ゲーム本体と分離した固定バージョンのApp Serverで、写真＋確定状態→検証可能なJSONを試す。ゲーム用のAPIキーなしで当該判断が成功するか、本人枠の消費、待ち時間、拒否、枠切れを確認。APIと同じ入力で判断を比較する。</p></div>
+<div class="tl-item"><div class="tl-title">Phase 2 — 2アカウントとスマホの接続PoC</div><p>A/Bを選び、本人アカウントでのログイン、同時実行の非混線、別タブ、ログアウト、再起動、資格情報削除を検証。スマホ単独を採用条件にするならBのログイン完走を必須にする。</p></div>
+<div class="tl-item"><div class="tl-title">Phase 3 — 小規模な実ゲーム比較</div><p>GPT-Liveを維持し、判断処理だけ差し替える。既存30秒タイムアウトに収まるか、会話のテンポが許容できるか、実スマホで比較。制限到達で運営課金へ流れないことを確認。</p></div>
+<div class="tl-item"><div class="tl-title">Phase 4 — メディアの拡張可否を判断</div><p>画像生成の結果取得とモデル変更による品質を個別評価。音声は公式に利用可能な接続方式とゲーム制御との適合性が確認できてから扱う。公開運用は提供条件と実験的機能への依存を解決できるかで再判断。</p></div>
+</div>
+<p>開発に進む場合は新規機能としてspec→plan→tasksを作成します。本レポートは採用承認や仕様確定を意味しません。まず判断PoCに限れば、現行の音声体験を維持したまま費用移転の核心を検証できます。</p>
+<h2>7. 調査範囲と未確認事項</h2>
+<div class="table-wrap"><table><thead><tr><th>今回行ったこと</th><th>確認範囲</th></tr></thead><tbody><tr><td>公式資料の取得</td><td>App Server、認証、料金、画像生成、Voice、GPT-Liveを閲覧。2026-09-17時点。</td></tr><tr><td>現行コードの読取</td><td>AI設定、OpenAI接続、Live委譲、画像検査・生成、fal動画、公開要件を照合。</td></tr><tr><td>変更</td><td>このHTMLのみ新規作成。ゲーム実装・認証・デプロイは変更していない。</td></tr><tr><td>未実施</td><td>実ログイン、App Server推論、2人同時接続、実音声・画像生成、スマホ、請求確認、法的な許諾確認。本番費用も未取得。</td></tr></tbody></table></div>
+<p>コード上の主な根拠：<code>packages/server/ai-config.ts:61</code>、<code>packages/server/openai.ts:175</code>、<code>apps/local-server/hosted-runtime.ts:751</code>、<code>packages/server/ending-config.ts:12</code>、<code>packages/server/fal.ts:3</code>、<code>specs/hosted-multiplayer/spec.md</code>。ローカルの秘密設定は未参照です。</p>
+<h3>公式出典</h3><div class="meta"><p><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server">[1] App Server：RPC・認証・実験的機能</a><br><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/auth">[2] Authentication：サブスクとAPI認証</a><br><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/pricing">[3] Pricing：利用枠・共有・クレジット</a><br><a style="color:var(--accent)" href="https://developers.openai.com/api/docs/guides/live">[4] GPT-Live：音声とクライアント委譲</a><br><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/features/voice">[5] ChatGPT Voice：公式製品の音声</a><br><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/image-generation">[6] Image generation：内蔵生成と利用枠</a></p></div>
+<h2>8. 理解度チェック</h2><p>費用移転と、現行ゲームとの互換性を確認する5問です。全問正解で合格になります。</p><div class="quiz" id="quiz"><div class='q' data-answer='b'><div class='q-title'>Q1. App Serverで運営API費を移せる条件は？</div><label><input type='radio' name='q1' value='a'>運営APIキーで全員を実行する</label><label><input type='radio' name='q1' value='b'>本人のChatGPT認証で対象処理をCodexに実行させる</label><label><input type='radio' name='q1' value='c'>サーバー名を変える</label><div class='fb ok'>正解。対象処理の実行経路と認証が重要です。</div><div class='fb ng'>本文を確認してください。対象処理の実行経路と認証が重要です。</div></div><div class='q' data-answer='b'><div class='q-title'>Q2. 初期案でGPT-Live費を残す理由は？</div><label><input type='radio' name='q2' value='a'>Codexには音声が存在しないため</label><label><input type='radio' name='q2' value='b'>公式アプリの音声と独自Webへの組み込みは別の確認が必要なため</label><label><input type='radio' name='q2' value='c'>写真の送信ができないため</label><div class='fb ok'>正解。製品機能の存在だけでは接続の互換性を証明できません。</div><div class='fb ng'>本文を確認してください。製品機能の存在だけでは接続の互換性を証明できません。</div></div><div class='q' data-answer='b'><div class='q-title'>Q3. 移行の損益を決めるのは？</div><label><input type='radio' name='q3' value='a'>API呼び出し回数だけ</label><label><input type='radio' name='q3' value='b'>移せる実費から追加ワーカー・運用費を引いた金額</label><label><input type='radio' name='q3' value='c'>サブスクの名前だけ</label><div class='fb ok'>正解。移行対象の費用比率を先に測定します。</div><div class='fb ng'>本文を確認してください。移行対象の費用比率を先に測定します。</div></div><div class='q' data-answer='b'><div class='q-title'>Q4. 利用者を分けるときに必要なのは？</div><label><input type='radio' name='q4' value='a'>同じ認証のままスレッド名だけ変える</label><label><input type='radio' name='q4' value='b'>認証・実行環境・保存領域と所有者の分離</label><label><input type='radio' name='q4' value='c'>共通ログにすべて記録する</label><div class='fb ok'>正解。スレッド分離とアカウント分離を混同しません。</div><div class='fb ng'>本文を確認してください。スレッド分離とアカウント分離を混同しません。</div></div><div class='q' data-answer='b'><div class='q-title'>Q5. 今回の調査で確定したものは？</div><label><input type='radio' name='q5' value='a'>公開版への全面移行が検証済み</label><label><input type='radio' name='q5' value='b'>部分移行のPoC方針と、検証すべき制約</label><label><input type='radio' name='q5' value='c'>全費用がゼロになること</label><div class='fb ok'>正解。実接続と課金の検証はまだ行っていません。</div><div class='fb ng'>本文を確認してください。実接続と課金の検証はまだ行っていません。</div></div><button id="grade-btn" onclick="grade()">採点する</button><div id="result"><div class="score"></div><div class="verdict"></div><div class="note dim"></div></div></div><footer>Codex · 調査レポート · 2026-09-17</footer></main><script>
+function grade() {
+  const qs = document.querySelectorAll('.q');
+  let correct = 0;
+  let firstWrong = null;
+  qs.forEach(q => {
+    const ans = q.dataset.answer;
+    const sel = q.querySelector('input:checked');
+    q.classList.remove('correct', 'wrong');
+    if (sel && sel.value === ans) {
+      q.classList.add('correct');
+      correct++;
+    } else {
+      q.classList.add('wrong');
+      if (!firstWrong) firstWrong = q;
+    }
+  });
+  const result = document.getElementById('result');
+  const score = result.querySelector('.score');
+  const verdict = result.querySelector('.verdict');
+  const note = result.querySelector('.note');
+  score.textContent = correct + ' / ' + qs.length;
+  result.classList.remove('pass', 'fail');
+  if (qs.length > 0 && correct === qs.length) {
+    result.classList.add('pass');
+    verdict.textContent = '🎉 合格 — 全問正解です';
+    note.textContent = '実装内容と設計判断を完全に把握できています。';
+  } else {
+    result.classList.add('fail');
+    verdict.textContent = 'あと ' + (qs.length - correct) + ' 問 — 再挑戦してください';
+    note.textContent = '❌ の設問のフィードバックを読んでから、もう一度「採点する」を押してください。';
+    if (firstWrong) firstWrong.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+</script></body></html>
