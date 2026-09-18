@@ -110,3 +110,13 @@ GPT-Live WebRTCは、作成したsession IDへサーバーからsidebandを接�
 SCENARIO_PATH未指定時は `scenarios/story-catalog.json` を読み込む。ローカル・公開版ともに、新規プレイごとに18構成から等確率で抽選し、再接続時はそのプレイの選択を維持する。本編の撮影ボタン下に選択済みのシナリオIDを表示する。
 
 既存 `.env.local` に固定シナリオの指定がある場合は、`SCENARIO_PATH=scenarios/story-catalog.json` に変更するか設定行を削除する。固定の拡充候補を試す場合は `npm run play:expanded` または `SCENARIO_PATH=scenarios/playtest/warehouse-expanded-r1.json` を使用する。APIキーは変更不要。
+
+## ChatGPTアカウントで遊ぶ公開デモ
+
+`AI_PROVIDER=codex` をGitHubの配信先Environment Variablesへ設定すると、公開URLでプレイヤー本人のChatGPTデバイス認証を要求する。`api` または未設定なら既存API経路。Codexを選択した配信ではOPENAI_API_KEY/FAL_KEYをコンテナへ注入せず、動画と追加結末生成は無効になる。
+
+Codexは公式Linux amd64版0.154.0-alpha.6.2をSHA512検証してコンテナへ固定配置。ビルド時・起動時に未認証のApp Server契約チェックを行い、失敗した場合はAPI版へ切り替えず停止する。音声の実アカウント接続は別途手動確認が必要。
+
+初期値はMAX_PLAYERS=2（認証待ち・再プレイ用の保持も枠を使用）、GAME_MODEL=gpt-5.6-luna、IMAGE_JOB_TIMEOUT_SECONDS=300。既存のVariablesに別値がある場合は明示更新する。RESULT_TTL_SECONDSは画像締切以上にする。利用枠・並列数・運用認証・drainは既存制限を維持。
+
+各Cookie所有者に一時CODEX_HOMEと専用プロセスを割り当てる。認証はOpenAI画面で行い、トークンをブラウザへ返さない。正常終了後10分は本人の再プレイに再利用し、ログアウト・保持期限・サーバー停止・異常時に破棄する。公開デモは単一インスタンスで、再デプロイ後は再ログインが必要。実験版依存であり、ゲーム用途の個別許諾取得を表明するものではない。

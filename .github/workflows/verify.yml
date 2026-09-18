@@ -1,0 +1,30 @@
+name: Verify application
+on:
+  pull_request:
+    branches: [develop, main]
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.2'
+      - name: Verify without credentials
+        run: |
+          npm ci
+          npm run format:check
+          npm test
+          npm run build
+      - name: Build pinned Linux image and probe Codex as the runtime user
+        run: |
+          docker build --platform linux/amd64 -t call-to-the-past:verify .
+          docker run --rm --entrypoint node call-to-the-past:verify --input-type=module -e "import { codexPreflight } from './dist/server/apps/server/codex-preflight.js'; await codexPreflight(); console.log('Codex Linux preflight OK');"

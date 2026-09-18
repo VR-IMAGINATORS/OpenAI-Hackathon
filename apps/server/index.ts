@@ -1,8 +1,10 @@
-import { createHostedApp } from './app.js';
+import { createServerRuntime } from './runtime.js';
+import { codexPreflight } from './codex-preflight.js';
 import { loadHostedConfig } from './config.js';
 
 const config = loadHostedConfig();
-const runtime = createHostedApp(config);
+if (config.ai.provider === 'codex') await codexPreflight();
+const runtime = createServerRuntime(config);
 const server = runtime.app.listen(config.port, config.host, () => {
   console.log(
     `アプリ: ${config.publicUrl ?? `http://${config.host}:${config.port}`} (${config.ai.mode})`,

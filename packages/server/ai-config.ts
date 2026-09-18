@@ -39,8 +39,9 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
   const mode = values.AI_MODE ?? 'mock';
   const provider = values.AI_PROVIDER ?? 'api';
   if (provider !== 'api' && provider !== 'codex') throw new Error('Invalid AI_PROVIDER');
-  if (provider === 'codex' && (mode !== 'live' || values.NODE_ENV === 'production'))
-    throw new Error('Codex provider is local live mode only');
+  if (provider === 'codex' && mode !== 'live') throw new Error('Codex provider requires live mode');
+  if (provider === 'codex' && values.NODE_ENV === 'production' && !values.CODEX_POC_BIN)
+    throw new Error('Production Codex requires CODEX_POC_BIN');
   if (mode !== 'mock' && mode !== 'live') throw new Error('Invalid AI_MODE');
   if (mode === 'live') {
     for (const name of [
