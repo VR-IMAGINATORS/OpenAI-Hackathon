@@ -16,7 +16,14 @@ export interface HostedBootstrap {
   app: { name: string; stage: 'hosted-multiplayer' };
   scenario: PublicScenario;
   auth: { required: false };
-  ai: { mode: 'mock' | 'live' };
+  ai: { mode: 'mock' | 'live'; playerLogin?: 'codex' };
+}
+export interface CodexLoginStatus {
+  status: 'disconnected' | 'starting' | 'pending' | 'ready' | 'failed';
+  verificationUrl?: string;
+  userCode?: string;
+  expiresAt?: number;
+  model?: string;
 }
 export interface HostedSession {
   authenticated: true;

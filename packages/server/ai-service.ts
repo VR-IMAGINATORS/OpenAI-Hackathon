@@ -84,6 +84,11 @@ export class AiService {
     readonly config: AiConfig,
     transport?: OpenAITransport,
     private readonly now: () => number = () => performance.now(),
+    private readonly gameResponder?: (
+      body: unknown,
+      signal: AbortSignal | undefined,
+      playId: string,
+    ) => Promise<unknown>,
   ) {
     if (!transport && (config.mode !== 'live' || !config.apiKey)) {
       throw new Error('Mock mode requires an injected OpenAITransport');
@@ -627,7 +632,9 @@ export class AiService {
     const raw = Promise.resolve().then(() => {
       if (signal?.aborted)
         throw new AiServiceError(409, 'CONTROL_CANCELLED', '制御の確認を中止しました。');
-      return this.transport.createResponse(request, requestSignal);
+      return game && this.gameResponder
+        ? this.gameResponder(request, requestSignal, playId)
+        : this.transport.createResponse(request, requestSignal);
     });
     const release = () => {
       play.responseBusy--;

@@ -7,6 +7,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "poc:codex": "node --import tsx tools/codex-poc.ts",
+    "play:codex": "npm run build && node --import tsx tools/play-codex.ts",
+    "play:codex:start": "node --import tsx tools/play-codex.ts",
     "dev": "node --import tsx tools/dev.ts",
     "dev:all": "node --import tsx tools/dev.ts --mock",
     "dev:web": "vite",

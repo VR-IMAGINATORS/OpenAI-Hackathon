@@ -5,6 +5,10 @@ export function setApiLocale(locale: 'ja' | 'en') {
   apiLocale = locale;
 }
 const englishMessages: Record<string, string> = {
+  CODEX_LOGIN_REQUIRED: 'Sign in with your ChatGPT account before starting.',
+  CODEX_CAPACITY: 'A Codex connection is in use. Wait until it ends and try again.',
+  CODEX_PLAY_ACTIVE: 'End your current play before changing the account.',
+  CODEX_UNAVAILABLE: 'Codex is unavailable. End this play and sign in again.',
   INSUFFICIENT_CREDITS: 'Not enough credits. A conversation costs 30; each photo costs 150.',
   AUTH_REQUIRED: 'Please join from the start screen.',
   AUTH_RATE_LIMIT: 'Too many attempts. Wait a moment and try again.',
@@ -28,6 +32,10 @@ export function controlHeaders(control: PlayControl | { playId: string }) {
   };
 }
 const publicMessages: Record<string, string> = {
+  CODEX_LOGIN_REQUIRED: '開始画面であなたのChatGPTアカウントにログインしてください。',
+  CODEX_CAPACITY: '別のCodex接続が使用中です。終了後に再試行してください。',
+  CODEX_PLAY_ACTIVE: 'アカウントを変更するには、先に現在のプレイを終了してください。',
+  CODEX_UNAVAILABLE: 'Codexを利用できません。プレイを終了し、再ログインしてください。',
   INSUFFICIENT_CREDITS: 'クレジットが不足しています。会話は30、写真は1枚150必要です。',
   AUTH_REQUIRED: '開始画面から参加してください。',
   AUTH_RATE_LIMIT: '参加リクエストの回数が上限に達しました。しばらく待って再試行してください。',
