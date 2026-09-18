@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GPT-Live サブスク接続テスト</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/probe.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">CALL TO THE PAST / VOICE PROBE</p>
+      <h1>GPT-Liveを<br />自分のアカウントで試す</h1>
+      <p>
+        実験用の独立した音声テストです。APIキーを使わず、Codexのプレイヤー認証から接続します。サブスクでの利用可否・利用枠は検証中です。
+      </p>
+      <section>
+        <h2>1. プレイヤー認証</h2>
+        <p id="state" role="status">未接続</p>
+        <button id="login">ChatGPTでログイン</button>
+        <div id="approval" hidden>
+          <p>本人のアカウントで承認し、この画面に戻ってください。</p>
+          <code id="code"></code
+          ><a id="verify" target="_blank" rel="noopener noreferrer">OpenAIの認証ページを開く</a>
+        </div>
+      </section>
+      <section>
+        <h2>2. 音声接続（最大60秒）</h2>
+        <p>
+          マイクを許可して話しかけてください。「テスト文を送信」は、サーバーから送った文章に音声が反応するかを確認します（最大3回）。文章どおりの読み上げは保証しません。終了・放置時は専用認証も破棄します。
+        </p>
+        <div class="buttons">
+          <button id="start" disabled>マイクを接続</button
+          ><button id="speech" disabled>テスト文を送信</button
+          ><button id="play" disabled>音声を再生</button
+          ><button id="stop" disabled>停止・ログアウト</button>
+        </div>
+        <audio id="audio" autoplay></audio>
+        <p>
+          送信文：「こんにちは。音声接続のテストです。こちらの声が聞こえますか。」押す前後は話さず、音声の反応を確認してください。
+        </p>
+        <p id="error" role="alert"></p>
+      </section>
+      <section>
+        <h2>3. 確認結果</h2>
+        <dl>
+          <dt>要求</dt>
+          <dd>音声モデル指定なし（Codex標準） / v3</dd>
+          <dt>相手から報告されたモデル</dt>
+          <dd id="model">未報告</dd>
+          <dt>WebRTC</dt>
+          <dd id="peer">未接続</dd>
+          <dt>受信音声データ</dt>
+          <dd id="bytes">0 bytes</dd>
+          <dt>サーバーの停止確認</dt>
+          <dd id="closed">未確認</dd>
+          <dt>残り時間</dt>
+          <dd id="remaining">—</dd>
+        </dl>
+        <p>
+          Codex側がモデル指定を拒否するため、標準モデルで接続します。GPT-Liveかどうかは未確認です。別モデルが報告された場合は停止します。モデル未報告や接続成功だけではGPT-Liveの利用を証明できません。声が聞こえたか、話しかけて返答があったかも確認してください。
+        </p>
+        <h3>受信イベント種別</h3>
+        <pre id="events">未受信</pre>
+      </section>
+      <p class="footnote">
+        音声・会話本文・SDP・認証コードはファイル保存しません。通常ゲームの音声は従来のAPI経路のままです。
+      </p>
+    </main>
+  </body>
+</html>

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const codes = new Set([
   'UPSTREAM_FAILED',
+  'CODEX_UNAVAILABLE',
   'REQUEST_LIMIT',
   'DRAINING',
   'PLAY_EXPIRED',

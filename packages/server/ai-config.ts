@@ -6,6 +6,7 @@ export const SCENE_ACTION_BUDGET = 4;
 
 export interface AiConfig {
   mode: 'mock' | 'live';
+  provider?: 'api' | 'codex';
   apiKey?: string;
   liveModel: string;
   liveVoice: LiveVoice;
@@ -36,6 +37,11 @@ export interface AiConfig {
 /** Receives already-loaded settings; never reads a private environment file. */
 export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
   const mode = values.AI_MODE ?? 'mock';
+  const provider = values.AI_PROVIDER ?? 'api';
+  if (provider !== 'api' && provider !== 'codex') throw new Error('Invalid AI_PROVIDER');
+  if (provider === 'codex' && mode !== 'live') throw new Error('Codex provider requires live mode');
+  if (provider === 'codex' && values.NODE_ENV === 'production' && !values.CODEX_POC_BIN)
+    throw new Error('Production Codex requires CODEX_POC_BIN');
   if (mode !== 'mock' && mode !== 'live') throw new Error('Invalid AI_MODE');
   if (mode === 'live') {
     for (const name of [
@@ -43,6 +49,7 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
       'AI_GLOBAL_LIVE_ATTEMPTS',
       'AI_GLOBAL_RESPONSE_ATTEMPTS',
     ]) {
+      if (provider === 'codex' && name === 'OPENAI_API_KEY') continue;
       if (!values[name]?.trim()) throw new Error(name + ' required');
     }
   }
@@ -60,10 +67,14 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
   if (!(liveVoices as readonly string[]).includes(liveVoice)) throw new Error('LIVE_VOICE invalid');
   const liveModel = model('LIVE_MODEL', 'gpt-live-1');
   const responseModel = model('RESPONSE_MODEL', 'gpt-5.6-terra');
-  const gameModel = model('GAME_MODEL', 'gpt-5.6-sol');
-  const imageModel = model('IMAGE_MODEL', 'gpt-image-2.5-flare');
+  const gameModel = model('GAME_MODEL', provider === 'codex' ? 'gpt-5.6-luna' : 'gpt-5.6-sol');
+  const imageModel =
+    provider === 'codex' ? 'codex-image-generation' : model('IMAGE_MODEL', 'gpt-image-2.5-flare');
   const inspectionModel = model('IMAGE_INSPECTION_MODEL', 'gpt-5.6-luna');
-  if (imageModel !== 'gpt-image-2.5-flare' || inspectionModel !== 'gpt-5.6-luna')
+  if (
+    (provider !== 'codex' && imageModel !== 'gpt-image-2.5-flare') ||
+    inspectionModel !== 'gpt-5.6-luna'
+  )
     throw new Error('Unsupported media model');
   if (positiveInteger(values, 'IMAGE_JOB_TIMEOUT_SECONDS', 150, 300) < 30)
     throw new Error('IMAGE_JOB_TIMEOUT_SECONDS invalid');
@@ -77,7 +88,8 @@ export function loadAiConfig(values: NodeJS.ProcessEnv): AiConfig {
     globalInspectionAttempts: positiveInteger(values, 'AI_GLOBAL_INSPECTION_ATTEMPTS', 100),
     imageJobTimeoutMs: positiveInteger(values, 'IMAGE_JOB_TIMEOUT_SECONDS', 150, 300) * 1000,
     mode,
-    apiKey: mode === 'live' ? values.OPENAI_API_KEY : undefined,
+    provider,
+    apiKey: mode === 'live' && provider === 'api' ? values.OPENAI_API_KEY : undefined,
     liveModel,
     liveVoice: liveVoice as LiveVoice,
     responseModel,

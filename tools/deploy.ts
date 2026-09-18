@@ -100,7 +100,9 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
   )
     throw new Error('Standard Lightsail HTTPS origin required');
   // Keep this script dependency-free: Actions runs it with Node's native type stripping.
-  const endingFlag = env.ENDING_VIDEO_ENABLED || 'false';
+  const provider = env.AI_PROVIDER || 'api';
+  if (provider !== 'api' && provider !== 'codex') throw new Error('AI_PROVIDER invalid');
+  const endingFlag = provider === 'codex' ? 'false' : env.ENDING_VIDEO_ENABLED || 'false';
   if (endingFlag !== 'true' && endingFlag !== 'false')
     throw new Error('ENDING_VIDEO_ENABLED invalid');
   const bounded = (name: string, fallback: string, min: number, max: number) => {
@@ -121,15 +123,15 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     APP_VERSION: version,
     PUBLIC_APP_URL: url.origin,
     AI_MODE: 'live',
-    MAX_PLAYERS: '5',
-    OPENAI_API_KEY: required('OPENAI_API_KEY'),
+    AI_PROVIDER: provider,
+    MAX_PLAYERS: bounded('MAX_PLAYERS', provider === 'codex' ? '2' : '5', 1, 5),
     OPS_TOKEN: required('OPS_TOKEN'),
     AI_GLOBAL_LIVE_ATTEMPTS: required('AI_GLOBAL_LIVE_ATTEMPTS'),
     AI_GLOBAL_RESPONSE_ATTEMPTS: required('AI_GLOBAL_RESPONSE_ATTEMPTS'),
     LIVE_MODEL: env.LIVE_MODEL || 'gpt-live-1',
     LIVE_VOICE: env.LIVE_VOICE || 'gleam',
     RESPONSE_MODEL: env.RESPONSE_MODEL || 'gpt-5.6-terra',
-    GAME_MODEL: env.GAME_MODEL || 'gpt-5.6-sol',
+    GAME_MODEL: env.GAME_MODEL || (provider === 'codex' ? 'gpt-5.6-luna' : 'gpt-5.6-sol'),
     IMAGE_MODEL: env.IMAGE_MODEL || 'gpt-image-2.5-flare',
     IMAGE_INSPECTION_MODEL: env.IMAGE_INSPECTION_MODEL || 'gpt-5.6-luna',
     AI_GLOBAL_IMAGE_ATTEMPTS: required('AI_GLOBAL_IMAGE_ATTEMPTS'),
@@ -137,7 +139,8 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     IMAGE_REQUESTS_PER_MINUTE: env.IMAGE_REQUESTS_PER_MINUTE || '5',
     IMAGE_CONCURRENT: env.IMAGE_CONCURRENT || '2',
     IMAGE_INSPECTION_CONCURRENT: env.IMAGE_INSPECTION_CONCURRENT || '2',
-    IMAGE_JOB_TIMEOUT_SECONDS: env.IMAGE_JOB_TIMEOUT_SECONDS || '150',
+    IMAGE_JOB_TIMEOUT_SECONDS:
+      env.IMAGE_JOB_TIMEOUT_SECONDS || (provider === 'codex' ? '300' : '150'),
     RESULT_TTL_SECONDS: resultTtl,
     ENDING_VIDEO_ENABLED: endingFlag,
     ENDING_JOB_TIMEOUT_SECONDS: endingTimeout,
@@ -145,6 +148,8 @@ export function deploymentConfig(env: NodeJS.ProcessEnv): DeployConfig {
     AI_RESPONSES_PER_PLAY: env.AI_RESPONSES_PER_PLAY || '80',
     ENABLE_GAME_TRACE: '0',
   };
+  if (provider === 'api') environment.OPENAI_API_KEY = required('OPENAI_API_KEY');
+  else environment.CODEX_POC_BIN = '/opt/codex/package/vendor/x86_64-unknown-linux-musl/bin/codex';
   if (endingFlag === 'true') {
     environment.FAL_KEY = required('FAL_KEY');
     environment.AI_GLOBAL_VIDEO_ATTEMPTS = bounded(

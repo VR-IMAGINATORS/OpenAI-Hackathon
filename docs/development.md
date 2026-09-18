@@ -76,3 +76,6 @@ liveモードでは最初に文章・タグを生成して保存し、動画有�
 `config/game-core.json` のschemaVersion 2で許容方針・回復表現・時間警告を編集できます。シナリオのknowledgeとobservationTargetsで、知っていること・条件付きで分かること・秘密を分離します。詳しい編集場所とPC/スマホの確認手順は[ハーネス改善の動作確認](../specs/improve-game-loop-harness/manual-verification.md)を参照してください。
 
 実音声の自然さ、ノイズ下での静寂推定、日英の判断品質は実機で確認します。自動テストの成功はこれらの確認を代替しません。
+# サブスクでのローカル試遊
+
+`npm run play:codex` はゲーム画面から本人がChatGPTログインし、Codexの写真・ゲーム判断、Live音声（juniper）、組み込み状況画像生成・検査を利用します。APIキーは不要で、この起動では設定済みキーも使用しません。動画・追加の結末生成は省略します。画像生成のモデル・品質指定はCodex側に従い、API経路のIMAGE_MODELは流用しません。従来のAPI構成（既定の声gleam）は通常起動で維持します。[手順と検証範囲](../specs/codex-game-live/README.md)を参照してください。
