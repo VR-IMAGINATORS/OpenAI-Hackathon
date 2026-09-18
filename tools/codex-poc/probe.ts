@@ -61,6 +61,11 @@ export async function login(
       180_000,
     );
     if (event.params.success !== true) throw new PocError('LOGIN_FAILED');
+    // Pinned Codex 0.154.0-alpha.6.2 sends login/completed BEFORE reloading auth.
+    // Read only after the subsequent account/updated, including already-buffered events.
+    const afterCompletion = cursor + rpc.since(cursor).indexOf(event) + 1;
+    const updated = await rpc.wait(afterCompletion, (m) => m.method === 'account/updated', 30_000);
+    if (updated.params?.authMode !== 'chatgpt') throw new PocError('CHATGPT_LOGIN_REQUIRED');
     return requireChatGPT(await rpc.call('account/read', {}));
   } catch (error) {
     await rpc.call('account/login/cancel', { loginId: result.loginId }, 2_000).catch(() => {});

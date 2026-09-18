@@ -98,6 +98,7 @@ test('login accepts early completion but rejects API key and non-OpenAI URLs', a
   const { rpc } = fixture((m, emit) => {
     if (m.method === 'account/login/start') {
       emit({ method: 'account/login/completed', params: { loginId: 'l', success: true } });
+      emit({ method: 'account/updated', params: { authMode: 'chatgpt' } });
       emit({
         id: m.id,
         result: {
@@ -134,6 +135,69 @@ test('login accepts early completion but rejects API key and non-OpenAI URLs', a
   );
   bad.rpc.fail();
 });
+test('login waits for auth reload after completion, ignoring earlier account updates', async () => {
+  let reads = 0;
+  let loaded = false;
+  const { rpc, emit } = fixture((m, send) => {
+    if (m.method === 'account/login/start') {
+      send({ method: 'account/updated', params: { authMode: null } });
+      send({
+        id: m.id,
+        result: {
+          loginId: 'l',
+          verificationUrl: 'https://auth.openai.com/codex/device',
+          userCode: 'TEST',
+        },
+      });
+    } else if (m.method === 'account/read') {
+      reads++;
+      send({
+        id: m.id,
+        result: { account: loaded ? { type: 'chatgpt', planType: 'plus' } : null },
+      });
+    } else send({ id: m.id, result: {} });
+  });
+  const result = login(rpc, 'device', () => {});
+  emit({ method: 'account/login/completed', params: { loginId: 'l', success: true } });
+  // Allow the completion handler to run while the native auth cache is still empty.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(reads, 0);
+  loaded = true;
+  emit({ method: 'account/updated', params: { authMode: 'chatgpt' } });
+  assert.equal(await result, 'plus');
+  assert.equal(reads, 1);
+  rpc.fail();
+});
+
+test('login rejects non-ChatGPT or missing accounts after the update and cancels', async () => {
+  for (const authMode of [null, 'apikey', 'chatgpt']) {
+    let cancelled = false;
+    const { rpc } = fixture((m, emit) => {
+      if (m.method === 'account/login/start') {
+        emit({
+          id: m.id,
+          result: {
+            loginId: 'l',
+            verificationUrl: 'https://auth.openai.com/codex/device',
+            userCode: 'TEST',
+          },
+        });
+        emit({ method: 'account/login/completed', params: { loginId: 'l', success: true } });
+        emit({ method: 'account/updated', params: { authMode } });
+      } else {
+        if (m.method === 'account/login/cancel') cancelled = true;
+        emit({ id: m.id, result: { account: null } });
+      }
+    });
+    await assert.rejects(
+      login(rpc, 'device', () => {}),
+      /CHATGPT_LOGIN_REQUIRED/,
+    );
+    assert.equal(cancelled, true);
+    rpc.fail();
+  }
+});
+
 test('usage gates block exhausted or explicitly forbidden ordinary usage', () => {
   assert.throws(() => safeLimits({ ordinaryUsageAllowed: false }), /INCLUDED_USAGE/);
   assert.throws(() => safeLimits({ rateLimits: { primary: { usedPercent: 100 } } }), /USAGE_LIMIT/);
