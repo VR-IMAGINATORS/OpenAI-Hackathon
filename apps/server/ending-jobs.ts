@@ -120,7 +120,7 @@ export class EndingJobs {
     private readonly results: ResultStore,
     private readonly options: EndingJobsOptions = {},
   ) {
-    if (config.enabled && ai.config.mode === 'live')
+    if (config.enabled && ai.config.mode === 'live' && ai.config.provider !== 'codex')
       this.fal = options.fal ?? createFalTransport(config.apiKey!);
   }
   private now() {
@@ -189,7 +189,10 @@ export class EndingJobs {
   }
   enqueue(packet: EndingPacket, seal: () => EndingPacket): void {
     const enabled = !!this.fal;
-    const writeStory = packet.outcome !== null && this.ai.config.mode === 'live';
+    const writeStory =
+      packet.outcome !== null &&
+      this.ai.config.mode === 'live' &&
+      this.ai.config.provider !== 'codex';
     const status: EndingVideoStatus =
       packet.outcome === null ? 'not_applicable' : enabled ? 'queued' : 'disabled';
     if (

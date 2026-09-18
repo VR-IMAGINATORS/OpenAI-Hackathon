@@ -78,6 +78,8 @@ export function createHostedApp(
     ending?: Omit<EndingJobsOptions, 'now'>;
   } = {},
 ) {
+  if (config.ai.provider === 'codex' && (!options.playerJudgments || !options.transport))
+    throw new Error('Subscription mode requires player authentication and transport');
   const now = options.now ?? (() => performance.now());
   const wallNow = options.wallNow ?? Date.now;
   const log = options.log ?? operationalLog;
@@ -543,7 +545,11 @@ export function createHostedApp(
           )
         : { ja: publicScenario(config.scenario), en: publicScenario(config.scenario) },
       auth: { required: false },
-      ai: { mode: config.ai.mode, ...(options.playerJudgments ? { playerLogin: 'codex' } : {}) },
+      ai: {
+        mode: config.ai.mode,
+        provider: config.ai.provider ?? 'api',
+        ...(options.playerJudgments ? { playerLogin: 'codex' } : {}),
+      },
     }),
   );
   app.post('/api/auth', (req, res) => {

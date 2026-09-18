@@ -14,6 +14,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.addInitScript(() => {
       window.__peerClosed = 0;
       window.__micStopped = false;
+      window.__sent = [];
       const track = {
         enabled: true,
         stop() {
@@ -34,7 +35,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         iceGatheringState = 'complete';
         addTrack() {}
         createDataChannel() {
-          return (this.channel = { readyState: 'open', send() {}, close() {} });
+          return (window.__channel = this.channel =
+            {
+              readyState: 'open',
+              send(value) {
+                window.__sent.push(JSON.parse(value));
+              },
+              close() {},
+            });
         }
         async createOffer() {
           return { type: 'offer', sdp: 'fake-offer' };
@@ -87,6 +95,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       recoveryExpiresAt: null,
     });
+    const received = [];
+    const command = {
+      seq: 1,
+      type: 'session.commentary.append',
+      event_id: 'result-1',
+      delegation_id: 'delegation-1',
+      content: 'The paper band is cut.',
+    };
     await page.route('**/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       // Same evaluation order as the real server, using a clock that keeps advancing.
@@ -101,14 +117,29 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       else if (path === '/api/session') data = { authenticated: true, playId: state.id };
       else if (['/api/play/state', '/api/play/control', '/api/play/heartbeat'].includes(path))
         data = envelope();
-      else if (path === '/api/play/live') data = { sdp: 'fake-answer', generation: 1 };
-      else if (path === '/api/play/commands/poll')
+      else if (path === '/api/play/live')
+        data = {
+          sdp: 'fake-answer',
+          generation: 1,
+          initialization: [
+            {
+              type: 'session.instructions.append',
+              event_id: 'init',
+              delegation_id: null,
+              content: 'Act as the game companion.',
+            },
+          ],
+        };
+      else if (path === '/api/play/events') {
+        received.push(route.request().postDataJSON().event);
+        data = { accepted: true };
+      } else if (path === '/api/play/commands/poll')
         data = {
           generation: 1,
           controlEpoch: 1,
           acknowledgedThrough: 0,
           serverNow: Date.now(),
-          commands: [],
+          commands: received.some((e) => e.type === 'session.delegation.created') ? [command] : [],
           state,
         };
       else if (path === '/api/play/voice-activity') data = { accepted: true };
@@ -139,6 +170,34 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.getByRole('button', { name: 'この画面で再接続', exact: true }).click();
     const label = page.locator('.messenger-call strong');
     await label.filter({ hasText: '音声で会話できます' }).waitFor();
+    assert.equal((await page.evaluate(() => window.__sent))[0].type, 'session.instructions.append');
+    await page.evaluate(() => {
+      for (const event of [
+        {
+          type: 'session.input_transcript.delta',
+          event_id: 'input-1',
+          delta: 'Cut the paper band.',
+          start_ms: 0,
+          end_ms: 100,
+        },
+        {
+          type: 'session.delegation.created',
+          event_id: 'delegate-1',
+          offset_ms: 100,
+          delegation: { id: 'delegation-1', type: 'delegation', target: 'client' },
+        },
+      ])
+        window.__channel.onmessage({ data: JSON.stringify(event) });
+    });
+    await page.waitForFunction(() => window.__sent.some((c) => c.event_id === 'result-1'));
+    assert.deepEqual(
+      received.map((e) => e.type),
+      ['session.input_transcript.delta', 'session.delegation.created'],
+    );
+    assert.equal(
+      (await page.evaluate(() => window.__sent.filter((c) => c.event_id === 'result-1'))).length,
+      1,
+    );
     let sequence = 0;
     const report = (output) =>
       playback.report({
@@ -170,7 +229,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await page.evaluate(() => window.__peerClosed), 1);
     assert.deepEqual(errors, []);
     console.log(
-      'PASS: mic off during final playback, then one peer close and 通話終了 after silence. API/audio mocked.',
+      'PASS: initialization, transcript/delegation forwarding, result delivery once, final playback and one peer close. API/audio mocked.',
     );
   } finally {
     await browser.close();

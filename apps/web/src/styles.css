@@ -2068,9 +2068,16 @@ h1 span {
   opacity: 0.5;
   cursor: wait;
 }
+.codex-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
 .codex-code {
   display: block;
-  margin: 16px 0;
+  margin: 0;
   font-size: 1.7rem;
   letter-spacing: 0.14em;
   user-select: all;

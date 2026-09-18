@@ -90,6 +90,8 @@ export class AiService {
       playId: string,
     ) => Promise<unknown>,
   ) {
+    if (config.provider === 'codex' && !transport)
+      throw new Error('Codex requires an explicit subscription transport');
     if (!transport && (config.mode !== 'live' || !config.apiKey)) {
       throw new Error('Mock mode requires an injected OpenAITransport');
     }
@@ -414,8 +416,8 @@ export class AiService {
     // Await transport settlement, including abort/read cancellation, before releasing a concurrency slot.
     try {
       const value = await (kind === 'generation'
-        ? this.transport.createImage!(body, controller.signal)
-        : this.transport.createResponse(body, controller.signal));
+        ? this.transport.createImage!(body, controller.signal, permit.ownerPlayId)
+        : this.transport.createResponse(body, controller.signal, permit.ownerPlayId));
       if (
         controller.signal.aborted ||
         permit.cancelled ||
@@ -505,7 +507,7 @@ export class AiService {
     this.liveBusy++;
     // Reserve synchronously before invoking even an injected transport.
     const raw = Promise.resolve()
-      .then(() => this.transport.createLiveSession(parsed.data))
+      .then(() => this.transport.createLiveSession(parsed.data, playId))
       .then((value) => {
         const answer = liveAnswer.parse(value);
         const duplicate = [...this.plays.values()].some(

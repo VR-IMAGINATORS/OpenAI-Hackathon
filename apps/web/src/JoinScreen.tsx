@@ -182,7 +182,13 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           <option value="ja">日本語</option>
         </select>
       </label>
-      {needsCodex && <CodexLogin locale={locale} onReady={setCodexReady} />}
+      {needsCodex && (
+        <CodexLogin
+          locale={locale}
+          subscriptionOnly={bootstrap.ai.provider === 'codex'}
+          onReady={setCodexReady}
+        />
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();

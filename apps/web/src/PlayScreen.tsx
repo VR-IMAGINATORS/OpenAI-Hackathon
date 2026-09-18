@@ -109,6 +109,7 @@ export default function PlayScreen({
   const [voice, setVoice] = useState<VoiceState>('closed');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [voiceDiagnostic, setVoiceDiagnostic] = useState('');
   const [photos, setPhotos] = useState<PreparedPhoto[]>([]);
   const [retryPhotos, setRetryPhotos] = useState<{
     photos: PreparedPhoto[];
@@ -356,6 +357,7 @@ export default function PlayScreen({
     locked.current = true;
     setBusy(true);
     setError('');
+    setVoiceDiagnostic('');
     const previous = live.current;
     prepared ??= previous?.pendingRequest ? previous : undefined;
     live.current = null;
@@ -367,6 +369,9 @@ export default function PlayScreen({
         if (connection.generation > 0) void heartbeat(connection);
       },
       onPlaybackBlocked: () => setBlockedAudio(true),
+      onError: (detail) => {
+        if (mounted.current && live.current === connection) setVoiceDiagnostic(detail);
+      },
       onVoiceActivity: (snapshot) => {
         const owner = control.current;
         if (
@@ -451,6 +456,7 @@ export default function PlayScreen({
       await connection.connect(control.current);
       await heartbeat(connection);
     } catch (error) {
+      setVoiceDiagnostic((previous) => previous || message(error));
       if (!connection.pendingRequest) connection.close();
       fail(error);
     } finally {
@@ -631,6 +637,11 @@ export default function PlayScreen({
           </button>
         )}
       </section>
+      {voiceDiagnostic && (
+        <p className="play-error" role="alert">
+          {t('音声診断: ', 'Voice diagnostic: ')}{voiceDiagnostic}
+        </p>
+      )}
       <details className="messenger-info">
         <GameStatusSummary
           key={playId}

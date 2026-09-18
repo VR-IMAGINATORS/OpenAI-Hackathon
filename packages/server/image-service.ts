@@ -301,7 +301,7 @@ export async function generateScene(
         quality: 'low',
         output_format: 'jpeg',
       },
-      60000,
+      ai.config.provider === 'codex' ? 180000 : 60000,
     ),
   );
 }
@@ -351,7 +351,13 @@ export async function inspectScene(
       },
     },
   };
-  const response = await ai.mediaCall(jobId, epoch, 'inspection', body, 15000);
+  const response = await ai.mediaCall(
+    jobId,
+    epoch,
+    'inspection',
+    body,
+    ai.config.provider === 'codex' ? 30000 : 15000,
+  );
   const parsed = z
     .object({
       status: z.string().optional(),

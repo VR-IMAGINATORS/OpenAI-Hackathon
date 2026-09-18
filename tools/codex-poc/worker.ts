@@ -44,7 +44,10 @@ export async function startWorker() {
   try {
     await mkdir(home);
     await mkdir(work);
-    await writeFile(join(home, 'config.toml'), pocConfig);
+    await writeFile(
+      join(home, 'config.toml'),
+      pocConfig.replace('[features]', '[features]\nimage_generation = true'),
+    );
     const env = childEnvironment(process.env, home);
     const binary = selectBinary(
       await resolveBinary(env, process.env.CODEX_POC_BIN),
@@ -57,7 +60,8 @@ export async function startWorker() {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
-    rpc = new Rpc(child.stdin!, child.stdout!);
+    // Native image completion includes base64; its owning consumer keeps it out of the journal.
+    rpc = new Rpc(child.stdin!, child.stdout!, 16 * 1024 * 1024);
     child.stderr!.resume();
     child.once('error', () => {
       usable = false;

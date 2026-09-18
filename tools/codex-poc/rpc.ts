@@ -24,6 +24,7 @@ export class Rpc {
   private events: Message[] = [];
   private eventBytes = 0;
   private listeners = new Set<() => void>();
+  private consumers = new Set<(message: Message) => boolean>();
   private failure?: Error;
   private buffer = '';
   private decoder = new StringDecoder('utf8');
@@ -31,6 +32,7 @@ export class Rpc {
   constructor(
     private input: Writable,
     output: Readable,
+    private maxLineBytes = 2 * 1024 * 1024,
   ) {
     output.on('data', (chunk: Buffer) => {
       this.buffer += this.decoder.write(chunk);
@@ -38,7 +40,7 @@ export class Rpc {
       while ((newline = this.buffer.indexOf('\n')) >= 0) {
         const line = this.buffer.slice(0, newline);
         this.buffer = this.buffer.slice(newline + 1);
-        if (Buffer.byteLength(line) > 2 * 1024 * 1024)
+        if (Buffer.byteLength(line) > this.maxLineBytes)
           return this.fail(new PocError('RPC_SIZE_LIMIT'));
         if (!line.trim()) continue;
         try {
@@ -47,7 +49,7 @@ export class Rpc {
           return this.fail(new PocError('RPC_INVALID_JSON'));
         }
       }
-      if (Buffer.byteLength(this.buffer) > 2 * 1024 * 1024)
+      if (Buffer.byteLength(this.buffer) > this.maxLineBytes)
         this.fail(new PocError('RPC_SIZE_LIMIT'));
     });
     output.on('end', () => this.fail(new PocError('RPC_CLOSED')));
@@ -65,6 +67,7 @@ export class Rpc {
         return;
       }
       // Deltas are display-only and can otherwise exhaust the bounded journal.
+      for (const consumer of this.consumers) if (consumer(m)) return;
       if (m.method.endsWith('/delta')) return;
       this.eventBytes += Buffer.byteLength(JSON.stringify(m));
       if (this.events.length >= 4096 || this.eventBytes > 8 * 1024 * 1024) {
@@ -114,6 +117,18 @@ export class Rpc {
 
   cursor() {
     return this.events.length;
+  }
+  /** A dedicated thread can own its notifications outside the judgment journal. */
+  consumeNotifications(consumer: (message: Message) => boolean) {
+    this.consumers.add(consumer);
+    return () => {
+      this.consumers.delete(consumer);
+    };
+  }
+  clearEventsIfIdle() {
+    if (this.listeners.size || this.pending.size) return false;
+    this.clearEvents();
+    return true;
   }
   since(cursor: number) {
     return this.events.slice(cursor);

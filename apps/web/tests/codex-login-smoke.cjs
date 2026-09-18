@@ -16,7 +16,12 @@ const fs = require('node:fs');
       let status = 200,
         body = {};
       if (path === '/api/bootstrap')
-        body = { ai: { mode: 'live', ...(enabled ? { playerLogin: 'codex' } : {}) } };
+        body = {
+          ai: {
+            mode: 'live',
+            ...(enabled ? { playerLogin: 'codex', provider: 'codex' } : { provider: 'api' }),
+          },
+        };
       else if (path === '/api/session') {
         status = 401;
         body = { error: { code: 'AUTH_REQUIRED' } };
@@ -36,6 +41,12 @@ const fs = require('node:fs');
     await page.goto(process.env.PLAYTEST_URL || 'http://127.0.0.1:5182');
     const login = page.getByRole('button', { name: 'Sign in with ChatGPT', exact: true });
     await login.waitFor();
+    await page
+      .getByText(
+        'Voice, photo understanding and game decisions use your account without API keys.',
+        { exact: false },
+      )
+      .waitFor();
     const difficulty = page.locator('.difficulty-card').first();
     assert.equal(await difficulty.isDisabled(), true);
     await login.click();

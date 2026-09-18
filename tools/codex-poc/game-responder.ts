@@ -28,6 +28,7 @@ export function createGameResponder(
   worker: Worker,
   model: string,
   report: (v: { status: string; durationMs: number }) => void = () => {},
+  options: { preserveWorkerOnCompletedFailure?: boolean } = {},
 ) {
   let busy = false;
   return async (body: unknown, signal?: AbortSignal): Promise<unknown> => {
@@ -129,7 +130,7 @@ export function createGameResponder(
         status = 'cancelled';
         throw new AiServiceError(409, 'CONTROL_CANCELLED', '判断を中止しました。');
       }
-      await worker.invalidate();
+      if (!terminal || !options.preserveWorkerOnCompletedFailure) await worker.invalidate();
       throw new AiServiceError(
         503,
         'CODEX_UNAVAILABLE',
@@ -147,7 +148,7 @@ export function createGameResponder(
           if (dirname(folder) !== resolve(worker.work)) throw new PocError('CLEANUP_PATH_INVALID');
           await rm(folder, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
         }
-        worker.rpc.clearEvents();
+        worker.rpc.clearEventsIfIdle();
       } catch {
         status = 'failed';
         await worker.invalidate().catch(() => {});

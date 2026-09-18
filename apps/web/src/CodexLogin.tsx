@@ -4,15 +4,31 @@ import { playRequest, PlayApiError } from './play-api.js';
 
 export default function CodexLogin({
   locale,
+  subscriptionOnly = false,
   onReady,
 }: {
   locale: 'ja' | 'en';
+  subscriptionOnly?: boolean;
   onReady: (ready: boolean) => void;
 }) {
   const [view, setView] = useState<CodexLoginStatus>({ status: 'disconnected' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const userCode = view.status === 'pending' ? view.userCode : undefined;
+  useEffect(() => {
+    setCopyStatus('idle');
+  }, [userCode]);
   const t = (ja: string, en: string) => (locale === 'ja' ? ja : en);
+  async function copyCode() {
+    if (!userCode) return;
+    try {
+      await navigator.clipboard.writeText(userCode);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
+  }
   useEffect(() => {
     onReady(view.status === 'ready' && !busy && !error);
   }, [view.status, busy, error, onReady]);
@@ -70,10 +86,15 @@ export default function CodexLogin({
     <section className="codex-login" aria-label={t('プレイヤーのログイン', 'Player login')}>
       <h2>{t('あなたのChatGPTアカウントで遊ぶ', 'Play with your ChatGPT account')}</h2>
       <p>
-        {t(
-          'ゲーム判断に、あなたのCodex利用枠を使います。音声・画像生成・動画は運営のAPIを使用します。',
-          'Game decisions use your Codex allowance. Voice, image generation and video use the operator’s API.',
-        )}
+        {subscriptionOnly
+          ? t(
+              '音声会話・写真の判断・状況画像の生成に、あなたのアカウントを使います。APIキーは使用しません。動画・結末の追加生成は省略します。',
+              'Voice, photo understanding, game decisions and scene images use your account without API keys. Videos and extra ending stories are omitted.',
+            )
+          : t(
+              'ゲーム判断に、あなたのCodex利用枠を使います。音声・画像生成・動画は運営のAPIを使用します。',
+              'Game decisions use your Codex allowance. Voice, image generation and video use the operator’s API.',
+            )}
       </p>
       <div role="status">
         {view.status === 'starting' && t('ログインを準備しています…', 'Preparing sign-in…')}
@@ -85,7 +106,22 @@ export default function CodexLogin({
                 'Open the verification page and enter this code. Choose your own account, approve, then return here.',
               )}
             </p>
-            <code className="codex-code">{view.userCode}</code>
+            <div className="codex-code-row">
+              <code className="codex-code">{view.userCode}</code>
+              <button type="button" onClick={() => void copyCode()}>
+                {copyStatus === 'copied'
+                  ? t('コピーしました', 'Copied')
+                  : t('コードをコピー', 'Copy code')}
+              </button>
+            </div>
+            {copyStatus === 'failed' && (
+              <p>
+                {t(
+                  'コピーできませんでした。コードを選択して手動でコピーしてください。',
+                  'Could not copy. Select the code and copy it manually.',
+                )}
+              </p>
+            )}
             <a
               className="codex-auth-link"
               href={view.verificationUrl}

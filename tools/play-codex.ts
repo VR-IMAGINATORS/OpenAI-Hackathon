@@ -13,6 +13,13 @@ export function localCodexEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv
     ...env,
     NODE_ENV: 'development',
     AI_MODE: 'live',
+    AI_PROVIDER: 'codex',
+    OPENAI_API_KEY: '',
+    FAL_KEY: '',
+    ENDING_VIDEO_ENABLED: 'false',
+    IMAGE_JOB_TIMEOUT_SECONDS: env.IMAGE_JOB_TIMEOUT_SECONDS ?? '300',
+    AI_GLOBAL_LIVE_ATTEMPTS: env.AI_GLOBAL_LIVE_ATTEMPTS ?? '50',
+    AI_GLOBAL_RESPONSE_ATTEMPTS: env.AI_GLOBAL_RESPONSE_ATTEMPTS ?? '1000',
     HOST: '127.0.0.1',
     PORT: '4310',
     PUBLIC_APP_URL: '',
@@ -29,12 +36,21 @@ async function main() {
   const config = loadHostedConfig(localCodexEnvironment(process.env));
   await access(resolve(config.webRoot, 'index.html'));
   console.log('ゲーム画面からプレイヤーがCodexログイン：ローカル同時1プレイ');
+  console.log('音声診断版: game-voice-v4（停止要求・終了理由を表示）');
   console.log(
-    `ゲーム判断=${config.ai.gameModel}（本人のCodex枠）。音声・画像・動画は既存API課金です。`,
+    `ゲーム判断=${config.ai.gameModel} / 音声=Codex Live・juniper / 画像=Codex組み込み（本人の認証）。APIキー不使用。動画・結末の追加生成は省略します。`,
   );
   const players = new CodexPlayerSessions({
     model: config.ai.gameModel,
     capacity: config.capacity,
+    reportImage: (entry) =>
+      console.log(
+        `Codex画像: ${entry.status} / ${entry.durationMs}ms${entry.code ? ' / ' + entry.code : ''}`,
+      ),
+    reportVoice: (entry) => {
+      console.log(`Codex音声: ${entry.status}${entry.code ? ' / ' + entry.code : ''}`);
+      if (entry.detail) console.log(`Codex音声診断 v4 (${entry.phase}・伏字あり): ${entry.detail}`);
+    },
     report: (entry) =>
       console.log(`Codex判断: ${entry.status} / ${entry.durationMs}ms / play=${entry.playId}`),
   });
@@ -65,6 +81,7 @@ async function main() {
   try {
     runtime = createHostedApp(config, {
       playerJudgments: players,
+      transport: players.transport,
     });
     await new Promise<void>((ready, reject) => {
       server = runtime!.app.listen(config.port, config.host, () => ready());

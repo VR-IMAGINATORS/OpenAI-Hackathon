@@ -7,6 +7,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "poc:codex:live": "node --import tsx tools/codex-live-poc.ts",
     "poc:codex": "node --import tsx tools/codex-poc.ts",
     "play:codex": "npm run build && node --import tsx tools/play-codex.ts",
     "play:codex:start": "node --import tsx tools/play-codex.ts",

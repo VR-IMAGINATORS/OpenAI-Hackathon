@@ -92,9 +92,9 @@ export const gameResponseRequest = responseRequest.safeExtend({
 });
 
 export interface OpenAITransport {
-  createLiveSession(body: unknown): Promise<z.infer<typeof liveAnswer>>;
-  createResponse(body: unknown, signal?: AbortSignal): Promise<unknown>;
-  createImage?(body: unknown, signal?: AbortSignal): Promise<unknown>;
+  createLiveSession(body: unknown, playId?: string): Promise<z.infer<typeof liveAnswer>>;
+  createResponse(body: unknown, signal?: AbortSignal, playId?: string): Promise<unknown>;
+  createImage?(body: unknown, signal?: AbortSignal, playId?: string): Promise<unknown>;
   createImageEdit?(body: ImageEditRequest, signal?: AbortSignal): Promise<unknown>;
   hangup(id: string): Promise<void>;
   isLiveSessionClosed?(id: string): boolean;
