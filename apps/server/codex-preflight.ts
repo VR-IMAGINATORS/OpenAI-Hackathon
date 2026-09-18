@@ -11,3 +11,24 @@ export async function codexPreflight() {
     await worker.close();
   }
 }
+
+/** Explicit network probe: obtains a fresh device challenge, never displays it, then cancels. */
+export async function codexDeviceLoginPreflight() {
+  const worker = await startWorker();
+  try {
+    const result = await worker.rpc.call(
+      'account/login/start',
+      { type: 'chatgptDeviceCode' },
+      30_000,
+    );
+    if (
+      typeof result.loginId !== 'string' ||
+      typeof result.userCode !== 'string' ||
+      new URL(result.verificationUrl).origin !== 'https://auth.openai.com'
+    )
+      throw new Error('LOGIN_PREFLIGHT_INVALID_RESPONSE');
+    await worker.rpc.call('account/login/cancel', { loginId: result.loginId });
+  } finally {
+    await worker.close();
+  }
+}
