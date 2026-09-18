@@ -44,6 +44,7 @@ jobs:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
           docker build --platform linux/amd64 -t "call-to-the-past:$TARGET_SHA" .
+          docker run --rm --entrypoint node "call-to-the-past:$TARGET_SHA" --input-type=module -e "import { codexDeviceLoginPreflight } from './dist/server/apps/server/codex-preflight.js'; await codexDeviceLoginPreflight(); console.log('Codex device login start/cancel OK');"
           docker save "call-to-the-past:$TARGET_SHA" -o "$RUNNER_TEMP/application-image.tar"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

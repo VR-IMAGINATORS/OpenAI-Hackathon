@@ -11,6 +11,8 @@ RUN npm prune --omit=dev
 
 FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS runtime
 WORKDIR /app
+# Native Codex uses the OS trust store; Node's bundled roots do not cover it.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV PORT=4310
 ENV HOST=0.0.0.0
