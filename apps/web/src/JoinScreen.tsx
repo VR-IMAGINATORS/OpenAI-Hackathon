@@ -1,4 +1,5 @@
 import OpeningSequence from './OpeningSequence.js';
+import CodexLogin from './CodexLogin.js';
 import { useEffect, useRef, useState } from 'react';
 import type {
   HostedBootstrap,
@@ -18,6 +19,8 @@ import {
 export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }) {
   const [locale, setLocale] = useState<'ja' | 'en'>('en');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [codexReady, setCodexReady] = useState(false);
+  const needsCodex = bootstrap.ai.playerLogin === 'codex';
   useEffect(() => {
     setApiLocale(locale);
     document.documentElement.lang = locale;
@@ -56,6 +59,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       .finally(() => setLoading(false));
   }, []);
   async function begin(selectedDifficulty: Difficulty) {
+    if (needsCodex && !codexReady) return;
     if (locked.current) return;
     locked.current = true;
     setDifficulty(selectedDifficulty);
@@ -104,6 +108,10 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
       if (e instanceof PlayApiError && e.status !== 0) createId.current = null;
       setError(e instanceof Error ? e.message : t('開始できませんでした。', 'Unable to start.'));
       if (e instanceof PlayApiError && e.code === 'PLAY_ALREADY_ACTIVE') await restore();
+      if (e instanceof PlayApiError && e.code === 'CODEX_LOGIN_REQUIRED') {
+        setShowOpening(false);
+        setCodexReady(false);
+      }
     } finally {
       locked.current = false;
       setLoading(false);
@@ -119,11 +127,13 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
         initialControl={play.control}
         preparedConnection={play.connection}
         onExit={() => {
+          setCodexReady(false);
           setShowOpening(false);
           setPlay(null);
           setError('');
         }}
         onReplay={() => {
+          setCodexReady(false);
           setShowOpening(false);
           setPlay(null);
           setError('');
@@ -172,6 +182,13 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           <option value="ja">日本語</option>
         </select>
       </label>
+      {needsCodex && (
+        <CodexLogin
+          locale={locale}
+          subscriptionOnly={bootstrap.ai.provider === 'codex'}
+          onReady={setCodexReady}
+        />
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -181,7 +198,7 @@ export default function JoinScreen({ bootstrap }: { bootstrap: HostedBootstrap }
           if (selected.success) void begin(selected.data);
         }}
       >
-        <fieldset className="difficulty-choice" disabled={loading}>
+        <fieldset className="difficulty-choice" disabled={loading || (needsCodex && !codexReady)}>
           <legend>{t('難易度を選んで開始', 'Choose a difficulty to start')}</legend>
           <div className="difficulty-options">
             {difficultySchema.options.map((value) => {

@@ -1,0 +1,523 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>コードで理解するCodex App Server — エンジニア向け資料</title><style>
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-inset: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #9da7b3;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --cyan: #39c5cf;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.75;
+    padding: 0 16px 80px;
+  }
+  .container { max-width: 880px; margin: 0 auto; }
+  header {
+    padding: 56px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  h1 { font-size: 30px; line-height: 1.35; margin: 10px 0 14px; }
+  .meta { color: var(--text-dim); font-size: 14px; }
+  .meta a { color: var(--accent); text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+  h2 {
+    font-size: 22px;
+    margin: 52px 0 18px;
+    padding-left: 14px;
+    border-left: 4px solid var(--accent);
+  }
+  h3 { font-size: 17px; margin: 30px 0 12px; color: var(--accent); }
+  p { margin: 12px 0; }
+  .dim { color: var(--text-dim); }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 18px 0;
+  }
+  .card.green { border-left: 4px solid var(--green); }
+  .card.orange { border-left: 4px solid var(--orange); }
+  .card.purple { border-left: 4px solid var(--purple); }
+  .card.cyan { border-left: 4px solid var(--cyan); }
+  .card.red { border-left: 4px solid var(--red); }
+  .card h4 { font-size: 15px; margin-bottom: 8px; }
+  code {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    color: var(--cyan);
+    word-break: break-all;
+  }
+  pre {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 14px 0;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 13px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 9px 13px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-inset); font-weight: 600; white-space: nowrap; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .badge.green { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.4); }
+  .badge.red { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.4); }
+  .badge.orange { background: rgba(210,153,34,0.15); color: var(--orange); border: 1px solid rgba(210,153,34,0.4); }
+  .badge.blue { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.4); }
+  .badge.purple { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.4); }
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .flow .step {
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+  }
+  .flow .arrow { color: var(--text-dim); }
+  .timeline { margin: 20px 0; padding-left: 24px; border-left: 2px solid var(--border); }
+  .timeline .tl-item { position: relative; padding: 0 0 22px 18px; }
+  .timeline .tl-item::before {
+    content: "";
+    position: absolute;
+    left: -31px;
+    top: 7px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--bg);
+  }
+  .timeline .tl-item.red::before { background: var(--red); }
+  .timeline .tl-item.green::before { background: var(--green); }
+  .timeline .tl-title { font-weight: 600; }
+  .callout {
+    background: rgba(88,166,255,0.07);
+    border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14.5px;
+  }
+  .callout.warn { background: rgba(210,153,34,0.07); border-color: rgba(210,153,34,0.35); }
+  /* ---- Quiz ---- */
+  .quiz {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 26px 28px;
+    margin-top: 24px;
+  }
+  .q { margin: 26px 0; padding-bottom: 22px; border-bottom: 1px dashed var(--border); }
+  .q:last-of-type { border-bottom: none; }
+  .q-title { font-weight: 600; margin-bottom: 10px; }
+  .q-num { color: var(--accent); font-weight: 700; margin-right: 6px; }
+  .q label {
+    display: block;
+    padding: 9px 14px;
+    margin: 7px 0;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14.5px;
+    transition: border-color 0.15s;
+  }
+  .q label:hover { border-color: var(--accent); }
+  .q input { margin-right: 9px; accent-color: var(--accent); }
+  .q .fb { display: none; margin-top: 10px; padding: 11px 15px; border-radius: 8px; font-size: 14px; }
+  .q.correct .fb.ok { display: block; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.4); }
+  .q.wrong .fb.ng { display: block; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.4); }
+  .q.correct > .q-title::after { content: " ✅"; }
+  .q.wrong > .q-title::after { content: " ❌"; }
+  #grade-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #1f6feb, #388bfd);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  #grade-btn:hover { filter: brightness(1.15); }
+  #result { display: none; margin-top: 22px; padding: 22px; border-radius: 12px; text-align: center; }
+  #result.pass { display: block; background: rgba(63,185,80,0.1); border: 2px solid var(--green); }
+  #result.fail { display: block; background: rgba(210,153,34,0.08); border: 2px solid var(--orange); }
+  #result .score { font-size: 34px; font-weight: 800; }
+  #result .verdict { font-size: 19px; font-weight: 700; margin-top: 6px; }
+  #result.pass .verdict { color: var(--green); }
+  #result.fail .verdict { color: var(--orange); }
+  footer { margin-top: 60px; color: var(--text-dim); font-size: 13px; text-align: center; }
+</style></head><body><main class="container"><header><div class="eyebrow">Engineering Guide · 2026-09-17</div><h1>コードで理解する<br>Codex App Serverの組み込み</h1><div class="meta">このゲームの判断処理を置き換える設計教材 ／ TypeScript風の疑似コード ／ 実接続未検証</div></header>
+<div class="card green"><h4>この資料でつかむこと</h4><p>ゲームサーバーからCodexプロセスを起動し、本人にログインしてもらい、写真と状態を渡して判断結果を受け取り、ゲームに反映するまでを追います。読了後に「どこを自作するか」「何を待つか」「どの境界で検証するか」がわかる構成です。</p></div>
+<p>前回の<a style="color:var(--accent)" href="codex-subscription-game-feasibility-2026-09-17.html">実現可能性・費用レポート</a>とは別の資料です。今回もゲーム実装は変更していません。コード例はそのまま起動する完成品ではなく、エラー処理や権限設計の契約を示す教材です。</p>
+<div class="callout warn">App Serverの公式資料には実験的・本番非サポートの記載があります。以下はPoCの実装イメージです。一般公開に必要な提供条件の確認と、GPT-Live／画像／動画費の扱いは前回の制約を引き継ぎます。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server">公式App Server資料</a></div>
+<nav class="card meta"><a style="color:var(--accent)" href="#mental">1. 全体像</a> · <a style="color:var(--accent)" href="#wire">2. 通信</a> · <a style="color:var(--accent)" href="#rpc">3. RPCクライアント</a> · <a style="color:var(--accent)" href="#auth">4. 認証</a> · <a style="color:var(--accent)" href="#judge">5. 判断</a> · <a style="color:var(--accent)" href="#events">6. 結果収集</a> · <a style="color:var(--accent)" href="#adapter">7. 既存コードへの接続</a> · <a style="color:var(--accent)" href="#lifecycle">8. 障害と終了</a> · <a style="color:var(--accent)" href="#scope">9. 分離と構成</a> · <a style="color:var(--accent)" href="#verify">10. 検証</a></nav>
+<h2 id="mental">1. App Serverはどこにいるのか</h2>
+<p>App Serverは、自分で起動するCodexのプロセスです。OpenAIが提供するモデル推論サービスとは別の層にあります。あなたのプログラムはApp Serverに要求を送り、App Serverが認証とエージェントの実行を担当して上流と通信します。画面はReactでもTUIでも構いません。</p>
+<div class="flow"><span class="step">React／スマホ</span><span class="arrow">→ HTTPS →</span><span class="step">ゲームサーバー</span><span class="arrow">→ stdio →</span><span class="step">Codex App Server</span><span class="arrow">→</span><span class="step">OpenAI推論</span></div>
+<div class="table-wrap"><table><tr><th>層</th><th>責務</th><th>この案で持たせないもの</th></tr><tr><td>ブラウザ</td><td>撮影・音声・操作・ログイン案内</td><td>Codexの資格情報、任意RPCの実行権限</td></tr><tr><td>ゲームサーバー</td><td>プレイ所有者・正本状態・予算・結果検証</td><td>モデルの文章だけで状態を無条件更新する処理</td></tr><tr><td>自作Codexアダプター</td><td>プロセス・RPC・イベント・型変換・中断</td><td>独自のゲームルール</td></tr><tr><td>App Server</td><td>Codexの認証、会話、推論とツール実行の調停</td><td>ゲームの唯一の正本状態</td></tr></table></div>
+<p>GPT-Liveは別経路で残します。現行の音声から届く委譲をゲームサーバーが受け、Codexの判断を検証した後に事実を音声側へ戻す設計です。音声ソケットをApp Serverへ丸ごと差し替える例ではありません。</p>
+<h3>混同しやすい4つのID</h3>
+<div class="table-wrap"><table><tr><th>ID</th><th>用途</th><th>例</th></tr><tr><td>playId</td><td>ゲームの1プレイ</td><td>誰のゲーム状態を変えるか</td></tr><tr><td>requestId</td><td>ゲーム操作の重複排除</td><td>撮影送信の二重処理を防ぐ</td></tr><tr><td>RPC id</td><td>通信の要求と応答の対応</td><td>id=17への応答をPromiseへ戻す</td></tr><tr><td>threadId／turnId</td><td>Codexの会話／その1回の実行</td><td>どの実行の通知かを識別する</td></tr></table></div>
+<p>threadは会話の入れ物、turnは1回の依頼と処理、itemはその中のメッセージやツール実行です。RPC idを同じ値で再送しても、ゲーム処理の冪等性が得られるとは考えません。</p>
+<h2 id="wire">2. 通信の基本：HTTPの1往復とは違う</h2>
+<p>最初のPoCは子プロセスのstdioを使います。1行のJSONが1メッセージです。要求にはidがあり、応答はそのidを返します。通知にはidがありません。さらに、App Serverからクライアントへの要求もあるため、受信したid付きメッセージをすべて応答とみなしてはいけません。公式プロトコルはJSON-RPC風ですが、ワイヤー上にjsonrpcヘッダーを付けません。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server#protocol">通信の公式仕様</a></p><pre><code>ゲーム側 → { id: 1, method: &quot;initialize&quot;, params: { clientInfo: ... } }
+Codex   → { id: 1, result: ... }
+ゲーム側 → { method: &quot;initialized&quot;, params: {} }
+
+ゲーム側 → { id: 2, method: &quot;thread/start&quot;, params: { model: selectedModel } }
+Codex   → { id: 2, result: { thread: { id: &quot;thr_A&quot;, ... } } }
+
+ゲーム側 → { id: 3, method: &quot;turn/start&quot;, params: { threadId: &quot;thr_A&quot;, ... } }
+Codex   → { id: 3, result: { turn: { id: &quot;turn_B&quot;, status: &quot;inProgress&quot;, ... } } }
+Codex   → { method: &quot;item/completed&quot;, params: { threadId: &quot;thr_A&quot;, turnId: &quot;turn_B&quot;, item: ... } }
+Codex   → { method: &quot;turn/completed&quot;, params: { threadId: &quot;thr_A&quot;, turn: { id: &quot;turn_B&quot;, status: &quot;completed&quot;, ... } } }
+
+// 読みやすさのための概略。実際は各JSONを1行で送る。
+// 通知と応答の到着順をこの図どおりと仮定しない。</code></pre><div class="callout"><strong>最重要：</strong><code>await rpc.call('turn/start', ...)</code>で得られるのは実行の受付です。判断が終わったかは通知を追って確定します。完了通知も「JSONが正しい」「ゲームに適用してよい」まで保証しません。</div>
+<h2 id="rpc">3. 自作する最小RPCクライアント</h2>
+<p>下記の<code>pending</code>は「RPC応答待ち」、<code>journal</code>は「実行通知待ち」です。別々に管理します。型は導入時に固定したCodexバージョンから生成し、コード例のany相当の扱いを置き換えます。</p><pre><code>// 開発時だけ実行するコマンド。今回の作業では実行していない。
+codex --version
+codex app-server generate-ts --out ./generated/codex
+
+// 以下はTypeScript風の設計例。補助関数は後述の契約で自作する。
+const child = spawn(resolvedCodexExecutable, [&#39;app-server&#39;], {
+  cwd: isolatedWorkDir,
+  env: buildAllowedEnv({ CODEX_HOME: isolatedCodexHome }),
+  stdio: [&#39;pipe&#39;, &#39;pipe&#39;, &#39;pipe&#39;],
+  windowsHide: true,
+});
+// buildAllowedEnvは必要なPATH・OS/CA設定だけを許可する。
+// 運営のOPENAI_API_KEYや、通常のCodexホームを引き継がない。
+
+let nextId = 1;
+const pending = new Map();
+const journal = new BoundedEventJournal(); // 自作。件数・寿命・サイズ上限つき
+
+function call(method, params, timeoutMs = 10_000) {
+  const id = nextId++;
+  return new Promise((resolve, reject) =&gt; {
+    const timer = setTimeout(() =&gt; {
+      pending.delete(id);
+      reject(new Error(&#39;RPC_TIMEOUT&#39;)); // 上流停止を意味しない
+    }, timeoutMs);
+    pending.set(id, { resolve, reject, timer }); // 送信より先に登録
+    writeJsonLine(child.stdin, { id, method, params })
+      .catch(failConnection); // 書き込みbackpressureも処理する自作ヘルパー
+  });
+}
+
+function onMessage(m) {
+  if (m.method !== undefined) {
+    if (m.id !== undefined) {
+      // 承認・ツール入力など、サーバーからの要求。
+      handleServerRequestWithDenyPolicy(m); // 固定版の型に合う拒否応答
+    } else {
+      journal.append(m); // 通知。awaitより前に来ても保持する
+    }
+    return;
+  }
+  const waiter = pending.get(m.id);
+  if (!waiter) return; // timeout後の遅延応答は内部状態を復活させない
+  pending.delete(m.id);
+  clearTimeout(waiter.timer);
+  if (&#39;error&#39; in m) waiter.reject(toSafeRpcError(m.error));
+  else waiter.resolve(m.result);
+}
+
+readBoundedJsonLines(child.stdout, onMessage, failConnection);
+child.once(&#39;error&#39;, failConnection);
+child.once(&#39;exit&#39;, () =&gt; failConnection(new Error(&#39;CODEX_EXITED&#39;)));
+// failConnectionは多重呼出し可能とし、pendingとjournalの全待機をrejectする。
+// stderrは上限つきで消費し、全文をログ保存しない。
+
+await call(&#39;initialize&#39;, {
+  clientInfo: { name: &#39;call_to_past_poc&#39;, title: &#39;Call to the Past PoC&#39;, version: &#39;0.1.0&#39; },
+});
+await writeJsonLine(child.stdin, { method: &#39;initialized&#39;, params: {} });</code></pre><p>補助関数の実装で省けないのは、JSONの行分割、巨大行の拒否、壊れたJSONでの接続失効、書込失敗時の待機解放、未対応のサーバー要求への応答です。stdoutを1チャンク＝1JSONとしてparseすると、分割受信で壊れます。サーバー要求を放置すると、ゲームが承認待ちのまま止まります。</p>
+<p>拒否方法は要求の種類で異なるため、全部に架空の<code>{ approved: false }</code>を返してはいけません。既知の承認要求には生成型に沿った拒否を返し、未対応メソッドはプロトコルエラーとして扱います。予想外のツール要求が出た判断は失敗させ、設定も点検します。</p>
+<h2 id="auth">4. ログインは「ゲーム認証」と別に扱う</h2>
+<p>ユーザーAのゲームCookieはAのプレイを特定します。一方、Codexログインはモデルを利用するアカウントを決めます。Cookieを発行しただけでCodexへログインしたことにはなりません。</p><pre><code>async function connectAccount(gameOwner, worker) {
+  assertOwner(gameOwner, worker.owner);
+  const cursor = worker.journal.cursor(); // 通知取りこぼし防止
+  const login = await worker.rpc.call(&#39;account/login/start&#39;, {
+    type: &#39;chatgptDeviceCode&#39;,
+  });
+
+  // 自作の認証済みUIチャネル。同じ所有者にのみ送る。
+  // トークンは送らない。URLは許可されたOpenAI認証先か検査する。
+  showLoginToOwner(gameOwner, {
+    verificationUrl: validateOfficialLoginUrl(login.verificationUrl),
+    userCode: login.userCode,
+  });
+
+  try {
+    const event = await worker.journal.waitAfter(cursor, m =&gt;
+      m.method === &#39;account/login/completed&#39; &amp;&amp;
+      m.params.loginId === login.loginId,
+      { timeoutMs: 120_000 } // アプリ独自の待機上限。公式有効期限ではない
+    );
+    if (!event.params.success) throw new Error(&#39;LOGIN_FAILED&#39;);
+    const account = await worker.rpc.call(&#39;account/read&#39;, {});
+    requireChatGPTAccount(account); // 自作。固定版の戻り値型に合わせる
+    await worker.rpc.call(&#39;account/rateLimits/read&#39;, {});
+    worker.ready = true;
+  } catch (error) {
+    await bestEffort(() =&gt; worker.rpc.call(&#39;account/login/cancel&#39;, {
+      loginId: login.loginId,
+    }));
+    await quarantineAndDestroy(worker); // 成功との競合もあるので再利用しない
+    throw error;
+  }
+}</code></pre><p>デバイスコード方式の入口と完了通知は公式に定義されています。利用できるアカウント・組織設定は実接続で確認します。コードやログイン用URLは本人への案内に限り、アクセスログや分析ログへ送らない設計です。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server#auth-endpoints">公式認証RPC</a></p>
+<p>ChatGPT認証を使うCodex処理と、APIキーを使うLive処理は別の請求経路です。モデル利用の資格情報をブラウザへ渡す必要はありません。ホスト運用では運営がその資格情報を預かる責任が生じます。<a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/auth">公式認証の説明</a></p>
+<h2 id="judge">5. 写真と状態を渡して、判断だけ返してもらう</h2>
+<p>PoCでは<strong>判断要求ごとに新しいthread</strong>を作る案を推奨します。会話の継続性はゲームサーバーが必要な範囲だけ送ります。モデル側の古い推測が次の判断へ混ざりにくく、既存のResponses呼び出しに近い契約になります。thread生成のオーバーヘッドと利用量は比較が必要です。</p><pre><code>const teachingSchema = { // 教材用。実装時は既存の判断スキーマを使う
+  type: &#39;object&#39;,
+  properties: {
+    possible: { type: &#39;boolean&#39; },
+    reason: { type: &#39;string&#39; },
+  },
+  required: [&#39;possible&#39;, &#39;reason&#39;],
+  additionalProperties: false,
+};
+
+async function judge(worker, request, signal) {
+  // 自作mutex。初期PoCでは1ワーカー1判断に限定する。
+  return worker.serial.run(async () =&gt; {
+    const photo = await writeValidatedPhoto(worker.tempDir, request.jpeg);
+    let threadId;
+    try {
+      const started = await worker.rpc.call(&#39;thread/start&#39;, {
+        model: worker.selectedModel, // model/listと許可リストで事前確認
+        cwd: worker.workDir,
+      });
+      threadId = started.thread.id;
+      const cursor = worker.journal.cursor();
+
+      const accepted = await worker.rpc.call(&#39;turn/start&#39;, {
+        threadId,
+        input: [
+          { type: &#39;text&#39;, text: makeMinimalJudgmentPrompt(request.snapshot) },
+          { type: &#39;localImage&#39;, path: photo.absolutePath },
+        ],
+        outputSchema: teachingSchema,
+      });
+      const result = await collectFinal(worker, cursor, {
+        threadId, turnId: accepted.turn.id, signal,
+      });
+      return validateTeachingDecision(JSON.parse(result));
+    } finally {
+      // helperは未完了ターンがあれば中断・停止確認してから写真を削除する。
+      // 停止確認できなければワーカーを失効させて終了する。
+      await finishRequestResources(worker, { threadId, photo });
+    }
+  });
+}</code></pre><p>画像入力とoutputSchemaは公式インターフェースです。上の例では認証済みURLを外へ公開する代わりに、ワーカー内の一時画像を使います。<code>localImage.path</code>はApp Serverが動いているマシン／コンテナのパスです。スマホ内のファイルパスではありません。写真は許可形式・サイズを検証し、ランダム名で保存します。</p>
+<div class="callout warn">この例は、起動前に隔離と権限制限を済ませたワーカーを前提にしています。thread/startの短いコードだけで安全なワーカーになるわけではありません。instructionsの優先順位を持つフィールド、sandbox、ツール無効化などの具体的な設定名は固定版の生成型と設定仕様で確定させます。プロンプトの「ツールを使うな」だけに依存しません。</div>
+<p>outputSchemaは出力の形を指定します。写真に見えない物を捏造していないか、在庫にない道具を使っていないか、クリア条件を満たしているかはゲーム側で検証します。<code>possible: true</code>という教材用の値だけで実ゲームの状態を更新しません。</p>
+<h2 id="events">6. 通知から結果を集める</h2>
+<p>次のcollectFinalは自作ヘルパーです。RPCの正式なメソッド名ではありません。受け付けたturnの通知だけを拾い、itemの最終内容を保持し、turnの成功終了を確認してから結果を返します。</p><pre><code>async function collectFinal(worker, cursor, ctx) {
+  const completedItems = new Map();
+  try {
+    for await (const m of worker.journal.streamAfter(cursor, {
+      timeoutMs: 30_000, signal: ctx.signal,
+    })) {
+      if (!belongsTo(m, ctx.threadId, ctx.turnId)) continue;
+      // belongsToは通知別の型で判定する。
+      // item通知: params.turnId、turn完了: params.turn.id
+
+      if (m.method === &#39;item/completed&#39;) {
+        completedItems.set(m.params.item.id, m.params.item);
+      }
+      if (m.method !== &#39;turn/completed&#39;) continue;
+      if (m.params.turn.status !== &#39;completed&#39;) {
+        throw new Error(&#39;TURN_NOT_SUCCESSFUL&#39;);
+      }
+      // バージョンにより完了turnに含まれるitemsもIDで統合する。
+      mergeAvailableCompletedItems(completedItems, m.params.turn);
+      return selectSingleFinalJsonText(completedItems);
+    }
+    throw new Error(&#39;EVENT_STREAM_CLOSED&#39;);
+  } catch (error) {
+    await interruptAndConfirmOrKill(worker, ctx);
+    throw error;
+  }
+}
+
+// 自作選択ルール：
+// ・agentMessageを対象にし、phaseがあればfinal_answerだけを採用。
+// ・commentary、ツール出力、途中deltaを結果としてparseしない。
+// ・phaseがない版では、完了した候補が1つだけであることを要求する。
+// ・空、複数候補、拒否、JSON不正は失敗として返す。
+// ・item/completedの全文を使い、deltaと二重に連結しない。</code></pre><p>イベントを待つ登録を<code>await turn/start</code>の後だけに行うと、その間に届いた通知を失う可能性があります。ここでは送信前にcursorを取り、短いイベント履歴を再生できる設計です。履歴上限を超えて必要な通知が欠けた場合は「成功」と推測せず、失敗させます。</p>
+<p>30秒はこのゲームに合わせたPoC側の例です。RPCの10秒、ログインの120秒とは別の期限です。待機のタイムアウトは上流停止ではありません。中断要求の応答も停止確認ではなく、完了通知の確認まで必要です。</p>
+<h2 id="adapter">7. 既存コードへどう接続するか</h2>
+<p>現行の<code>createGameAI</code>は<code>AIResponsesClient.respond</code>を受け取ります。<code>structuredResponse</code>はResponses形式からテキストを取り出してJSONとスキーマを検証します。最初はその契約を保つ薄いアダプターを置くと、ゲームロジックの変更を抑えられます。</p><pre><code>// 提案するアダプター。新規ファイル案：packages/server/codex-judgment.ts
+function makeCodexResponsesClient(worker) {
+  return {
+    async respond(body, signal) {
+      const request = validateAllowedGameRequest(body);
+      // instructions / input / schemaを明示的に変換する自作関数。
+      const text = await runCodexJudgment(worker, {
+        instructions: request.instructions,
+        content: request.input,
+        schema: request.text.format.schema,
+        signal,
+      });
+      // ゲーム内部の既存パーサー向け互換形。上流の生レスポンスではない。
+      return {
+        status: &#39;completed&#39;,
+        output: [{
+          type: &#39;message&#39;,
+          content: [{ type: &#39;output_text&#39;, text }],
+        }],
+      };
+    },
+  };
+}
+
+// hosted-runtime.tsの依存注入イメージ
+const judgmentClient = play.backend === &#39;codex&#39;
+  ? makeCodexResponsesClient(play.worker)
+  : { respond: (body, signal) =&gt; ai.respondGame(play.id, body, signal) };
+
+const gameAI = createGameAI(judgmentClient, () =&gt; selectedModel, snapshot);
+// GPT-Liveの接続・音声出力は引き続き既存aiを使う。</code></pre><div class="table-wrap"><table><tr><th>既存Responsesの要素</th><th>変換方針</th><th>落とし穴</th></tr><tr><td>instructions</td><td>固定版で確認した指示用フィールドへ。未確定ならPoC専用プロンプトを設計</td><td>user本文に結合するだけでは指示階層が同じにならない</td></tr><tr><td>input_text／input_image</td><td>text／localImageへ。写真をワーカーへ転送</td><td>コンテナ間のパスとファイル寿命</td></tr><tr><td>text.format.schema</td><td>outputSchema</td><td>同じJSON Schema方言・制約が使えるか検証</td></tr><tr><td>model／reasoning</td><td>許可モデルと固定版の対応パラメーターへ</td><td>利用可能モデルはアカウント依存</td></tr><tr><td>max_output_tokens</td><td>同等の上限設定が使えるかを別途確認</td><td>黙って捨てると既存のコスト／出力制約が弱くなる</td></tr><tr><td>store: false</td><td>保存・削除ポリシーを新たに検証</td><td>Codexのローカル履歴や上流保持と同義ではない</td></tr><tr><td>AbortSignal</td><td>turn中断と停止確認へ変換</td><td>HTTP接続を閉じるだけでは足りない</td></tr></table></div>
+<p><strong>差し替え後も上限管理を通す必要があります。</strong>上の短い分岐は、既存のai.respondGameの回数・同時数制限をバイパスします。実装では共通のJudgmentServiceを作り、予約→呼出し→解放をAPI／Codexの両方へ適用します。結果だけを偽装してusageをゼロ扱いせず、Codex経路であることを内部メタデータに記録します。</p>
+<p>この注入例で移るのはcreateGameAI経路だけです。意図分類、ヒント、画像検査、エンディング文章などの別呼び出し元も、対象に含めるなら個別に接続します。「ゲームのAIを全移行した」とまとめないことが重要です。</p>
+<h3>確定状態への反映は一度だけ</h3><pre><code>async function handleAction(owner, playId, requestId) {
+  const play = requireOwnedPlay(owner, playId);
+  return deduplicateOrJoin(playId, requestId, async () =&gt; { // 自作の進行中台帳
+    const version = play.version;
+    const snapshot = makeSnapshot(play);
+    const proposal = await judgmentService.judge(snapshot);
+
+    return withPlayLock(playId, () =&gt; { // 非同期推論中はロックを保持しない
+      const current = requireOwnedPlay(owner, playId);
+      if (current.ended || current.version !== version) {
+        throw new Error(&#39;STALE_JUDGMENT&#39;);
+      }
+      validateAllowedTransition(current, proposal);
+      return commitOnce(current, requestId, proposal);
+    });
+  });
+}</code></pre><p>タイムアウトした古い判断が後から返っても、新しい場面に適用しません。既存のゲーム側検証を再利用する方針で、上記は概念を説明するコードです。requestIdやversionをモデルに生成させて所有権を判断することもしません。</p>
+<h2 id="lifecycle">8. 障害・中断・終了を先に設計する</h2>
+<div class="table-wrap"><table><tr><th>状態</th><th>扱い</th></tr><tr><td>turn/startの応答が来ない</td><td>受付済みか不明。即再送しない。専用ワーカーを失効・停止し、元の処理を確定状態へ反映させない</td></tr><tr><td>利用枠不足／認証失効</td><td>プレイを停止または再接続案内。運営APIへ自動フォールバックしない</td></tr><tr><td>JSON不正</td><td>ゲーム状態は未更新。再試行をする層は1か所にする</td></tr><tr><td>ツール承認要求</td><td>ゲーム判断に不要なら拒否して当該判断を失敗。承認UIを無期限に待たない</td></tr><tr><td>利用者が終了</td><td>新規受付停止→実行中断→停止確認→ログアウト→ワーカー停止→保存物削除</td></tr><tr><td>プロセス異常終了</td><td>全RPC・イベント待機を失敗させる。再起動時も失敗した操作を自動で二重実行しない</td></tr></table></div><pre><code>async function interruptAndConfirmOrKill(worker, { threadId, turnId }) {
+  worker.accepting = false;
+  const cursor = worker.journal.cursor();
+  try {
+    await worker.rpc.call(&#39;turn/interrupt&#39;, { threadId, turnId });
+    await worker.journal.waitAfter(cursor, m =&gt;
+      isTerminalTurn(m, threadId, turnId), { timeoutMs: 3_000 });
+    // completedとの競合もあり得る。キャンセル済み要求の結果は採用しない。
+  } catch {
+    await terminateIsolatedWorker(worker); // OS/コンテナ単位で子孫も終了
+  }
+}
+
+async function closePlay(worker) {
+  worker.accepting = false;
+  await stopActiveTurnOrKill(worker);
+  await bestEffort(() =&gt; worker.rpc.call(&#39;account/logout&#39;, {}));
+  await terminateIsolatedWorker(worker);
+  await removeOwnedWorkspace(worker); // 登録済み専用パスだけ。ユーザー入力は禁止
+}</code></pre><p>既存の<code>structuredResponse</code>には、対象エラーに対して最大1回の修復再試行があります。アダプターでも2回、RPCでも3回、と重ねると意図せず実行回数が増えます。既存の再試行判定に、認証・枠切れ・中断・状態不明のエラーが混入しないよう対応表を作ります。</p>
+<p>ログアウトは写真と履歴の全削除を意味しません。専用の認証保存先、OSの資格情報ストア、履歴、バックアップを含む保存先をPoCで調べます。CODEX_HOMEを分けるだけではプロセスのファイル読取権限やOS資格情報ストアまで隔離されない点に注意します。</p>
+<h2 id="scope">9. 多人数・スマホへ広げるときの境界</h2>
+<div class="flow"><span class="step">所有者A</span><span class="arrow">→</span><span class="step">Worker A／認証A／領域A</span></div><div class="flow"><span class="step">所有者B</span><span class="arrow">→</span><span class="step">Worker B／認証B／領域B</span></div>
+<p>最初の設計では、1プレイに1専用ワーカーを割り当て、終了時に廃棄します。利用者1人の複数プレイで認証を再利用する最適化は、所有権と保存期間の設計後に検討します。共有プロセスでログインアカウントを次々に切り替える実装は避けます。</p>
+<p>ブラウザへ公開するのは「ログイン開始」「状態確認」「写真送信」「終了」などのゲーム操作だけです。RPCメソッド名やcwdをリクエストに指定させません。App Serverにはゲームに不要なファイル・コマンド操作もあるためです。</p>
+<p>本人PC方式では、PC側ブリッジが運営サーバーへ外向きの認証済み接続を張り、短期ペアリングでプレイと結び付けます。スマホのlocalhostはPCではありません。ホスト方式では、ゲームサーバーと専用ワーカーの間を内部stdioにし、外部のHTTPS認証をゲーム側で扱うと境界が明確です。通信の暗号化だけで本人PC上の判断の改変を防げるわけではありません。</p>
+<p>権限は固定版に合わせて、不要なツール・MCP・プラグイン・外部ネットワークを制限し、専用の読取範囲に閉じます。モデル上流への必要な通信は確保します。read-onlyでも任意ファイル読取が可能な設定なら不十分です。</p>
+<h2 id="verify">10. 何ができればPoC成功か</h2>
+<div class="table-wrap"><table><tr><th>段階</th><th>確認</th><th>成功条件</th></tr><tr><td>課金なしの通信テスト</td><td>偽の子プロセスで通知先着・分割JSON・異常終了・タイムアウトを再現</td><td>取りこぼし、待機漏れ、二重完了がない</td></tr><tr><td>アダプターテスト</td><td>成功／拒否／JSON不正／中断を既存パーサーへ入力</td><td>成功だけが検証へ進み、再試行は定めた回数内</td></tr><tr><td>状態テスト</td><td>同一requestId、version更新後の遅延結果、終了後の通知</td><td>ゲーム更新が1回だけ、古い結果は不採用</td></tr><tr><td>実アカウント1名</td><td>ログイン→写真判断→JSON→終了</td><td>本人枠で実行し、モデル利用と待ち時間を確認</td></tr><tr><td>2アカウント</td><td>同時実行・片方のログアウト・保存物検査</td><td>認証・写真・通知が混線しない</td></tr><tr><td>実スマホ＋Live</td><td>音声委譲→Codex判断→事実反映→発話</td><td>ゲームのテンポと終了制御を維持</td></tr></table></div>
+<p><strong>今回の品質確認：</strong>公式プロトコルと既存コードを照合した教材です。HTMLの構造とクイズを静的検証します。上記PoC、コード例のコンパイル、実ログイン、実推論は行っていません。自作ヘルパーの名称は提案であり、実在するSDK関数として紹介していません。</p>
+<h3>実装時のファイル分割案</h3><pre><code>packages/server/
+  codex-rpc.ts          # JSONL、要求ID、応答待ち、サーバー要求
+  codex-events.ts       # 通知履歴、turnの最終結果収集
+  codex-worker.ts       # 起動、認証、隔離、終了
+  codex-judgment.ts     # ゲーム要求→Codex→既存結果形式
+  judgment-service.ts  # API/Codex共通の回数・同時数・期限管理
+
+apps/server/           # プレイ所有者とワーカーの対応・限定HTTP API
+apps/local-server/     # 既存のゲーム状態・検証・Live委譲を維持
+apps/web/              # 接続、ログイン案内、残量不足の表示</code></pre><h3>参照先</h3><div class="meta"><p><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/app-server">公式：App Server（通信、初期化、turn、item、認証）</a><br><a style="color:var(--accent)" href="https://learn.chatgpt.com/docs/auth">公式：認証方式</a><br><a style="color:var(--accent)" href="https://developers.openai.com/api/docs/guides/live">公式：GPT-Liveとクライアント委譲</a></p></div>
+<p>既存コード：<code>packages/server/openai.ts</code> のOpenAITransport、<code>apps/local-server/game-ai.ts</code> のcreateGameAI、<code>apps/local-server/structured-response.ts</code> のresponseText／structuredResponse、<code>apps/local-server/hosted-runtime.ts</code> の依存注入とLive接続。2026-09-17時点の読取結果です。</p>
+<h2>理解度チェック：実装で間違えやすい6点</h2><div class="quiz" id="quiz"><div class='q' data-answer='b'><div class='q-title'>Q1. turn/startの応答を受けた直後にしてよいことは？</div><label><input type='radio' name='q1' value='a'>判断結果としてゲームを更新する</label><label><input type='radio' name='q1' value='b'>turnIdを記録し、通知から完了結果を収集する</label><label><input type='radio' name='q1' value='c'>同じ要求を必ず再送する</label><div class='fb ok'>正解。受付と実行完了は別です。</div><div class='fb ng'>もう一度確認してください。受付と実行完了は別です。</div></div><div class='q' data-answer='b'><div class='q-title'>Q2. 通知の取りこぼしを防ぐには？</div><label><input type='radio' name='q2' value='a'>応答後にだけイベントを購読する</label><label><input type='radio' name='q2' value='b'>送信前から通知を保持し、対応するturnだけ取り出す</label><label><input type='radio' name='q2' value='c'>すべての通知をゲームへ流す</label><div class='fb ok'>正解。応答より先に通知が来る場合も扱います。</div><div class='fb ng'>もう一度確認してください。応答より先に通知が来る場合も扱います。</div></div><div class='q' data-answer='b'><div class='q-title'>Q3. outputSchemaで保証しきれないことは？</div><label><input type='radio' name='q3' value='a'>JSONの形を要求すること</label><label><input type='radio' name='q3' value='b'>ゲームのルール上、その変更が正当であること</label><label><input type='radio' name='q3' value='c'>プロパティ名を指定すること</label><div class='fb ok'>正解。ゲーム側の状態検証が必要です。</div><div class='fb ng'>もう一度確認してください。ゲーム側の状態検証が必要です。</div></div><div class='q' data-answer='b'><div class='q-title'>Q4. 判断タイムアウト時の処理は？</div><label><input type='radio' name='q4' value='a'>Promiseをrejectするだけ</label><label><input type='radio' name='q4' value='b'>中断と停止確認を行い、未確認ならワーカーを停止する</label><label><input type='radio' name='q4' value='c'>無条件に運営APIへ切り替える</label><div class='fb ok'>正解。待つのをやめても、上流は動いている可能性があります。</div><div class='fb ng'>もう一度確認してください。待つのをやめても、上流は動いている可能性があります。</div></div><div class='q' data-answer='b'><div class='q-title'>Q5. 既存クライアントを差し替えるときに必要なのは？</div><label><input type='radio' name='q5' value='a'>返却JSONさえ似せればよい</label><label><input type='radio' name='q5' value='b'>回数・同時数・再試行・保存条件の差も確認する</label><label><input type='radio' name='q5' value='c'>usageを必ずゼロにする</label><div class='fb ok'>正解。データ形式以外の契約も引き継ぎます。</div><div class='fb ng'>もう一度確認してください。データ形式以外の契約も引き継ぎます。</div></div><div class='q' data-answer='b'><div class='q-title'>Q6. 利用者を安全に分離するために必要なのは？</div><label><input type='radio' name='q6' value='a'>threadIdだけを分ける</label><label><input type='radio' name='q6' value='b'>認証、保存先、実行権限、所有者の対応も分ける</label><label><input type='radio' name='q6' value='c'>RPC idにユーザー名を入れる</label><div class='fb ok'>正解。会話の識別子とセキュリティ境界は別です。</div><div class='fb ng'>もう一度確認してください。会話の識別子とセキュリティ境界は別です。</div></div><button id="grade-btn" onclick="grade()">採点する</button><div id="result"><div class="score"></div><div class="verdict"></div><div class="note dim"></div></div></div><footer>Codex · Engineering Guide · 2026-09-17</footer></main><script>
+function grade() {
+  const qs = document.querySelectorAll('.q');
+  let correct = 0;
+  let firstWrong = null;
+  qs.forEach(q => {
+    const ans = q.dataset.answer;
+    const sel = q.querySelector('input:checked');
+    q.classList.remove('correct', 'wrong');
+    if (sel && sel.value === ans) {
+      q.classList.add('correct');
+      correct++;
+    } else {
+      q.classList.add('wrong');
+      if (!firstWrong) firstWrong = q;
+    }
+  });
+  const result = document.getElementById('result');
+  const score = result.querySelector('.score');
+  const verdict = result.querySelector('.verdict');
+  const note = result.querySelector('.note');
+  score.textContent = correct + ' / ' + qs.length;
+  result.classList.remove('pass', 'fail');
+  if (qs.length > 0 && correct === qs.length) {
+    result.classList.add('pass');
+    verdict.textContent = '🎉 合格 — 全問正解です';
+    note.textContent = '実装内容と設計判断を完全に把握できています。';
+  } else {
+    result.classList.add('fail');
+    verdict.textContent = 'あと ' + (qs.length - correct) + ' 問 — 再挑戦してください';
+    note.textContent = '❌ の設問のフィードバックを読んでから、もう一度「採点する」を押してください。';
+    if (firstWrong) firstWrong.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+</script></body></html>

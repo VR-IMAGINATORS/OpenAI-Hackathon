@@ -321,7 +321,10 @@ test('hosted workflows isolate requested SHA from credential job and pin all act
     const [build, deployJob] = yaml.split(/\r?\n  deploy:\r?\n/);
     assert.doesNotMatch(build, /secrets\.|id-token: write|environment:/);
     assert.doesNotMatch(build, /FAL_KEY|ENDING_VIDEO_ENABLED|AI_GLOBAL_VIDEO_ATTEMPTS/);
-    assert.match(deployJob, /FAL_KEY: \$\{\{ secrets.FAL_KEY \}\}/);
+    assert.match(
+      deployJob,
+      /FAL_KEY: \$\{\{ vars.AI_PROVIDER != 'codex' && secrets.FAL_KEY \|\| '' \}\}/,
+    );
     for (const name of [
       'ENDING_VIDEO_ENABLED',
       'AI_GLOBAL_VIDEO_ATTEMPTS',

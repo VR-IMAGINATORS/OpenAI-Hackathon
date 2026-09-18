@@ -133,7 +133,12 @@ export class GameRuntime {
     readonly deadline: number,
     scenario: Scenario,
     private ai: AiService,
-    private models: { liveModel: string; gameModel: string; liveVoice?: LiveVoice },
+    private models: {
+      liveModel: string;
+      gameModel: string;
+      liveVoice?: LiveVoice;
+      provider?: 'api' | 'codex';
+    },
     private queue: PhotoQueue,
     private now = () => performance.now(),
     readonly coreSnapshot?: ScenarioSnapshot,
@@ -774,7 +779,18 @@ export class GameRuntime {
           ? null
           : openingCommand(this.game.state(), this.coreSnapshot?.locale, this.coreSnapshot);
         this.openingIssued = true;
-        return { sdp: answer.transport.sdp, generation: this.game.generation, opening };
+        // Both transports receive instructions in the server-side creation request.
+        const initialization: LiveCommand[] = [];
+        return {
+          sdp: answer.transport.sdp,
+          generation: this.game.generation,
+          opening,
+          initialization,
+          // Codex adapter has already awaited thread/realtime/started and SDP.
+          ...(this.models.provider === 'codex'
+            ? { sessionStarted: true, protocol: 'codex-frameless' as const }
+            : {}),
+        };
       } finally {
         this.liveCreating = false;
       }

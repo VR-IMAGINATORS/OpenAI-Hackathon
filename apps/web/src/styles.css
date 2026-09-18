@@ -2030,6 +2030,58 @@ h1 span {
     border-radius: 20px;
   }
 }
+.codex-login {
+  width: min(100%, 560px);
+  margin: 24px auto;
+  padding: 20px;
+  border: 1px solid #405965;
+  border-radius: 16px;
+  background: #13242d;
+  text-align: left;
+  color: #e9f4f6;
+}
+.codex-login h2 {
+  font-size: 1.1rem;
+  margin: 0 0 12px;
+}
+.codex-login p,
+.codex-login small {
+  line-height: 1.6;
+}
+.codex-login > small {
+  display: block;
+  margin-top: 12px;
+  color: #b5c9d0;
+}
+.codex-login button,
+.codex-auth-link {
+  display: inline-block;
+  padding: 12px 16px;
+  border: 1px solid #789ba7;
+  border-radius: 8px;
+  background: #213f4c;
+  color: #f4fcff;
+  cursor: pointer;
+  font: inherit;
+}
+.codex-login button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.codex-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.codex-code {
+  display: block;
+  margin: 0;
+  font-size: 1.7rem;
+  letter-spacing: 0.14em;
+  user-select: all;
+}
 @media (max-height: 480px) {
   .messenger-info summary {
     padding-block: 6px;

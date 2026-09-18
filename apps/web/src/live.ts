@@ -1,13 +1,16 @@
 import type { PlayControl } from '../../../packages/shared/api.js';
+import { voiceStartupDetail } from '../../../packages/shared/voice-diagnostics.js';
 import { playRequest, retryUncertain, PlayApiError } from './play-api.js';
 import { VoiceActivityMonitor, type VoiceActivitySnapshot } from './voice-activity.js';
 export type VoiceState = 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 import type { LiveCommand } from '../../../packages/shared/game.js';
+import { CodexLiveProtocol } from './codex-live-protocol.js';
 interface LiveOptions {
   onState: (state: VoiceState) => void;
   onEvent: (event: Record<string, unknown>, generation: number) => void;
   onPlaybackBlocked: () => void;
   onVoiceActivity?: (snapshot: VoiceActivitySnapshot) => void;
+  onError?: (message: string) => void;
 }
 export class LiveConnection {
   generation = 0;
@@ -19,6 +22,10 @@ export class LiveConnection {
   private audio = new Audio();
   private cancelled = false;
   private inputStopped = false;
+  private initialization: LiveCommand[] | null = null;
+  private initialized = false;
+  private failure: string | null = null;
+  private codexProtocol: CodexLiveProtocol | null = null;
   private activity: VoiceActivityMonitor | null = null;
   constructor(private options: LiveOptions) {
     this.audio.autoplay = true;
@@ -33,6 +40,12 @@ export class LiveConnection {
     this.options.onState(state);
   }
   private started = false;
+  private diagnose(code: string) {
+    if (!this.failure) {
+      this.failure = `${code} / peer=${this.peer?.connectionState ?? 'closed'} / ice=${this.peer?.iceConnectionState ?? 'closed'} / channel=${this.channel?.readyState ?? 'closed'} / initialized=${this.initialized}`;
+      this.options.onError?.(this.failure);
+    }
+  }
   pendingRequest: { requestId: string; sdp: string } | null = null;
   setOptions(options: LiveOptions) {
     this.options = options;
@@ -45,6 +58,10 @@ export class LiveConnection {
     }
     this.cancelled = false;
     this.inputStopped = false;
+    this.initialization = null;
+    this.initialized = false;
+    this.failure = null;
+    this.codexProtocol = null;
     this.update('connecting');
     this.activity?.close();
     const activity = (this.activity = new VoiceActivityMonitor((snapshot) =>
@@ -74,9 +91,10 @@ export class LiveConnection {
       };
       peer.onconnectionstatechange = () => {
         if (this.cancelled) return;
-        if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected')
+        if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
+          this.diagnose('VOICE_PEER_' + peer.connectionState.toUpperCase());
           this.update(peer.connectionState);
-        else if (peer.connectionState === 'closed') this.update('closed');
+        } else if (peer.connectionState === 'closed') this.update('closed');
       };
       const channel = (this.channel = peer.createDataChannel('oai-events'));
       this.started = false;
@@ -89,6 +107,24 @@ export class LiveConnection {
           return;
         }
         if (!value || typeof value !== 'object') return;
+        if (this.codexProtocol) {
+          for (const normalized of this.codexProtocol.decode(value)) {
+            if (!this.inputStopped || normalized.type === 'session.output_transcript.delta')
+              this.options.onEvent(normalized, this.generation);
+          }
+        }
+        if (value.type === 'error' || value.type === 'session.error') {
+          const detail =
+            value.error && typeof value.error === 'object'
+              ? (value.error as Record<string, unknown>).message
+              : value.message;
+          this.failure = `VOICE_CLIENT_UPSTREAM_ERROR / ${this.initialized ? 'active' : 'starting'} / ${voiceStartupDetail(detail)}`;
+          this.options.onError?.(this.failure);
+          this.cancelled = true;
+          this.release();
+          this.update('failed');
+          return;
+        }
         if (
           this.inputStopped &&
           ['session.input_transcript.delta', 'session.delegation.created'].includes(
@@ -98,9 +134,12 @@ export class LiveConnection {
           return;
         if (value.type === 'session.started') {
           this.started = true;
-          this.update('connected');
+          this.initialize();
         }
-        if (value.type === 'session.closed') this.update('disconnected');
+        if (value.type === 'session.closed') {
+          this.diagnose('VOICE_SESSION_CLOSED');
+          this.update('disconnected');
+        }
         if (
           [
             'session.input_transcript.delta',
@@ -112,8 +151,13 @@ export class LiveConnection {
         }
       };
       channel.onclose = () => {
-        if (!this.cancelled) this.update('disconnected');
+        if (!this.cancelled) {
+          this.diagnose('VOICE_CHANNEL_CLOSED');
+          this.update('disconnected');
+        }
       };
+      channel.onerror = () => this.diagnose('VOICE_CHANNEL_ERROR');
+      channel.onopen = () => this.initialize();
       await peer.setLocalDescription(await peer.createOffer());
       await new Promise<void>((resolve, reject) => {
         if (peer.iceGatheringState === 'complete') return resolve();
@@ -148,28 +192,39 @@ export class LiveConnection {
       };
       this.pendingRequest = body;
       const answer = await retryUncertain(() =>
-        playRequest<{ sdp: string; generation: number; opening?: LiveCommand | null }>(
-          '/api/play/live',
-          body,
-          'POST',
-          control,
-        ),
+        playRequest<{
+          sdp: string;
+          generation: number;
+          opening?: LiveCommand | null;
+          initialization?: LiveCommand[];
+          sessionStarted?: boolean;
+          protocol?: 'codex-frameless';
+        }>('/api/play/live', body, 'POST', control),
       );
       if (this.cancelled) return;
       this.pendingRequest = null;
       this.generation = answer.generation;
       this.activity?.setGeneration(answer.generation);
       this.opening = answer.opening ?? null;
+      this.initialization = answer.initialization ?? [];
+      this.codexProtocol = answer.protocol === 'codex-frameless' ? new CodexLiveProtocol() : null;
+      if (answer.sessionStarted === true) this.started = true;
       await peer.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
+      this.initialize();
       await new Promise<void>((resolve, reject) => {
         const until = Date.now() + 15_000;
         const timer = window.setInterval(() => {
-          if (this.started) {
+          if (this.initialized && !this.cancelled) {
             window.clearInterval(timer);
             resolve();
           } else if (this.cancelled || Date.now() > until) {
             window.clearInterval(timer);
-            reject(new Error('音声の応答を確認できません。接続を再開してください。'));
+            reject(
+              new Error(
+                this.failure ??
+                  `音声の応答を確認できません。診断: VOICE_CONNECT_TIMEOUT / peer=${peer.connectionState} / channel=${this.channel?.readyState ?? 'closed'} / started=${this.started}`,
+              ),
+            );
           }
         }, 100);
       });
@@ -190,9 +245,32 @@ export class LiveConnection {
     }
   }
   send(commands: LiveCommand[]) {
-    if (this.channel?.readyState !== 'open') return false;
-    for (const command of commands) this.channel.send(JSON.stringify(command));
+    if (this.channel?.readyState !== 'open' || !this.initialized) return false;
+    for (const command of this.codexProtocol?.encode(commands) ?? commands)
+      this.channel.send(JSON.stringify(command));
     return true;
+  }
+  private initialize() {
+    if (
+      this.cancelled ||
+      this.initialized ||
+      !this.started ||
+      !this.initialization ||
+      this.channel?.readyState !== 'open'
+    )
+      return;
+    try {
+      for (const command of this.codexProtocol?.encode(this.initialization) ?? this.initialization)
+        this.channel.send(JSON.stringify(command));
+      this.initialized = true;
+      this.update('connected');
+    } catch {
+      this.failure = 'VOICE_INITIALIZATION_SEND_FAILED';
+      this.options.onError?.(this.failure);
+      this.cancelled = true;
+      this.release();
+      this.update('failed');
+    }
   }
   async resumeAudio() {
     const resume = this.activity?.resume();

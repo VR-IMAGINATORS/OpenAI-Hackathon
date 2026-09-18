@@ -24,6 +24,7 @@ import { SessionError, assertController } from './control.js';
 import { PhotoQueue } from './photo-queue.js';
 import { ScenarioConfigError } from './scenario-catalog.js';
 import { operationalLog, type OperationalEvent } from './logging.js';
+import type { GameResponder, PlayerJudgments } from './player-judgments.js';
 
 const uuid = z.string().uuid();
 const createSchema = z
@@ -69,12 +70,16 @@ export function createHostedApp(
   config: HostedConfig,
   options: {
     transport?: OpenAITransport;
+    gameResponder?: GameResponder;
+    playerJudgments?: PlayerJudgments;
     now?: () => number;
     wallNow?: () => number;
     log?: (event: OperationalEvent) => void;
     ending?: Omit<EndingJobsOptions, 'now'>;
   } = {},
 ) {
+  if (config.ai.provider === 'codex' && (!options.playerJudgments || !options.transport))
+    throw new Error('Subscription mode requires player authentication and transport');
   const now = options.now ?? (() => performance.now());
   const wallNow = options.wallNow ?? Date.now;
   const log = options.log ?? operationalLog;
@@ -93,6 +98,7 @@ export function createHostedApp(
     config.ai,
     options.transport ?? (config.ai.mode === 'mock' ? disabledTransport : undefined),
     now,
+    options.playerJudgments?.respond ?? options.gameResponder,
   );
   const clockOrigin = now(),
     wallOrigin = wallNow();
@@ -151,164 +157,179 @@ export function createHostedApp(
     recoveryMs: config.recoveryMs,
     resultTtlMs: config.resultTtlMs ?? 300_000,
     factory: (id, deadline, auth, request) => {
-      const snapshot = config.scenarioCatalog?.current(request.locale ?? 'ja', request.difficulty);
-      const scenario = snapshot
-        ? localizeScenario(snapshot.scenarioV2, snapshot.locale)
-        : structuredClone(config.scenario);
-      if (!snapshot) return new GameRuntime(id, deadline, scenario, ai, config.ai, queue, now);
-      results.create({
-        playId: id,
-        ownerDigest: auth.digest,
-        locale: snapshot.locale,
-        groupingGapMs: snapshot.coreConfig.chatGroupingGapMs,
-        reserveEnding: true,
-      });
-      let openingSceneId: string | undefined;
+      options.playerJudgments?.bind(auth.digest, id);
       try {
-        return new GameRuntime(
-          id,
-          deadline,
-          scenario,
-          ai,
-          config.ai,
-          queue,
-          now,
-          snapshot,
-          {
-            notice: (text, kind) =>
-              safeDisplay(() => {
-                if (kind === 'opening-briefing' && openingSceneId) {
-                  results.publishMessage(id, openingSceneId, text.slice(0, 4000));
-                  return;
-                }
-                results.appendMessage(id, {
-                  side: 'assistant',
-                  kind: 'system',
-                  text: text.slice(0, 4000),
-                });
-              }),
-            transcript: (fragment, messageId) =>
-              safeDisplay(() => results.appendTranscript(id, fragment, messageId)),
-            photos: async (photos) => {
-              try {
-                const assetIds = [];
-                for (const photo of photos) {
-                  const bytes = await sharp(photo.jpeg)
-                    .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
-                    .jpeg({ quality: 70 })
-                    .toBuffer();
-                  assetIds.push(
-                    await results.putAsset(id, { kind: 'photo', bytes, mime: 'image/jpeg' }),
-                  );
-                }
-                if (assetIds.length)
-                  results.appendMessage(id, { side: 'user', kind: 'photo', text: '', assetIds });
-              } catch {
-                /* Recognition can continue even when a thumbnail cannot be retained. */
-              }
-            },
-            scene: (input) =>
-              safeDisplay(() => {
-                const deferDisplay = !!snapshot.scenarioV2.story && !!input.awaitTranscript;
-                if (deferDisplay) openingSceneId = input.messageId;
-                const deadlineIso = new Date(
-                  resultNow() + (config.ai.imageJobTimeoutMs ?? 150_000),
-                ).toISOString();
-                const slot = {
-                  status: 'queued' as const,
-                  assetId: null,
-                  errorCode: null,
-                  deadline: deadlineIso,
-                };
-                results.appendMessage(
-                  id,
-                  {
-                    id: input.messageId,
-                    side: 'assistant',
-                    // The initial scene belongs to the silent briefing. A system
-                    // message also cannot absorb the call-check transcript deltas.
-                    kind: deferDisplay ? 'system' : 'result',
-                    text: input.awaitTranscript ? '' : input.text.slice(0, 4000),
-                    relatedCommandSeq: input.commandSeq,
-                    liveGeneration: input.generation,
-                    imageSlot: slot,
-                  },
-                  { deferDisplay },
-                );
-                results.bindScene(id, input.messageId, input.gameVersion);
-                const fail = (
-                  _errorCode = 'SCENE_RECEIVE_FAILED',
-                  status: 'failed' | 'cancelled' = 'failed',
-                ) =>
-                  safeDisplay(() =>
-                    results.updateMessage(id, input.messageId, {
-                      imageSlot: { ...slot, status, errorCode: 'SCENE_RECEIVE_FAILED' },
-                    }),
-                  );
-                try {
-                  sceneJobs.enqueue(
-                    {
-                      playId: id,
-                      messageId: input.messageId,
-                      snapshot,
-                      facts: input.facts,
-                      situation: input.situation,
-                      action: input.action,
-                    },
-                    {
-                      ready: async (bytes) => {
-                        try {
-                          const assetId = await results.putAsset(id, {
-                            kind: 'scene',
-                            bytes,
-                            mime: 'image/jpeg',
-                          });
-                          results.updateMessage(id, input.messageId, {
-                            imageSlot: { ...slot, status: 'ready', assetId },
-                          });
-                        } catch {
-                          log({
-                            event: 'scene_failed',
-                            correlationId: id,
-                            stage: 'storage',
-                            errorCode: 'SCENE_STORAGE_FAILED',
-                          });
-                          fail();
-                        }
-                      },
-                      failed: fail,
-                      stage: (stage) => {
-                        // Inspection passed, but ready() must finish storing the asset first.
-                        // Publish ready and its asset ID together in the callback above.
-                        if (stage === 'ready') return;
-                        safeDisplay(() =>
-                          results.updateMessage(id, input.messageId, {
-                            imageSlot: { ...slot, status: stage },
-                          }),
-                        );
-                      },
-                    },
-                  );
-                } catch {
-                  fail();
-                }
-              }),
-            ending: (packet, seal) => safeDisplay(() => endingJobs.enqueue(packet, seal)),
-            ended: (state) =>
-              safeDisplay(() => {
-                results.end(id, state);
-                if (state.status === 'expired') sceneJobs.cancelPlay(id, true);
-              }),
-          },
-          config.enableGameTrace,
+        const snapshot = config.scenarioCatalog?.current(
+          request.locale ?? 'ja',
+          request.difficulty,
         );
+        const scenario = snapshot
+          ? localizeScenario(snapshot.scenarioV2, snapshot.locale)
+          : structuredClone(config.scenario);
+        if (!snapshot) return new GameRuntime(id, deadline, scenario, ai, config.ai, queue, now);
+        results.create({
+          playId: id,
+          ownerDigest: auth.digest,
+          locale: snapshot.locale,
+          groupingGapMs: snapshot.coreConfig.chatGroupingGapMs,
+          reserveEnding: true,
+        });
+        let openingSceneId: string | undefined;
+        try {
+          return new GameRuntime(
+            id,
+            deadline,
+            scenario,
+            ai,
+            config.ai,
+            queue,
+            now,
+            snapshot,
+            {
+              notice: (text, kind) =>
+                safeDisplay(() => {
+                  if (kind === 'opening-briefing' && openingSceneId) {
+                    results.publishMessage(id, openingSceneId, text.slice(0, 4000));
+                    return;
+                  }
+                  results.appendMessage(id, {
+                    side: 'assistant',
+                    kind: 'system',
+                    text: text.slice(0, 4000),
+                  });
+                }),
+              transcript: (fragment, messageId) =>
+                safeDisplay(() => results.appendTranscript(id, fragment, messageId)),
+              photos: async (photos) => {
+                try {
+                  const assetIds = [];
+                  for (const photo of photos) {
+                    const bytes = await sharp(photo.jpeg)
+                      .resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true })
+                      .jpeg({ quality: 70 })
+                      .toBuffer();
+                    assetIds.push(
+                      await results.putAsset(id, { kind: 'photo', bytes, mime: 'image/jpeg' }),
+                    );
+                  }
+                  if (assetIds.length)
+                    results.appendMessage(id, { side: 'user', kind: 'photo', text: '', assetIds });
+                } catch {
+                  /* Recognition can continue even when a thumbnail cannot be retained. */
+                }
+              },
+              scene: (input) =>
+                safeDisplay(() => {
+                  const deferDisplay = !!snapshot.scenarioV2.story && !!input.awaitTranscript;
+                  if (deferDisplay) openingSceneId = input.messageId;
+                  const deadlineIso = new Date(
+                    resultNow() + (config.ai.imageJobTimeoutMs ?? 150_000),
+                  ).toISOString();
+                  const slot = {
+                    status: 'queued' as const,
+                    assetId: null,
+                    errorCode: null,
+                    deadline: deadlineIso,
+                  };
+                  results.appendMessage(
+                    id,
+                    {
+                      id: input.messageId,
+                      side: 'assistant',
+                      // The initial scene belongs to the silent briefing. A system
+                      // message also cannot absorb the call-check transcript deltas.
+                      kind: deferDisplay ? 'system' : 'result',
+                      text: input.awaitTranscript ? '' : input.text.slice(0, 4000),
+                      relatedCommandSeq: input.commandSeq,
+                      liveGeneration: input.generation,
+                      imageSlot: slot,
+                    },
+                    { deferDisplay },
+                  );
+                  results.bindScene(id, input.messageId, input.gameVersion);
+                  const fail = (
+                    _errorCode = 'SCENE_RECEIVE_FAILED',
+                    status: 'failed' | 'cancelled' = 'failed',
+                  ) =>
+                    safeDisplay(() =>
+                      results.updateMessage(id, input.messageId, {
+                        imageSlot: { ...slot, status, errorCode: 'SCENE_RECEIVE_FAILED' },
+                      }),
+                    );
+                  try {
+                    sceneJobs.enqueue(
+                      {
+                        playId: id,
+                        messageId: input.messageId,
+                        snapshot,
+                        facts: input.facts,
+                        situation: input.situation,
+                        action: input.action,
+                      },
+                      {
+                        ready: async (bytes) => {
+                          try {
+                            const assetId = await results.putAsset(id, {
+                              kind: 'scene',
+                              bytes,
+                              mime: 'image/jpeg',
+                            });
+                            results.updateMessage(id, input.messageId, {
+                              imageSlot: { ...slot, status: 'ready', assetId },
+                            });
+                          } catch {
+                            log({
+                              event: 'scene_failed',
+                              correlationId: id,
+                              stage: 'storage',
+                              errorCode: 'SCENE_STORAGE_FAILED',
+                            });
+                            fail();
+                          }
+                        },
+                        failed: fail,
+                        stage: (stage) => {
+                          // Inspection passed, but ready() must finish storing the asset first.
+                          // Publish ready and its asset ID together in the callback above.
+                          if (stage === 'ready') return;
+                          safeDisplay(() =>
+                            results.updateMessage(id, input.messageId, {
+                              imageSlot: { ...slot, status: stage },
+                            }),
+                          );
+                        },
+                      },
+                    );
+                  } catch {
+                    fail();
+                  }
+                }),
+              ending: (packet, seal) => safeDisplay(() => endingJobs.enqueue(packet, seal)),
+              ended: (state) =>
+                safeDisplay(() => {
+                  results.end(id, state);
+                  if (state.status === 'expired') sceneJobs.cancelPlay(id, true);
+                }),
+            },
+            config.enableGameTrace,
+          );
+        } catch (error) {
+          results.evict(id);
+          throw error;
+        }
       } catch (error) {
-        results.evict(id);
+        void options.playerJudgments?.release(id).catch(() => {});
         throw error;
       }
     },
     expire: (r) => r.expire(),
-    close: (r) => r.close(),
+    close: async (r) => {
+      try {
+        return await r.close();
+      } finally {
+        await options.playerJudgments?.release(r.id);
+      }
+    },
     snapshot: (r) => r.state(),
     dispose: (r) => r.dispose(),
     transferControl: (r) => r.transferControl(),
@@ -370,6 +391,7 @@ export function createHostedApp(
   }
   async function runTick(waitForClose: boolean) {
     const work: Promise<void>[] = [registry.sweep(waitForClose)];
+    if (options.playerJudgments) work.push(options.playerJudgments.sweep());
     for (const play of registry.plays.values()) {
       if (!play.runtime || ['closing', 'terminal', 'quarantined'].includes(play.lifecycle))
         continue;
@@ -409,7 +431,11 @@ export function createHostedApp(
     disposed = true;
     clearInterval(watchdog);
     queue.dispose();
-    await drain();
+    try {
+      await drain();
+    } finally {
+      await options.playerJudgments?.dispose();
+    }
     results.clear();
     endingJobs.dispose();
   }
@@ -519,7 +545,11 @@ export function createHostedApp(
           )
         : { ja: publicScenario(config.scenario), en: publicScenario(config.scenario) },
       auth: { required: false },
-      ai: { mode: config.ai.mode },
+      ai: {
+        mode: config.ai.mode,
+        provider: config.ai.provider ?? 'api',
+        ...(options.playerJudgments ? { playerLogin: 'codex' } : {}),
+      },
     }),
   );
   app.post('/api/auth', (req, res) => {
@@ -553,6 +583,20 @@ export function createHostedApp(
       expiresAt: retained?.expiresAt ?? null,
     });
   });
+  if (options.playerJudgments) {
+    const judgments = options.playerJudgments;
+    app.get('/api/codex/status', (req, res) => res.json(judgments.status(owner(req).digest)));
+    app.post('/api/codex/login', (req, res) => {
+      z.object({}).strict().parse(req.body);
+      if (registry.admission !== 'open') throw new SessionError('DRAINING', 503);
+      res.json(judgments.start(owner(req).digest));
+    });
+    app.post('/api/codex/logout', async (req, res) => {
+      z.object({}).strict().parse(req.body);
+      await judgments.logout(owner(req).digest);
+      res.json({ status: 'disconnected' });
+    });
+  }
   app.post('/api/plays', (req, res) => {
     const body = config.scenarioCatalog
       ? createSchema.parse(req.body)

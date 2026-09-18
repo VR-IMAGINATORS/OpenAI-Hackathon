@@ -87,7 +87,9 @@ export function loadHostedConfig(
   });
   scenarioCatalog.validate();
   const ai = loadAiConfig(values);
-  const ending = loadEndingConfig(values);
+  const ending = loadEndingConfig(
+    ai.provider === 'codex' ? { ...values, ENDING_VIDEO_ENABLED: 'false', FAL_KEY: '' } : values,
+  );
   const resultTtlMs =
     positiveInteger(values, 'RESULT_TTL_SECONDS', ending.enabled ? 600 : 300, 600) * 1000;
   if (resultTtlMs < 150_000 || resultTtlMs < ai.imageJobTimeoutMs)
