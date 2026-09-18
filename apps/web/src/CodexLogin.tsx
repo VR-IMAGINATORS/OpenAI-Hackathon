@@ -174,8 +174,8 @@ export default function CodexLogin({
       )}
       <small>
         {t(
-          'このブラウザのプレイ専用です。プレイ終了時に接続を解除します。',
-          'This connection belongs to this browser’s play and is removed when the play ends.',
+          'このブラウザ専用です。終了後10分以内は再ログインせず遊べます。ログアウト・期限切れ・サーバー終了時に接続を解除します。',
+          'For this browser only. Replay within 10 minutes without signing in again. Sign-out, expiry or server shutdown removes the connection.',
         )}
       </small>
     </section>

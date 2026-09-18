@@ -788,7 +788,8 @@ export class GameRuntime {
           initialization,
           // Codex adapter has already awaited thread/realtime/started and SDP.
           ...(this.models.provider === 'codex'
-            ? { sessionStarted: true, protocol: 'codex-frameless' as const } : {}),
+            ? { sessionStarted: true, protocol: 'codex-frameless' as const }
+            : {}),
         };
       } finally {
         this.liveCreating = false;

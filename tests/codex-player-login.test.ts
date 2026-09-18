@@ -18,7 +18,7 @@ function deferred<T = void>() {
   return { promise, resolve, reject };
 }
 const flush = () => new Promise<void>((r) => setImmediate(r));
-function fixture(capacity = 2) {
+function fixture(capacity = 2, respond?: (signal?: AbortSignal) => Promise<unknown>) {
   let now = 0;
   const workers: {
     login: ReturnType<typeof deferred<void>>;
@@ -54,7 +54,8 @@ function fixture(capacity = 2) {
       return entry.worker;
     },
     checkModel: async () => {},
-    responder: (worker) => async () => ({ worker: workers.findIndex((w) => w.worker === worker) }),
+    responder: (worker) => async (_body, signal) =>
+      respond ? respond(signal) : { worker: workers.findIndex((w) => w.worker === worker) },
   });
   return {
     manager,
@@ -65,7 +66,7 @@ function fixture(capacity = 2) {
   };
 }
 
-test('player login isolates owners and play routing, blocks switching, closes on release', async () => {
+test('player login isolates owners and reuses authentication for replay until logout', async () => {
   const f = fixture();
   try {
     f.manager.start('a');
@@ -93,9 +94,74 @@ test('player login isolates owners and play routing, blocks switching, closes on
     );
     await assert.rejects(f.manager.logout('a'), /CODEX_PLAY_ACTIVE/);
     await f.manager.release('pa');
-    assert.equal(f.manager.status('a').status, 'disconnected');
+    assert.equal(f.manager.status('a').status, 'ready');
     assert.equal(f.manager.status('b').status, 'ready');
+    assert.equal(f.workers[0].closed, 0);
+    await assert.rejects(f.manager.respond({}, undefined, 'pa'));
+    f.manager.bind('a', 'pa2');
+    assert.deepEqual(await f.manager.respond({}, undefined, 'pa2'), { worker: 0 });
+    assert.equal(f.workers.length, 2);
+    await f.manager.release('pa2');
+    await f.manager.logout('a');
+    assert.equal(f.manager.status('a').status, 'disconnected');
     assert.ok(f.workers[0].closed);
+  } finally {
+    await f.manager.dispose();
+  }
+});
+
+test('release cancels old work and blocks replay until cleanup has settled', async () => {
+  const done = deferred<unknown>();
+  let signal: AbortSignal | undefined;
+  const f = fixture(1, async (s) => {
+    signal = s;
+    return done.promise;
+  });
+  try {
+    f.manager.start('a');
+    await flush();
+    f.workers[0].login.resolve();
+    await flush();
+    f.manager.bind('a', 'old');
+    const work = f.manager.respond({}, undefined, 'old');
+    const release = f.manager.release('old');
+    assert.equal(signal?.aborted, true);
+    assert.throws(() => f.manager.bind('a', 'new'), /CODEX_PLAY_ACTIVE/);
+    await assert.rejects(f.manager.respond({}, undefined, 'old'));
+    done.resolve({});
+    await work;
+    await release;
+    f.manager.bind('a', 'new');
+    assert.equal(f.workers[0].closed, 0);
+  } finally {
+    done.resolve({});
+    await f.manager.dispose();
+  }
+});
+
+test('release renews the idle deadline but never retains an unusable worker', async () => {
+  const f = fixture();
+  try {
+    f.manager.start('a');
+    await flush();
+    f.workers[0].login.resolve();
+    await flush();
+    f.manager.bind('a', 'old');
+    f.advance(700000);
+    await f.manager.release('old');
+    assert.equal(f.manager.status('a').expiresAt, 1300000);
+    f.advance(600001);
+    await f.manager.sweep();
+    assert.equal(f.manager.status('a').status, 'disconnected');
+    assert.ok(f.workers[0].closed);
+    f.manager.start('a');
+    await flush();
+    f.workers[1].login.resolve();
+    await flush();
+    f.manager.bind('a', 'failed');
+    await f.workers[1].worker.invalidate();
+    await f.manager.release('failed');
+    assert.equal(f.manager.status('a').status, 'disconnected');
   } finally {
     await f.manager.dispose();
   }
@@ -229,10 +295,14 @@ test('HTTP login requires own cookie/origin, gates creation and routes game call
     { worker: 0 },
   );
   await app.registry.end(play);
-  assert.deepEqual(await (await request('/api/codex/status', a)).json(), {
-    status: 'disconnected',
+  assert.equal((await (await request('/api/codex/status', a)).json()).status, 'ready');
+  const replay = await request('/api/plays', a, {
+    requestId: randomUUID(),
+    clientId: randomUUID(),
   });
-  assert.ok(f.workers[0].closed > 0);
+  assert.equal(replay.status, 201);
+  assert.equal(f.workers.length, 1);
+  assert.equal(f.workers[0].closed, 0);
 });
 
 test('failed model verification closes auth and never enables play', async () => {

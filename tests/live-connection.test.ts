@@ -109,7 +109,10 @@ for (const serverStarted of [false, true]) {
     assert.equal(connection.send([]), false);
     await connection.connect({ playId: 'play', clientId: 'client', controlEpoch: 1 });
     const wireInstruction = serverStarted
-      ? { type: 'session.context.append', content: [{ type: 'input_text', text: instruction.content }] }
+      ? {
+          type: 'session.context.append',
+          content: [{ type: 'input_text', text: instruction.content }],
+        }
       : instruction;
     assert.deepEqual(sent, [wireInstruction]);
     channel.onmessage!({ data: JSON.stringify({ type: 'session.started' }) });

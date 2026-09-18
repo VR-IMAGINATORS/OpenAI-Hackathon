@@ -284,6 +284,12 @@ test('player voice is bound to its own worker and unknown plays cannot connect',
     );
     await assert.rejects(manager.transport.createResponse({}), /SUBSCRIPTION_API_DISABLED/);
     await manager.release('pa');
+    assert.equal(workers[0].value.isUsable(), true);
+    manager.bind('a', 'pa-replay');
+    const replay = await manager.transport.createLiveSession(request, 'pa-replay');
+    assert.notEqual(replay.session.id, a.session.id);
+    assert.equal(workers.length, 2);
+    assert.equal(workers[0].calls.filter((m) => m.method === 'thread/realtime/start').length, 2);
     assert.equal(workers[1].value.isUsable(), true);
   } finally {
     await manager.dispose();
@@ -394,5 +400,7 @@ test('keyless hosted game uses owned voice and generates inspected scene images'
   play.runtime!.expire();
   await app.registry.end(play);
   assert.equal(app.ai.snapshot().responseAttempts, 0);
+  assert.equal(f.value.isUsable(), true);
+  await app.dispose();
   assert.equal(f.value.isUsable(), false);
 });

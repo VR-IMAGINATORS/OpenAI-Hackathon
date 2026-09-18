@@ -639,7 +639,8 @@ export default function PlayScreen({
       </section>
       {voiceDiagnostic && (
         <p className="play-error" role="alert">
-          {t('音声診断: ', 'Voice diagnostic: ')}{voiceDiagnostic}
+          {t('音声診断: ', 'Voice diagnostic: ')}
+          {voiceDiagnostic}
         </p>
       )}
       <details className="messenger-info">

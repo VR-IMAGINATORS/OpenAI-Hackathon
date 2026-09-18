@@ -21,6 +21,9 @@ interface Entry {
   closing?: Promise<void>;
   voice?: CodexGameVoice;
   inspector?: ReturnType<typeof createGameResponder>;
+  pending: Set<Promise<unknown>>;
+  playAbort?: AbortController;
+  releasing?: Promise<void>;
 }
 
 export class CodexPlayerSessions implements PlayerJudgments {
@@ -30,53 +33,62 @@ export class CodexPlayerSessions implements PlayerJudgments {
   private voices = new Map<string, CodexGameVoice>();
   /** No public API transport exists on this route, including optional media. */
   readonly transport: OpenAITransport = {
-    createLiveSession: async (body, playId) => {
-      const e = playId ? this.plays.get(playId) : undefined;
-      if (!e || e.cancelled || !e.worker?.isUsable())
-        throw new AiServiceError(503, 'CODEX_UNAVAILABLE', '開始画面から再ログインしてください。');
-      if (e.voice && !e.voice.isClosed()) throw new Error('VOICE_ALREADY_ACTIVE');
-      const previous = e.voice;
-      if (previous) await previous.stop();
-      if (e.voice !== previous) throw new Error('VOICE_ALREADY_ACTIVE');
-      if (e.cancelled || !e.worker.isUsable()) throw new Error('CODEX_UNAVAILABLE');
-      const voice = new CodexGameVoice(e.worker, this.options.model, this.options.reportVoice);
-      e.voice = voice;
-      this.voices.set(voice.id, voice);
-      return voice.start(body);
-    },
-    createResponse: async (body, signal, playId) => {
-      if (!playId) throw new Error('SUBSCRIPTION_API_DISABLED');
-      const e = this.mediaEntry(playId);
-      const request = responseRequest.parse(body);
-      if (request.text.format.name !== 'scene_inspection')
-        throw new Error('SUBSCRIPTION_API_DISABLED');
-      e.inspector ??= createGameResponder(e.worker!, request.model, undefined, {
-        preserveWorkerOnCompletedFailure: true,
-      });
-      return e.inspector(request, signal);
-    },
-    createImage: async (body, signal, playId) => {
-      if (!playId) throw new Error('SUBSCRIPTION_API_DISABLED');
-      const e = this.mediaEntry(playId);
-      const started = performance.now();
-      let status = 'failed';
-      let code: string | undefined;
-      this.options.reportImage?.({ status: 'starting', durationMs: 0 });
-      try {
-        const image = await generateCodexImage(e.worker!, this.options.model, body, signal);
-        status = 'completed';
-        return image;
-      } catch (error) {
-        code = error instanceof PocError ? error.code : 'CODEX_IMAGE_FAILED';
-        throw error;
-      } finally {
-        this.options.reportImage?.({
-          status,
-          code,
-          durationMs: Math.round(performance.now() - started),
+    createLiveSession: (body, playId) =>
+      this.runForPlay(playId, async () => {
+        const e = playId ? this.plays.get(playId) : undefined;
+        if (!e || e.cancelled || !e.worker?.isUsable())
+          throw new AiServiceError(
+            503,
+            'CODEX_UNAVAILABLE',
+            '開始画面から再ログインしてください。',
+          );
+        if (e.voice && !e.voice.isClosed()) throw new Error('VOICE_ALREADY_ACTIVE');
+        const previous = e.voice;
+        if (previous) await previous.stop();
+        if (e.voice !== previous) throw new Error('VOICE_ALREADY_ACTIVE');
+        if (e.cancelled || !e.worker.isUsable()) throw new Error('CODEX_UNAVAILABLE');
+        const voice = new CodexGameVoice(e.worker, this.options.model, this.options.reportVoice);
+        e.voice = voice;
+        this.voices.set(voice.id, voice);
+        return voice.start(body);
+      }),
+    createResponse: (body, signal, playId) =>
+      this.runForPlay(playId, async (playSignal) => {
+        signal = signal ? AbortSignal.any([signal, playSignal]) : playSignal;
+        if (!playId) throw new Error('SUBSCRIPTION_API_DISABLED');
+        const e = this.mediaEntry(playId);
+        const request = responseRequest.parse(body);
+        if (request.text.format.name !== 'scene_inspection')
+          throw new Error('SUBSCRIPTION_API_DISABLED');
+        e.inspector ??= createGameResponder(e.worker!, request.model, undefined, {
+          preserveWorkerOnCompletedFailure: true,
         });
-      }
-    },
+        return e.inspector(request, signal);
+      }),
+    createImage: (body, signal, playId) =>
+      this.runForPlay(playId, async (playSignal) => {
+        signal = signal ? AbortSignal.any([signal, playSignal]) : playSignal;
+        if (!playId) throw new Error('SUBSCRIPTION_API_DISABLED');
+        const e = this.mediaEntry(playId);
+        const started = performance.now();
+        let status = 'failed';
+        let code: string | undefined;
+        this.options.reportImage?.({ status: 'starting', durationMs: 0 });
+        try {
+          const image = await generateCodexImage(e.worker!, this.options.model, body, signal);
+          status = 'completed';
+          return image;
+        } catch (error) {
+          code = error instanceof PocError ? error.code : 'CODEX_IMAGE_FAILED';
+          throw error;
+        } finally {
+          this.options.reportImage?.({
+            status,
+            code,
+            durationMs: Math.round(performance.now() - started),
+          });
+        }
+      }),
     createImageEdit: async () => {
       throw new Error('SUBSCRIPTION_API_DISABLED');
     },
@@ -91,9 +103,23 @@ export class CodexPlayerSessions implements PlayerJudgments {
     },
   };
   private readonly now: () => number;
+  private async runForPlay<T>(
+    playId: string | undefined,
+    run: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    if (!playId) throw new Error('SUBSCRIPTION_API_DISABLED');
+    const e = this.mediaEntry(playId);
+    const task = run(e.playAbort!.signal);
+    e.pending.add(task);
+    try {
+      return await task;
+    } finally {
+      e.pending.delete(task);
+    }
+  }
   private mediaEntry(playId: string) {
     const e = this.plays.get(playId);
-    if (!e || e.cancelled || !e.worker?.isUsable())
+    if (!e || e.cancelled || e.playAbort?.signal.aborted || !e.worker?.isUsable())
       throw new AiServiceError(503, 'CODEX_UNAVAILABLE', 'Codexへ再ログインしてください。');
     return e;
   }
@@ -132,6 +158,7 @@ export class CodexPlayerSessions implements PlayerJudgments {
       view: { status: 'starting' },
       deadline: this.now() + 180_000,
       cancelled: false,
+      pending: new Set(),
     };
     this.entries.set(owner, e); // Reserve synchronously, including worker startup.
     e.task = this.connect(e);
@@ -181,6 +208,7 @@ export class CodexPlayerSessions implements PlayerJudgments {
 
   private close(e: Entry): Promise<void> {
     e.cancelled = true;
+    e.playAbort?.abort();
     e.view = { status: 'failed' }; // Erase the code before waiting for provider cleanup.
     e.responder = undefined;
     if (!e.closing)
@@ -214,21 +242,42 @@ export class CodexPlayerSessions implements PlayerJudgments {
       throw new SessionError('CODEX_LOGIN_REQUIRED', 401);
     if (e.playId) throw new SessionError('CODEX_PLAY_ACTIVE', 409);
     e.playId = playId;
+    e.playAbort = new AbortController();
     this.plays.set(playId, e);
   }
-  respond = async (body: unknown, signal: AbortSignal | undefined, playId: string) => {
-    const e = this.plays.get(playId);
-    if (!e?.responder || e.cancelled || !e.worker?.isUsable())
-      throw new AiServiceError(503, 'CODEX_UNAVAILABLE', '開始画面から再ログインしてください。');
-    return e.responder(body, signal);
-  };
+  respond = (body: unknown, signal: AbortSignal | undefined, playId: string) =>
+    this.runForPlay(playId, async (playSignal) => {
+      signal = signal ? AbortSignal.any([signal, playSignal]) : playSignal;
+      const e = this.plays.get(playId);
+      if (!e?.responder || e.cancelled || !e.worker?.isUsable())
+        throw new AiServiceError(503, 'CODEX_UNAVAILABLE', '開始画面から再ログインしてください。');
+      return e.responder(body, signal);
+    });
   async release(playId: string) {
     const e = this.plays.get(playId);
     if (!e) return;
-    await this.close(e);
-    this.plays.delete(playId);
-    e.playId = undefined;
-    for (const [owner, entry] of this.entries) if (entry === e) await this.remove(owner, e);
+    if (!e.releasing)
+      e.releasing = (async () => {
+        // Reject old-play requests immediately; don't allow replay until cleanup settles.
+        e.playAbort?.abort();
+        await Promise.allSettled([...e.pending]);
+        try {
+          await e.voice?.stop();
+          if (e.cancelled || !e.worker?.isUsable()) throw new Error('CODEX_UNAVAILABLE');
+          e.voice = undefined;
+          e.inspector = undefined;
+          e.deadline = this.now() + 600_000;
+          e.view = { status: 'ready', model: this.options.model, expiresAt: e.deadline };
+        } catch {
+          for (const [owner, entry] of this.entries) if (entry === e) await this.remove(owner, e);
+        } finally {
+          this.plays.delete(playId);
+          e.playId = undefined;
+          e.playAbort = undefined;
+        }
+      })();
+    await e.releasing;
+    e.releasing = undefined;
   }
   async sweep() {
     for (const [owner, e] of this.entries)
