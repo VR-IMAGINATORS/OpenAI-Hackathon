@@ -153,6 +153,12 @@ export default function CodexLogin({
               '接続に失敗したか、期限が切れました。利用枠・モデルの利用可否を確認して再ログインしてください。',
               'Connection failed or expired. Check your allowance and model access, then sign in again.',
             )}
+            {view.errorCode && (
+              <small>
+                {' '}
+                {t('診断', 'Diagnostic')}: {view.errorStage} / {view.errorCode}
+              </small>
+            )}
           </p>
         )}
       </div>

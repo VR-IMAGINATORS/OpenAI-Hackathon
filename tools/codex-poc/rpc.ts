@@ -1,5 +1,6 @@
 import { StringDecoder } from 'node:string_decoder';
 import type { Readable, Writable } from 'node:stream';
+import { loginRpcFailure } from './login-diagnostics.js';
 
 export type Message = {
   id?: number | string;
@@ -19,7 +20,7 @@ export class Rpc {
   private nextId = 1;
   private pending = new Map<
     number,
-    { resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
+    { method: string; resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
   >();
   private events: Message[] = [];
   private eventBytes = 0;
@@ -86,7 +87,10 @@ export class Rpc {
     // Never propagate raw upstream error text (may contain tokens or prompts).
     if ('error' in m)
       p.reject(
-        new PocError(`RPC_ERROR_${Number.isInteger(m.error?.code) ? m.error.code : 'UNKNOWN'}`),
+        new PocError(
+          (p.method === 'account/login/start' ? loginRpcFailure(m.error?.message) : undefined) ??
+            `RPC_ERROR_${Number.isInteger(m.error?.code) ? m.error.code : 'UNKNOWN'}`,
+        ),
       );
     else p.resolve(m.result);
   }
@@ -106,7 +110,7 @@ export class Rpc {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new PocError('RPC_TIMEOUT')), timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { method, resolve, reject, timer });
       try {
         this.send({ id, method, params });
       } catch {
